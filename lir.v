@@ -501,9 +501,9 @@ Proof.
 Qed.
 
 
-Ltac open_value ty rule :=
+Ltac open_value rule :=
   match goal with
-    | [ Ht : MEmpty |= ?e : ty,
+    | [ Ht : MEmpty |= ?e : _,
         Hv : Value ?e |- _] =>
           eapply rule in Ht; trivial; decompose [ex or and] Ht
     end.
@@ -530,14 +530,14 @@ Proof.
   (* trivial values *)
   eauto using Value;
   (* break values *)
-  repeat open_value (ETn (Ttag Tgint)) valint;
-  try open_value (ETn (Ttag Tgtbl)) valtbl;
-  try open_value (ETn (Ttag Tgfun)) valfun;
-  try open_value (ETn Tstar) valbox;
+  repeat open_value valint;
+  try open_value valtbl;
+  try open_value valfun;
+  try open_value valbox;
   try match goal with
-    | [ Ht : MEmpty |= ?e : (ETlam _ _),
-        Hv : Value ?e |- _] =>
-          decompose [ex or and] (vallam Ht Hv)
+    | [ Ht : MEmpty |= ?e : _,
+        Hv : Value ?e |- _] => eapply vallam in Ht; trivial;
+          decompose [ex or and] Ht
   end; subst;
   (* try cases that became easy after breaking values *)
   try (right; right; eauto using step,eq_refl; fail);

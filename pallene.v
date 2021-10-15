@@ -65,33 +65,33 @@ Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
 Inductive PTyping : Environment -> EPall -> TPall -> Prop :=
-| TyPnil : forall Γ, Γ |= EPnil : TPnil
-| TyInt : forall Γ n, Γ |= EPnum n : TPint
-| TyVal : forall Γ var T,
+| PTyPnil : forall Γ, Γ |= EPnil : TPnil
+| PTyInt : forall Γ n, Γ |= EPnum n : TPint
+| PTyVal : forall Γ var T,
     In Γ var = Some T ->
     Γ |= EPvar var : T
-| TyAdd : forall Γ e1 e2,
+| PTyAdd : forall Γ e1 e2,
     Γ |= e1 : TPint ->
     Γ |= e2 : TPint ->
     Γ |= EPplus e1 e2 : TPint
-| TyNew : forall Γ T, Γ |= EPnew T : TParr T
-| TyGet : forall Γ e1 T e2,
+| PTyNew : forall Γ T, Γ |= EPnew T : TParr T
+| PTyGet : forall Γ e1 T e2,
     Γ |= e1 : TParr T ->
     Γ |= e2 : TPint ->
     Γ |= EPget e1 e2 : T
-| TySet : forall Γ e1 T e2 e3,
+| PTySet : forall Γ e1 T e2 e3,
     Γ |= e1 : TParr T ->
     Γ |= e2 : TPint ->
     Γ |= e3 : T ->
-    Γ |= EPset e1 e2 e3 : T
-| TyFun : forall Γ var Tvar body Tbody,
+    Γ |= EPset e1 e2 e3 : TPnil
+| PTyFun : forall Γ var Tvar body Tbody,
     var |=> Tvar; Γ |= body : Tbody ->
     Γ |= EPfunc var Tvar body : TPfun Tvar Tbody
-| TyApp : forall Γ e1 e2 T1 T2,
+| PTyApp : forall Γ e1 e2 T1 T2,
     Γ |= e1 : TPfun T1 T2 ->
     Γ |= e2 : T1 ->
     Γ |= EPapp e1 e2 : T2
-| TyCast : forall Γ e T1 T2,
+| PTyCast : forall Γ e T1 T2,
     Γ |= e : T1 ->
     Γ |= EPcast e T2 : T2
 
@@ -117,7 +117,7 @@ Fixpoint typeOf Γ e : option TPall :=
   | EPset e1 e2 e3 =>
     match (typeOf Γ e1), (typeOf Γ e2), (typeOf Γ e3) with
     | Some (TParr T), Some TPint, Some T' =>
-        if TPeq T T' then Some T' else None
+        if TPeq T T' then Some TPnil else None
     | _, _, _ => None
     end
   | EPvar var => In Γ var
@@ -151,6 +151,7 @@ Proof.
   try easy; rewrite TPeqRefl; trivial.
 Qed.
 
+
 Ltac destTOf Γ e :=
     destruct (typeOf Γ e) as [[ | | | ? | ? ?] | ?] eqn:?; try easy.
 
@@ -160,19 +161,15 @@ Proof.
   generalize dependent Γ.
   generalize dependent T.
   induction e; intros T Γ Heq; subst;
-  simpl in Heq; inversion Heq; subst; eauto using PTyping.
-  - destTOf Γ e1.
-    destTOf Γ e2.
-    inversion Heq; subst. eauto using PTyping.
-  - destTOf Γ e1.
-    destTOf Γ e2.
-    inversion Heq; subst. eauto using PTyping.
+  simpl in Heq; inversion Heq; subst; eauto using PTyping;
+  try (destTOf Γ e1; destTOf Γ e2;
+    inversion Heq; subst; eauto using PTyping; fail).
   - destTOf Γ e1.
     destTOf Γ e2.
     destruct (typeOf Γ e3) eqn:?; try easy.
     destruct (TPeq t t0) eqn:?; try easy.
     inversion Heq; subst.
-    assert(t = T). { apply dec_TP. trivial. }
+    assert(t = t0). { apply dec_TP. trivial. }
     subst. eauto using PTyping.
   - destTOf Γ e1.
     destruct (typeOf Γ e2) eqn:?; try easy.
@@ -202,58 +199,120 @@ Fixpoint TP2FCT (t : TPall) : FCType :=
   end.
 
 
-Fixpoint Cast (t1 t2 : FCType) (e : LirExp) : LirExp :=
+Fixpoint TP2TGamma (Γ : Map TPall) : Map FCType :=
+  match Γ with
+  | MEmpty => MEmpty
+  | MCons var T Γ' => MCons var (TP2FCT T) (TP2TGamma Γ')
+  end.
+
+
+Lemma TP2TGammaIn : forall Γ var T,
+    In Γ var = Some T -> In (TP2TGamma Γ) var = Some (TP2FCT T).
+Proof.
+  induction Γ; intros var T H.
+  - simpl in *. easy.
+  - simpl in *. destruct (string_dec var s); subst; auto.
+    congruence.
+Qed.
+
+
+Definition Cast (t1 t2 : FCType) (e : LirExp) : LirExp :=
   match t1, t2 with
   | Tstar, Tstar => e
-  | Tstar, Ttag t => Eunbox t e
-  | Ttag t, Tstar => Ebox t e
+  | Tstar, Ttag t => Ebox t e
+  | Ttag t, Tstar => Eunbox t e
   | Ttag t1', Ttag t2' => if dec_Tag t1' t2' then e
-                            else Ebox t1' (Eunbox t2' e)
+                            else Eunbox t1' (Ebox t2' e)
   end.
 
 
 Notation "'<' t1 '<=' t2 '>' e" := (Cast t1 t2 e)
     (at level 50, t1 at next level, t2 at next level).
 
-(*
-Definition Pall2Lir (Γ : Environment) (e : EPall) (t : TPall)
-  (Hty : Γ |= e : t) : LirExp.
-refine ((fix Pall2Lir (Γ : Environment) (e : EPall) (t : TPall)
-  (Hty : Γ |= e : t) {struct e}  : LirExp :=
-    (match e as e0 return (e = e0 -> LirExp) with
-    | EPnil => fun Heq => Enil
-    | EPnum a => fun Heq => Enum a
-    | EPplus e1 e2 => fun Heq =>
-         Eplus (Pall2Lir _ e1 _ _) (Pall2Lir _ e2 _ _)
-    | EPnew _ => fun Heq => Ecstr
-    | EPget e1 e2 => fun Heq =>
-         <(TP2FCT t) <= Tstar> (Eindx (Pall2Lir _ e1 _ _)
-                                      (Pall2Lir _ e2 _ _))
-    | EPset e1 e2 e3 => fun Heq =>
-         (Eassg (Pall2Lir _ e1 _ _)
-               (Pall2Lir _ e2 _ _)
-               (<Tstar <= (TP2FCT t)> Pall2Lir _ e3 _ _))
-    | EPcast e t1 t2 => fun Heq =>
-         <(TP2FCT t2) <= (TP2FCT t1)> (Pall2Lir _ e _ _)
-    | _ => fun Heq => Enil
-    end) (eq_refl e)) Γ e t Hty);
- subst; inversion Hty; subst; eauto.
 
 
-Fixpoint Pall2Lir (e : EPall) : LirExp :=
+Definition tagOf Γ e : FCType :=
+  match typeOf Γ e with
+  | Some T => TP2FCT T
+  | None => Tgnil
+  end.
+
+Lemma tagOfT : forall Γ e T, typeOf Γ e = Some T -> tagOf Γ e = TP2FCT T.
+Proof. intros. unfold tagOf. rewrite H. trivial. Qed.
+
+
+Fixpoint Pall2Lir (Γ : Environment) (e : EPall) : LirExp :=
   match e with
   | EPnil => Enil
   | EPnum a => Enum a
-  | EPplus e1 e2 => Eplus (Pall2Lir e1) (Pall2Lir e2)
-  | EPcntr => Ecstr
-  | EPget e1 e2 =>  Eindx (Pall2Lir e1) (Pall2Lir e2)
-  | EPset e1 e2 e3 : Eassg  (Pall2Lir e1) (Pall2Lir e2) (Pall2Lir e3)
-  | EPvar v => Evar v
-  | EPapp :w
-:  EPall -> EPall -> EPall
-  | EPfunc : string -> TPall -> EPall -> EPall
-  | EPcast : EPall -> TPall -> EPall
+  | EPplus e1 e2 => Eplus (Pall2Lir Γ e1) (Pall2Lir Γ e2)
+  | EPnew _ => Ecstr
+  | EPget e1 e2 =>
+         <tagOf Γ e <= Tstar> (Eindx (Pall2Lir Γ e1) (Pall2Lir Γ e2))
+  | EPset e1 e2 e3 =>
+         (Eassg (Pall2Lir Γ e1)
+               (Pall2Lir Γ e2)
+                (<Tstar <= tagOf Γ e3> Pall2Lir Γ e3))
+  | EPvar var => Evar var
+  | EPfunc var T e => let Γ' := (var |=> T; Γ) in
+        Efun (Elambda var Tstar
+                      (Elambapp (Elambda var (TP2FCT T)
+                                    (<Tstar <= tagOf Γ' e> (Pall2Lir Γ' e)))
+                                (<TP2FCT T <= Tstar> (Evar var))))
+  | EPapp e1 e2 => <tagOf Γ e <= Tstar>
+         (Efunapp (Pall2Lir Γ e1)
+                  (<Tstar <= (tagOf Γ e2)> Pall2Lir Γ e2))
+  | EPcast e1 t => <TP2FCT t <= tagOf Γ e1> (Pall2Lir Γ e1)
   end.
 
-*)
+
+Theorem Pall2LirWellTyped : forall Γ (e : EPall) T,
+    Γ |= e : T -> Typing (TP2TGamma Γ) (Pall2Lir Γ e) (TP2FCT T).
+Proof.
+  intros Γ e T H.
+  induction H; simpl in *;
+  repeat match goal with
+  | [H: PTyping ?G ?E ?T |- _] =>
+      apply typeOfCorrect in H
+  end;
+  eauto using Typing,TP2TGammaIn.
+  - unfold tagOf. simpl. rewrite H. rewrite H0.
+    destruct (TP2FCT T) eqn:HTT; simpl; eauto using Typing.
+  - unfold tagOf. rewrite H1.
+    destruct (TP2FCT T) eqn:?; simpl; eauto using Typing.
+  - apply TyFun. apply TyLam. apply TyLamApp with (TP2FCT Tvar).
+    apply TyLam.
+    + apply envExt with (var |=> TP2FCT Tvar; TP2TGamma Γ).
+      apply inclusion_shadow'.
+      apply tagOfT in H. rewrite H.
+      destruct (TP2FCT Tbody) eqn:?; eauto using Typing.
+    + apply tagOfT in H;
+      destruct (TP2FCT Tvar) eqn:?;
+      eauto using Typing,InEq.
+  - destruct (tagOf Γ (EPapp e1 e2)) eqn:?.
+    + assert (Ttag t = TP2FCT T2).
+      { unfold tagOf in Heqf. simpl in Heqf.
+        rewrite H in Heqf.
+        rewrite H0 in Heqf.
+        rewrite TPeqRefl in Heqf. easy. }
+      rewrite <- H1. apply TyUnbox.
+      apply TyFunApp. easy.
+      apply tagOfT in H0. rewrite H0.
+      destruct (TP2FCT T1) eqn:?; eauto using Typing.
+    + assert (TP2FCT T2 = Tstar).
+      { unfold tagOf in Heqf.
+        destruct (typeOf Γ (EPapp e1 e2)) eqn:?; try easy.
+        simpl in Heqo. rewrite H in Heqo. rewrite H0 in Heqo.
+        rewrite TPeqRefl in Heqo. congruence. }
+      rewrite H1. simpl. apply TyFunApp.
+      trivial. apply tagOfT in H0. rewrite H0.
+      destruct (TP2FCT T1) eqn:?; eauto using Typing.
+  - unfold Cast.
+    apply tagOfT in H. rewrite H.
+    destruct (TP2FCT T1) eqn:?;
+    destruct (TP2FCT T2) eqn:?; eauto using Typing.
+    destruct (dec_Tag t0 t); subst; try easy.
+    eauto using Typing.
+Qed.
+
 

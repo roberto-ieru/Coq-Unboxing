@@ -73,6 +73,16 @@ Proof.
   - eauto using InNotEq.
 Qed.
 
+Lemma inclusion_shadow' : forall A (M : Map A) var t1 t2,
+  inclusion (var |=> t1; M) (var |=> t1; (var |=> t2; M)).
+Proof.
+  unfold inclusion.
+  intros A M var t1 t2 var' t' Hin.
+  simpl. destruct (string_dec var'); subst.
+  - simpl in Hin. destruct (string_dec var) in Hin; subst; easy.
+  - simpl in Hin. destruct (string_dec var') in Hin; subst; easy.
+Qed.
+
 Lemma inclusion_permute : forall A (M : Map A) var1 var2 t1 t2,
   var1 <> var2 ->
   inclusion (var1 |=> t1; (var2 |=> t2; M))

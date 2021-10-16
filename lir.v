@@ -11,99 +11,98 @@ Require Import LIR.maps.
 
 
 
-Inductive Tag : Set := | Tgnil | Tgint | Tgtbl | Tgfun.
+Inductive Tag : Set := | TgNil | TgInt | TgTbl | TgFun.
 
 
 Lemma dec_Tag : forall (t1 t2 : Tag), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. Qed.
 
 
-(* variable type? *)
-Inductive FCType : Set :=
-| Ttag : Tag -> FCType
-| Tstar
+Inductive IRType : Set :=
+| IRTTag : Tag -> IRType
+| IRTStar
 .
 
-Coercion Ttag : Tag >-> FCType.
+Coercion IRTTag : Tag >-> IRType.
 
 Inductive EType : Set :=
-| ETn : FCType -> EType
-| ETlam : FCType -> EType -> EType
+| ETn : IRType -> EType
+| ETLamb : IRType -> EType -> EType
 .
 
-Coercion ETn : FCType >-> EType.
+Coercion ETn : IRType >-> EType.
 
 Definition address := nat.
 
-Inductive LirExp : Set :=
-| Enil : LirExp
-| Enum : nat -> LirExp
-| Eplus : LirExp -> LirExp -> LirExp
-| Ecstr : LirExp
-| Etbl : address -> LirExp
-| Eindx : LirExp -> LirExp -> LirExp
-| Eassg : LirExp -> LirExp -> LirExp -> LirExp
-| Evar : string -> LirExp
-| Elambda : string -> EType -> LirExp -> LirExp
-| Efun : LirExp -> LirExp
-| Elambapp : LirExp -> LirExp -> LirExp
-| Efunapp : LirExp -> LirExp -> LirExp
-| Ebox : Tag -> LirExp -> LirExp
-| Eunbox : Tag -> LirExp -> LirExp
+Inductive IRE : Set :=
+| IRENil : IRE
+| IRENum : nat -> IRE
+| IREPlus : IRE -> IRE -> IRE
+| IRECnst : IRE
+| IREAddr : address -> IRE
+| IREGet : IRE -> IRE -> IRE
+| IRESet : IRE -> IRE -> IRE -> IRE
+| IREVar : string -> IRE
+| IRELamb : string -> EType -> IRE -> IRE
+| IREFun : IRE -> IRE
+| IRELambApp : IRE -> IRE -> IRE
+| IREFunApp : IRE -> IRE -> IRE
+| IREBox : Tag -> IRE -> IRE
+| IREUnbox : Tag -> IRE -> IRE
 .
 
-Definition Environment := Map FCType.
+Definition IREnvironment := Map IRType.
 
 
 Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
-Inductive Typing : Environment -> LirExp -> EType -> Prop :=
-| TyNil : forall Γ, Γ |= Enil : Tgnil
-| TyVar : forall Γ var T,
+Inductive IRTyping : IREnvironment -> IRE -> EType -> Prop :=
+| IRTyNil : forall Γ, Γ |= IRENil : TgNil
+| IRTyVar : forall Γ var T,
     In Γ var = Some T ->
-    Γ |= Evar var : T
-| TyInt : forall Γ n, Γ |= Enum n : Tgint
-| TyAdd : forall Γ e1 e2,
-    Γ |= e1 : Tgint ->
-    Γ |= e2 : Tgint ->
-    Γ |= (Eplus e1 e2) : Tgint
-| TyNew : forall Γ, Γ |= Ecstr : Tgtbl
-| TyTbl : forall Γ addr, Γ |= Etbl addr : Tgtbl
-| TyGet : forall Γ e1 e2,
-    Γ |= e1 : Tgtbl ->
-    Γ |= e2 : Tgint ->
-    Γ |= (Eindx e1 e2) : Tstar
-| TySet : forall Γ e1 e2 e3,
-    Γ |= e1 : Tgtbl ->
-    Γ |= e2 : Tgint ->
-    Γ |= e3 : Tstar ->
-    Γ |= (Eassg e1 e2 e3) : Tgnil
-| TyLam : forall Γ var tvar e te,
+    Γ |= IREVar var : T
+| IRTyInt : forall Γ n, Γ |= IRENum n : TgInt
+| IRTyPlus : forall Γ e1 e2,
+    Γ |= e1 : TgInt ->
+    Γ |= e2 : TgInt ->
+    Γ |= (IREPlus e1 e2) : TgInt
+| IRTyCnst : forall Γ, Γ |= IRECnst : TgTbl
+| IRTyAddr : forall Γ addr, Γ |= IREAddr addr : TgTbl
+| IRTyGet : forall Γ e1 e2,
+    Γ |= e1 : TgTbl ->
+    Γ |= e2 : TgInt ->
+    Γ |= (IREGet e1 e2) : IRTStar
+| IRTySet : forall Γ e1 e2 e3,
+    Γ |= e1 : TgTbl ->
+    Γ |= e2 : TgInt ->
+    Γ |= e3 : IRTStar ->
+    Γ |= (IRESet e1 e2 e3) : TgNil
+| IRTyLamb : forall Γ var tvar e te,
     var |=> tvar; Γ |= e : te ->
-    Γ |= (Elambda var tvar e) : (ETlam tvar te)
-| TyLamApp : forall Γ e1 e2 t1 t2,
-    Γ |= e1 : (ETlam t1 t2) ->
+    Γ |= (IRELamb var tvar e) : (ETLamb tvar te)
+| IRTyLambApp : forall Γ e1 e2 t1 t2,
+    Γ |= e1 : (ETLamb t1 t2) ->
     Γ |= e2 : t1 ->
-    Γ |= (Elambapp e1 e2) : t2
-| TyFun : forall Γ e,
-    Γ |= e : (ETlam Tstar Tstar) ->
-    Γ |= (Efun e) : Tgfun
-| TyFunApp : forall Γ e1 e2,
-    Γ |= e1 : Tgfun ->
-    Γ |= e2 : Tstar ->
-    Γ |= (Efunapp e1 e2) : Tstar
-| TyBox : forall Γ e (t : Tag),
+    Γ |= (IRELambApp e1 e2) : t2
+| IRTyFun : forall Γ e,
+    Γ |= e : (ETLamb IRTStar IRTStar) ->
+    Γ |= (IREFun e) : TgFun
+| IRTyFunApp : forall Γ e1 e2,
+    Γ |= e1 : TgFun ->
+    Γ |= e2 : IRTStar ->
+    Γ |= (IREFunApp e1 e2) : IRTStar
+| IRTyBox : forall Γ e (t : Tag),
     Γ |= e : t ->
-    Γ |= (Ebox t e) : Tstar
-| TyUnbox : forall Γ e (t : Tag),
-    Γ |= e : Tstar ->
-    Γ |= (Eunbox t e) : t
-where "Γ '|=' e ':' t" := (Typing Γ e t)
+    Γ |= (IREBox t e) : IRTStar
+| IRTyUnbox : forall Γ e (t : Tag),
+    Γ |= e : IRTStar ->
+    Γ |= (IREUnbox t e) : t
+where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 .
 
 Lemma lambUnique : forall t1 t1' t2 t2',
-     ETlam t1 t2 = ETlam t1' t2' -> t2 = t2'.
+     ETLamb t1 t2 = ETLamb t1' t2' -> t2 = t2'.
 Proof. intros. injection H. trivial. Qed.
 
 
@@ -122,7 +121,7 @@ Theorem envExt : forall Γ Γ' e t,
 Proof.
   intros Γ Γ' e t Hinc Hty.
   generalize dependent Γ'.
-  induction Hty; intros Γ' Hinc; subst; eauto using Typing.
+  induction Hty; intros Γ' Hinc; subst; eauto using IRTyping.
   - constructor. apply IHHty.
     auto using inclusion_update.
 Qed.
@@ -130,22 +129,22 @@ Qed.
 
 
 Example TypeFunId : forall Γ var,
-  Γ |= Efun (Elambda var Tstar (Evar var)) : Tgfun.
-Proof. eauto using Typing,  InEq. Qed.
+  Γ |= IREFun (IRELamb var IRTStar (IREVar var)) : TgFun.
+Proof. eauto using IRTyping,  InEq. Qed.
 
 
-Inductive Value : LirExp -> Prop :=
-| Vnil : Value Enil
-| Vnum : forall n, Value (Enum n)
-| Vtbl : forall a, Value (Etbl a)
-| Vfun : forall var e, Value (Efun (Elambda var Tstar e))
-| Vbox : forall gt v, Value v -> Value (Ebox gt v)
-| Vlam : forall var t e, Value (Elambda var t e)
+Inductive Value : IRE -> Prop :=
+| Vnil : Value IRENil
+| Vnum : forall n, Value (IRENum n)
+| Vtbl : forall a, Value (IREAddr a)
+| Vfun : forall var e, Value (IREFun (IRELamb var IRTStar e))
+| Vbox : forall gt v, Value v -> Value (IREBox gt v)
+| Vlam : forall var t e, Value (IRELamb var t e)
 .
 
 
 Lemma valint : forall Γ e,
-    Γ |= e : Tgint -> Value e -> exists n, e = Enum n.
+    Γ |= e : TgInt -> Value e -> exists n, e = IRENum n.
 Proof.
   intros Γ e HT HV.
   inversion HV;
@@ -155,7 +154,7 @@ Qed.
 
 
 Lemma valtbl : forall Γ e,
-    Γ |= e : Tgtbl -> Value e -> exists a, e = Etbl a.
+    Γ |= e : TgTbl -> Value e -> exists a, e = IREAddr a.
 Proof.
   intros Γ e HT HV.
   inversion HV;
@@ -165,7 +164,7 @@ Qed.
 
 
 Lemma valfun : forall Γ e,
-    Γ |= e : Tgfun -> Value e -> exists var b, e = Efun (Elambda var Tstar b).
+    Γ |= e : TgFun -> Value e -> exists var b, e = IREFun (IRELamb var IRTStar b).
 Proof.
   intros Γ e HT HV.
   inversion HV;
@@ -175,7 +174,7 @@ Qed.
 
 
 Lemma vallam : forall {Γ e t1 t2},
-    Γ |= e : ETlam t1 t2 -> Value e -> exists var b, e = Elambda var t1 b.
+    Γ |= e : ETLamb t1 t2 -> Value e -> exists var b, e = IRELamb var t1 b.
 Proof.
   intros Γ e t1 t2 HT HV.
   inversion HV;
@@ -184,24 +183,24 @@ Proof.
 Qed.
 
 
-Lemma valbox : forall Γ e, Γ |= e : Tstar -> Value e ->
-    exists o t, e = Ebox t o /\ (Γ |= o : t) /\ Value o.
+Lemma valbox : forall Γ e, Γ |= e : IRTStar -> Value e ->
+    exists o t, e = IREBox t o /\ (Γ |= o : t) /\ Value o.
 Proof.
   intros Γ e HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
   match goal with
-  | [H: Ebox _ _ = Ebox _ _ |- _ ] => inversion H; subst end.
+  | [H: IREBox _ _ = IREBox _ _ |- _ ] => inversion H; subst end.
   (eexists; eexists; eauto using Value).
 Qed.
 
 
 Inductive Mem : Set :=
 | EmptyMem : Mem
-| Update : address -> nat -> LirExp -> Mem -> Mem.
+| Update : address -> nat -> IRE -> Mem -> Mem.
 
 
-Definition BoxedNil := Ebox Tgnil Enil.
+Definition BoxedNil := IREBox TgNil IRENil.
 
 Fixpoint query (a : address) (idx : nat) (m : Mem) :=
   match m with
@@ -226,23 +225,23 @@ Definition fresh (m : Mem) : (address * Mem) :=
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
 
-Fixpoint substitution (var : string) (y : LirExp)  (e : LirExp) : LirExp :=
+Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
  match e with
- | Enil => e
- | Enum n => e
- | Eplus e1 e2 => Eplus ([var := y] e1) ([var := y] e2)
- | Ecstr => e
- | Etbl a => e
- | Eindx e1 e2 => Eindx ([var := y] e1) ([var := y] e2)
- | Eassg e1 e2 e3 => Eassg ([var := y] e1) ([var := y] e2) ([var := y] e3)
- | Evar var' => if string_dec var var' then y else e
- | Elambda var' type body => if string_dec var var' then e
-                       else Elambda var' type ([var := y] body)
- | Efun e  => Efun ([var := y] e)
- | Elambapp e1 e2 => Elambapp ([var := y] e1) ([var := y] e2)
- | Efunapp e1 e2 => Efunapp ([var := y] e1) ([var := y] e2)
- | Ebox tg e  => Ebox tg ([var := y] e)
- | Eunbox tg e  => Eunbox tg ([var := y] e)
+ | IRENil => e
+ | IRENum n => e
+ | IREPlus e1 e2 => IREPlus ([var := y] e1) ([var := y] e2)
+ | IRECnst => e
+ | IREAddr a => e
+ | IREGet e1 e2 => IREGet ([var := y] e1) ([var := y] e2)
+ | IRESet e1 e2 e3 => IRESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
+ | IREVar var' => if string_dec var var' then y else e
+ | IRELamb var' type body => if string_dec var var' then e
+                       else IRELamb var' type ([var := y] body)
+ | IREFun e  => IREFun ([var := y] e)
+ | IRELambApp e1 e2 => IRELambApp ([var := y] e1) ([var := y] e2)
+ | IREFunApp e1 e2 => IREFunApp ([var := y] e1) ([var := y] e2)
+ | IREBox tg e  => IREBox tg ([var := y] e)
+ | IREUnbox tg e  => IREUnbox tg ([var := y] e)
 end
 where "'[' x ':=' s ']' t" := (substitution x s t).
 
@@ -252,7 +251,7 @@ Lemma inclusion_typing : forall Γ Γ' e te,
 Proof.
   intros Γ Γ' e te Hin Hty.
   generalize dependent Γ'.
-  induction Hty; eauto using Typing, inclusion_update.
+  induction Hty; eauto using IRTyping, inclusion_update.
 Qed.
 
 
@@ -267,7 +266,7 @@ Lemma subst_typing : forall e2 Γ var tv te e1,
        Γ |= ([var := e1] e2) : te.
 Proof.
   induction e2; intros Γ var tv te e1 HT2 HT1;
-  simpl; inversion HT2; subst; eauto using Typing.
+  simpl; inversion HT2; subst; eauto using IRTyping.
   - destruct (string_dec var s); subst.
     + assert (T = tv). { rewrite InEq in H1. congruence. }
       subst. eauto using typing_empty.
@@ -275,8 +274,8 @@ Proof.
       simpl. destruct (string_dec s var); subst; try easy.
       eauto using InNotEq.
   - destruct (string_dec var s); subst.
-    + eauto using inclusion_typing, inclusion_shadow, Typing.
-    + eauto using inclusion_typing, inclusion_permute, Typing.
+    + eauto using inclusion_typing, inclusion_shadow, IRTyping.
+    + eauto using inclusion_typing, inclusion_permute, IRTyping.
 Qed.
 
 
@@ -286,128 +285,128 @@ Reserved Notation "m '/' e --> 'fail'"
 (at level 40, e at level 39).
 
 
-Inductive step : Mem -> LirExp -> Mem -> option LirExp -> Prop :=
+Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
 | StPlus1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
-    m / Eplus e1 e2 --> m' / Eplus e1' e2
+    m / IREPlus e1 e2 --> m' / IREPlus e1' e2
 | StPlus1F : forall m e1 e2,
     m / e1 --> fail ->
-    m / Eplus e1 e2 --> fail
+    m / IREPlus e1 e2 --> fail
 | StPlus2 : forall m e1 e2 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
-    m /  Eplus e1 e2 --> m' /  Eplus e1 e2'
+    m /  IREPlus e1 e2 --> m' /  IREPlus e1 e2'
 | StPlus2F : forall m e1 e2,
     Value e1 ->
     m / e2 --> fail ->
-    m /  Eplus e1 e2 --> fail
+    m /  IREPlus e1 e2 --> fail
 | StPlus : forall m n1 n2,
-    m /  Eplus (Enum n1) (Enum n2) --> m /  Enum (n1 + n2)
+    m /  IREPlus (IRENum n1) (IRENum n2) --> m /  IRENum (n1 + n2)
 | StCstr : forall m m' free,
     (free, m') = fresh m ->
-    m / Ecstr --> m' / Etbl free
+    m / IRECnst --> m' / IREAddr free
 | StIndx1 : forall m e1 e2 m' e1',
     m /e1 --> m' /e1' ->
-    m / Eindx e1 e2 --> m' / Eindx e1' e2
+    m / IREGet e1 e2 --> m' / IREGet e1' e2
 | StIndx1F : forall m e1 e2,
     m /e1 --> fail ->
-    m / Eindx e1 e2 --> fail
+    m / IREGet e1 e2 --> fail
 | StIndx2 : forall m e1 e2 m' e2',
     Value e1 ->
     m /e2 --> m' /e2' ->
-    m / Eindx e1 e2 --> m' / Eindx e1 e2'
+    m / IREGet e1 e2 --> m' / IREGet e1 e2'
 | StIndx2F : forall m e1 e2,
     Value e1 ->
     m /e2 --> fail ->
-    m / Eindx e1 e2 --> fail
+    m / IREGet e1 e2 --> fail
 | StIndx : forall m a n,
-    m / Eindx (Etbl a) (Enum n) --> m / query a n m
+    m / IREGet (IREAddr a) (IRENum n) --> m / query a n m
 | StAssg1 : forall m e1 e2 e3 m' e1',
     m / e1 --> m' / e1' ->
-    m / Eassg e1 e2 e3 --> m' / Eassg e1' e2 e3
+    m / IRESet e1 e2 e3 --> m' / IRESet e1' e2 e3
 | StAssg1F : forall m e1 e2 e3,
     m / e1 --> fail ->
-    m / Eassg e1 e2 e3 --> fail
+    m / IRESet e1 e2 e3 --> fail
 | StAssg2 : forall m e1 e2 e3 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
-    m / Eassg e1 e2 e3 --> m' / Eassg e1 e2' e3
+    m / IRESet e1 e2 e3 --> m' / IRESet e1 e2' e3
 | StAssg2F : forall m e1 e2 e3,
     Value e1 ->
     m / e2 --> fail ->
-    m / Eassg e1 e2 e3 --> fail
+    m / IRESet e1 e2 e3 --> fail
 | StAssg3 : forall m e1 e2 e3 m' e3',
     Value e1 -> Value e2 ->
     m / e3 --> m' / e3' ->
-    m / Eassg e1 e2 e3 --> m' / Eassg e1 e2 e3'
+    m / IRESet e1 e2 e3 --> m' / IRESet e1 e2 e3'
 | StAssg3F : forall m e1 e2 e3,
     Value e1 -> Value e2 ->
     m / e3 --> fail ->
-    m / Eassg e1 e2 e3 --> fail
+    m / IRESet e1 e2 e3 --> fail
 | StAssg : forall m a n v,
     Value v ->
-    m / Eassg (Etbl a) (Enum n) v --> Update a n v m / Enil
+    m / IRESet (IREAddr a) (IRENum n) v --> Update a n v m / IRENil
 | StFun1 : forall m e m' e',
     m / e --> m' / e' ->
-    m / Efun e --> m' / Efun e'
+    m / IREFun e --> m' / IREFun e'
 | StFun1F : forall m e,
     m / e --> fail ->
-    m / Efun e --> fail
+    m / IREFun e --> fail
 | StLambapp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
-    m / Elambapp e1 e2 --> m' / Elambapp e1' e2
+    m / IRELambApp e1 e2 --> m' / IRELambApp e1' e2
 | StLambapp1F : forall m e1 e2,
     m / e1 --> fail ->
-    m / Elambapp e1 e2 --> fail
+    m / IRELambApp e1 e2 --> fail
 | StLambapp2 : forall m e1 e2 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
-    m / Elambapp e1 e2 --> m' / Elambapp e1 e2'
+    m / IRELambApp e1 e2 --> m' / IRELambApp e1 e2'
 | StLambapp2F : forall m e1 e2,
     Value e1 ->
     m / e2 --> fail ->
-    m / Elambapp e1 e2 --> fail
+    m / IRELambApp e1 e2 --> fail
 | StLambapp : forall m var t e1 v2,
      Value v2 ->
-     m / Elambapp (Elambda var t e1) v2 -->
+     m / IRELambApp (IRELamb var t e1) v2 -->
      m / ([var := v2] e1)
 | StFunapp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
-    m / Efunapp e1 e2 --> m' / Efunapp e1' e2
+    m / IREFunApp e1 e2 --> m' / IREFunApp e1' e2
 | StFunapp1F : forall m e1 e2,
     m / e1 --> fail ->
-    m / Efunapp e1 e2 --> fail
+    m / IREFunApp e1 e2 --> fail
 | StFunapp2 : forall m e1 e2 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
-    m / Efunapp e1 e2 --> m' / Efunapp e1 e2'
+    m / IREFunApp e1 e2 --> m' / IREFunApp e1 e2'
 | StFunapp2F : forall m e1 e2,
     Value e1 ->
     m / e2 --> fail ->
-    m / Efunapp e1 e2 --> fail
+    m / IREFunApp e1 e2 --> fail
 | StFunapp : forall m var b v2,
     Value v2 ->
-    m / Efunapp (Efun (Elambda var Tstar b)) v2 -->
-    m / Elambapp (Elambda var Tstar b) v2
+    m / IREFunApp (IREFun (IRELamb var IRTStar b)) v2 -->
+    m / IRELambApp (IRELamb var IRTStar b) v2
 | StBox1 : forall m t e m' e',
     m / e --> m' / e' ->
-    m / Ebox t e --> m' / Ebox t e'
+    m / IREBox t e --> m' / IREBox t e'
 | StBox1F : forall m t e,
     m / e --> fail ->
-    m / Ebox t e --> fail
+    m / IREBox t e --> fail
 | StUnbox1 : forall m t e m' e',
     m / e --> m' / e' ->
-    m / Eunbox t e --> m' / Eunbox t e'
+    m / IREUnbox t e --> m' / IREUnbox t e'
 | StUnbox1F : forall m t e,
     m / e --> fail ->
-    m / Eunbox t e --> fail
+    m / IREUnbox t e --> fail
 | StUnbox : forall m t v,
     Value v ->
-    m / Eunbox t (Ebox t v) --> m / v
+    m / IREUnbox t (IREBox t v) --> m / v
 | StUnboxF : forall m t t' v,
     t <> t' ->
     Value v ->
-    m / Eunbox t (Ebox t' v) --> fail
+    m / IREUnbox t (IREBox t' v) --> fail
 
 where "m / e --> m1 / e1" := (step m e m1 (Some e1))
   and "m / e --> 'fail'" := (step m e m None).
@@ -415,15 +414,15 @@ where "m / e --> m1 / e1" := (step m e m1 (Some e1))
 
 
 Definition mem_correct (m : Mem) :=
-  forall a n, Value (query a n m) /\ MEmpty |= (query a n m) : Tstar.
+  forall a n, Value (query a n m) /\ MEmpty |= (query a n m) : IRTStar.
 
 
 Lemma mem_correct_empty : mem_correct EmptyMem.
-Proof. unfold mem_correct; eauto using Value,Typing. Qed.
+Proof. unfold mem_correct; eauto using Value,IRTyping. Qed.
 
 
 Lemma mem_correct_query : forall Γ m a n,
-  mem_correct m -> Γ |= (query a n m) : Tstar.
+  mem_correct m -> Γ |= (query a n m) : IRTStar.
 Proof.
   intros Γ m a n Hmc.
   specialize (Hmc a n) as [? ?].
@@ -432,14 +431,14 @@ Qed.
 
 
 Lemma mem_correct_update : forall m a idx e,
-  mem_correct m -> Value e -> MEmpty |= e : Tstar ->
+  mem_correct m -> Value e -> MEmpty |= e : IRTStar ->
       mem_correct (Update a idx e m).
 Proof.
   intros m a idx e Hmc.
   unfold mem_correct; intros.
   simpl.
   destruct (Nat.eq_dec a0 a); destruct (Nat.eq_dec n idx);
-  simpl; subst; simpl; eauto using Typing,Value.
+  simpl; subst; simpl; eauto using IRTyping,Value.
 Qed.
 
 
@@ -447,7 +446,7 @@ Lemma mem_correct_fresh : forall m m' free,
   mem_correct m -> (free,m') = fresh m -> mem_correct m'.
 Proof.
   unfold fresh. intros m m' free Hmc Heq. inversion Heq.
-  eauto using mem_correct_update,Typing,Value.
+  eauto using mem_correct_update,IRTyping,Value.
 Qed.
 
 
@@ -475,10 +474,10 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HT; intros e' m' Hst; inversion Hst; subst;
-  eauto using Typing, mem_correct_query;
+  eauto using IRTyping, mem_correct_query;
   match goal with
   | [ H: _ |= _ : _ |- _ ] =>
-        (inversion H; subst; eauto using Typing, subst_typing; fail)
+        (inversion H; subst; eauto using IRTyping, subst_typing; fail)
   end.
 Qed.
 
@@ -497,7 +496,7 @@ Proof.
   induction HV; intros HEx; destruct HEx as [m' [v' Hst]];
   inversion Hst; subst; eauto;
   match goal with
-  | [H: step _ (Elambda _ _ _) _ _ |- _] => inversion H end.
+  | [H: step _ (IRELamb _ _ _) _ _ |- _] => inversion H end.
 Qed.
 
 

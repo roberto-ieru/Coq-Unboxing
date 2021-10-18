@@ -186,7 +186,7 @@ Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 
 
 
-Fixpoint TP2FCT (t : PType) : IRType :=
+Fixpoint PT2IRT (t : PType) : IRType :=
   match t with
   | PTStar => IRTStar
   | PTNil => TgNil
@@ -199,12 +199,12 @@ Fixpoint TP2FCT (t : PType) : IRType :=
 Fixpoint TP2TGamma (Γ : Map PType) : Map IRType :=
   match Γ with
   | MEmpty => MEmpty
-  | MCons var T Γ' => MCons var (TP2FCT T) (TP2TGamma Γ')
+  | MCons var T Γ' => MCons var (PT2IRT T) (TP2TGamma Γ')
   end.
 
 
 Lemma TP2TGammaIn : forall Γ var T,
-    In Γ var = Some T -> In (TP2TGamma Γ) var = Some (TP2FCT T).
+    In Γ var = Some T -> In (TP2TGamma Γ) var = Some (PT2IRT T).
 Proof.
   induction Γ; intros var T H; simpl in *.
   - easy.
@@ -229,11 +229,11 @@ Notation "'<' t1 '<=' t2 '>' e" := (Cast t1 t2 e)
 
 Definition tagOf Γ e : IRType :=
   match typeOf Γ e with
-  | Some T => TP2FCT T
+  | Some T => PT2IRT T
   | None => TgNil
   end.
 
-Lemma tagOfT : forall Γ e T, typeOf Γ e = Some T -> tagOf Γ e = TP2FCT T.
+Lemma tagOfT : forall Γ e T, typeOf Γ e = Some T -> tagOf Γ e = PT2IRT T.
 Proof. intros. unfold tagOf. rewrite H. trivial. Qed.
 
 
@@ -252,19 +252,19 @@ Fixpoint Pall2Lir (Γ : Environment) (e : PE) : IRE :=
   | PEVar var => IREVar var
   | PEFun var T e => let Γ' := (var |=> T; Γ) in
         IREFun (IRELamb var IRTStar
-                      (IRELambApp (IRELamb var (TP2FCT T)
+                      (IRELambApp (IRELamb var (PT2IRT T)
                                   (<IRTStar <= tagOf Γ' e> (Pall2Lir Γ' e)))
-                                  (<TP2FCT T <= IRTStar> (IREVar var))))
+                                  (<PT2IRT T <= IRTStar> (IREVar var))))
   | PEApp e1 e2 => <tagOf Γ e <= IRTStar>
          (IREFunApp (Pall2Lir Γ e1)
                   (<IRTStar <= (tagOf Γ e2)> Pall2Lir Γ e2))
-  | PECast e1 t => <TP2FCT t <= tagOf Γ e1> (Pall2Lir Γ e1)
+  | PECast e1 t => <PT2IRT t <= tagOf Γ e1> (Pall2Lir Γ e1)
   end.
 
 
 Lemma invertCall : forall Γ e1 e2 T1 T2 t,
   typeOf Γ e1 = Some (TPfun T1 T2) -> typeOf Γ e2 = Some T1 ->
-    tagOf Γ (PEApp e1 e2) = t -> TP2FCT T2 = t.
+    tagOf Γ (PEApp e1 e2) = t -> PT2IRT T2 = t.
 Proof.
   intros Γ e1 r2 T1 T2 t H1 H2.
   unfold tagOf. simpl. rewrite H1. rewrite H2.
@@ -275,13 +275,13 @@ Qed.
 Ltac breakTagOf :=
   match goal with
   [H: typeOf _ ?E = Some ?T |- context C [tagOf _ ?E] ] =>
-    apply tagOfT in H; rewrite H; destruct (TP2FCT T) eqn:?;
+    apply tagOfT in H; rewrite H; destruct (PT2IRT T) eqn:?;
     eauto using IRTyping
   end.
 
 
 Theorem Pall2LirWellTyped : forall Γ (e : PE) T,
-    Γ |= e : T -> IRTyping (TP2TGamma Γ) (Pall2Lir Γ e) (TP2FCT T).
+    Γ |= e : T -> IRTyping (TP2TGamma Γ) (Pall2Lir Γ e) (PT2IRT T).
 Proof with eauto using IRTyping.
   intros Γ e T H.
   induction H; simpl in *;
@@ -291,23 +291,23 @@ Proof with eauto using IRTyping.
       apply typeOfCorrect in H
   end.
   - unfold tagOf. simpl. rewrite H. rewrite H0.
-    destruct (TP2FCT T) eqn:?; simpl...
+    destruct (PT2IRT T) eqn:?; simpl...
   - unfold tagOf. rewrite H1.
-    destruct (TP2FCT T) eqn:?; simpl...
-  - apply IRTyFun. apply IRTyLamb. apply IRTyLambApp with (TP2FCT Tvar).
+    destruct (PT2IRT T) eqn:?; simpl...
+  - apply IRTyFun. apply IRTyLamb. apply IRTyLambApp with (PT2IRT Tvar).
     apply IRTyLamb.
-    + apply envExt with (var |=> TP2FCT Tvar; TP2TGamma Γ).
+    + apply envExt with (var |=> PT2IRT Tvar; TP2TGamma Γ).
       apply inclusion_shadow'.
       breakTagOf.
     + apply tagOfT in H;
-      destruct (TP2FCT Tvar) eqn:?;
+      destruct (PT2IRT Tvar) eqn:?;
       eauto using IRTyping,InEq.
   - destruct (tagOf Γ (PEApp e1 e2)) eqn:?;
       rewrite (invertCall _ _ _ _ _ _ H H0 Heqi);
       breakTagOf.
   - unfold Cast.
     breakTagOf;
-    destruct (TP2FCT T2) eqn:?...
+    destruct (PT2IRT T2) eqn:?...
     destruct (dec_Tag t0 t); subst; try easy...
 Qed.
 

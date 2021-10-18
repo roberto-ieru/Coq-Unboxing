@@ -305,45 +305,45 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
 | StCstr : forall m m' free,
     (free, m') = fresh m ->
     m / IRECnst --> m' / IREAddr free
-| StIndx1 : forall m e1 e2 m' e1',
+| StGet1 : forall m e1 e2 m' e1',
     m /e1 --> m' /e1' ->
     m / IREGet e1 e2 --> m' / IREGet e1' e2
-| StIndx1F : forall m e1 e2,
+| StGet1F : forall m e1 e2,
     m /e1 --> fail ->
     m / IREGet e1 e2 --> fail
-| StIndx2 : forall m e1 e2 m' e2',
+| StGet2 : forall m e1 e2 m' e2',
     Value e1 ->
     m /e2 --> m' /e2' ->
     m / IREGet e1 e2 --> m' / IREGet e1 e2'
-| StIndx2F : forall m e1 e2,
+| StGet2F : forall m e1 e2,
     Value e1 ->
     m /e2 --> fail ->
     m / IREGet e1 e2 --> fail
-| StIndx : forall m a n,
+| StGet : forall m a n,
     m / IREGet (IREAddr a) (IRENum n) --> m / query a n m
-| StAssg1 : forall m e1 e2 e3 m' e1',
+| StSet1 : forall m e1 e2 e3 m' e1',
     m / e1 --> m' / e1' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1' e2 e3
-| StAssg1F : forall m e1 e2 e3,
+| StSet1F : forall m e1 e2 e3,
     m / e1 --> fail ->
     m / IRESet e1 e2 e3 --> fail
-| StAssg2 : forall m e1 e2 e3 m' e2',
+| StSet2 : forall m e1 e2 e3 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1 e2' e3
-| StAssg2F : forall m e1 e2 e3,
+| StSet2F : forall m e1 e2 e3,
     Value e1 ->
     m / e2 --> fail ->
     m / IRESet e1 e2 e3 --> fail
-| StAssg3 : forall m e1 e2 e3 m' e3',
+| StSet3 : forall m e1 e2 e3 m' e3',
     Value e1 -> Value e2 ->
     m / e3 --> m' / e3' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1 e2 e3'
-| StAssg3F : forall m e1 e2 e3,
+| StSet3F : forall m e1 e2 e3,
     Value e1 -> Value e2 ->
     m / e3 --> fail ->
     m / IRESet e1 e2 e3 --> fail
-| StAssg : forall m a n v,
+| StSet : forall m a n v,
     Value v ->
     m / IRESet (IREAddr a) (IRENum n) v --> Update a n v m / IRENil
 | StFun1 : forall m e m' e',

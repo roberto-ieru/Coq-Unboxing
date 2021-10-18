@@ -83,7 +83,7 @@ Inductive PTyping : Environment -> PE -> PType -> Prop :=
     Γ |= e1 : TParr T ->
     Γ |= e2 : PTInt ->
     Γ |= e3 : T ->
-    Γ |= PESet e1 e2 e3 : PTNil
+    Γ |= PESet e1 e2 e3 : PTStar
 | PTyFun : forall Γ var Tvar body Tbody,
     var |=> Tvar; Γ |= body : Tbody ->
     Γ |= PEFun var Tvar body : TPfun Tvar Tbody
@@ -117,7 +117,7 @@ Fixpoint typeOf Γ e : option PType :=
   | PESet e1 e2 e3 =>
     match (typeOf Γ e1), (typeOf Γ e2), (typeOf Γ e3) with
     | Some (TParr T), Some PTInt, Some T' =>
-        if TPeq T T' then Some PTNil else None
+        if TPeq T T' then Some PTStar else None
     | _, _, _ => None
     end
   | PEVar var => In Γ var

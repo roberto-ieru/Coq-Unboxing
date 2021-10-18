@@ -77,7 +77,7 @@ Inductive IRTyping : IREnvironment -> IRE -> EType -> Prop :=
     Γ |= e1 : TgTbl ->
     Γ |= e2 : TgInt ->
     Γ |= e3 : IRTStar ->
-    Γ |= (IRESet e1 e2 e3) : TgNil
+    Γ |= (IRESet e1 e2 e3) : IRTStar
 | IRTyLamb : forall Γ var tvar e te,
     var |=> tvar; Γ |= e : te ->
     Γ |= (IRELamb var tvar e) : (ETLamb tvar te)
@@ -345,7 +345,7 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
     m / IRESet e1 e2 e3 --> fail
 | StSet : forall m a n v,
     Value v ->
-    m / IRESet (IREAddr a) (IRENum n) v --> Update a n v m / IRENil
+    m / IRESet (IREAddr a) (IRENum n) v --> Update a n v m / v
 | StFun1 : forall m e m' e',
     m / e --> m' / e' ->
     m / IREFun e --> m' / IREFun e'

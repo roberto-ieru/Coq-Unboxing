@@ -23,7 +23,7 @@ Inductive LE : Set :=
 | LEFun : string -> LE -> LE
 .
 
-
+(*
 Inductive LTyping : IREnvironment -> LE -> Prop :=
 | LTyNil : forall Γ, LTyping Γ LENil
 | LTyNum : forall Γ n, LTyping Γ (LENum n)
@@ -52,7 +52,7 @@ Inductive LTyping : IREnvironment -> LE -> Prop :=
       LTyping (var |=> IRTStar; Γ) body ->
       LTyping Γ (LEFun var body)
 .
-
+*)
 
 Fixpoint Lua2Lir (Γ : IREnvironment) (e : LE) : IRE :=
   match e with
@@ -63,12 +63,9 @@ Fixpoint Lua2Lir (Γ : IREnvironment) (e : LE) : IRE :=
   | LECnst => IREBox TgTbl IRECnst
   | LEGet e1 e2 => IREGet (IREUnbox TgTbl (Lua2Lir Γ e1))
                           (IREUnbox TgInt (Lua2Lir Γ e2))
-  (* | LESet e1 e2 e3 => IRESet (IREUnbox TgTbl (Lua2Lir Γ e1))
+  | LESet e1 e2 e3 => IRESet (IREUnbox TgTbl (Lua2Lir Γ e1))
                              (IREUnbox TgInt (Lua2Lir Γ e2))
-                             (Lua2Lir Γ e3) *)
-  | LESet e1 e2 e3 => IREBox TgNil (IRESet (IREUnbox TgTbl (Lua2Lir Γ e1))
-                             (IREUnbox TgInt (Lua2Lir Γ e2))
-                             (Lua2Lir Γ e3))
+                             (Lua2Lir Γ e3)
   | LEVar var =>
       match In Γ var with
       | Some _ => IREVar var

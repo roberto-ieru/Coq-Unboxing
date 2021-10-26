@@ -243,7 +243,8 @@ Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
  | IREBox tg e  => IREBox tg ([var := y] e)
  | IREUnbox tg e  => IREUnbox tg ([var := y] e)
 end
-where "'[' x ':=' s ']' t" := (substitution x s t).
+where "'[' x ':=' s ']' t" := (substitution x s t)
+.
 
 
 Lemma inclusion_typing : forall Γ Γ' e te,
@@ -409,7 +410,8 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
     m / IREUnbox t (IREBox t' v) --> fail
 
 where "m / e --> m1 / e1" := (step m e m1 (Some e1))
-  and "m / e --> 'fail'" := (step m e m None).
+  and "m / e --> 'fail'" := (step m e m None)
+.
 
 
 
@@ -483,9 +485,8 @@ Qed.
 
 
 Theorem Preservation : forall m e t m' e',
-  mem_correct m /\ MEmpty |= e : t ->
-    m / e --> m' / e' ->
-  mem_correct m' /\ MEmpty |= e' : t.
+  mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' ->
+    mem_correct m' /\ MEmpty |= e' : t.
 Proof. intuition; eauto using memPreservation,expPreservation. Qed.
 
 
@@ -546,4 +547,74 @@ Proof.
     match goal with | [t1:Tag, t2:Tag |- _] => destruct (dec_Tag t1 t2) end;
     right; subst; eauto using step.
 Qed.
+
+
+Reserved Notation "m '/' e -->* m1 '/' e1"
+(at level 40, e at level 39, m1 at level 39, e1 at level 39).
+Reserved Notation "m '/' e -->* 'fail'"
+(at level 40, e at level 39).
+
+Inductive multistep : Mem -> IRE -> Mem -> option IRE -> Prop :=
+| MStRefl : forall m e, m / e -->* m / e
+| MStMStep : forall m e m' e' m'' e'',
+    m / e --> m' / e' ->
+    m' / e' -->* m'' / e'' ->
+    m / e -->* m'' / e''
+| MStStepF : forall m e,
+    m / e --> fail ->
+    m / e -->* fail
+| MStMStepF : forall m e m' e',
+    m / e --> m' / e' ->
+    m' / e' -->* fail ->
+    m / e -->* fail
+
+where "m / e -->* m1 / e1" := (multistep m e m1 (Some e1))
+  and "m / e -->* 'fail'" := (multistep m e m None)
+.
+
+
+Theorem MultiProgress : forall m e t m' e',
+    mem_correct m ->
+    MEmpty |= e : t  ->
+    m / e -->* m' / e' ->
+        Value e' \/
+       (m' / e' --> fail \/ exists m'' e'', m' / e' --> m'' / e'').
+Proof.
+  intros m e t m' e' HTy HMem HMulti.
+  remember (Some e') as E eqn:Heq.
+  induction HMulti; inversion Heq; subst.
+  - eauto using Progress.
+  - eapply IHHMulti; trivial; eapply Preservation; eauto.
+Qed.
+
+
+Ltac finishmExp :=
+  intros m e m' e' Hmt;
+  remember (Some e') as E' eqn:Heq;
+  generalize dependent e';
+  induction Hmt; intros ? Heq; inversion Heq; subst;
+  eauto using step,multistep.
+
+Lemma mPlus1 : forall e2 m e m' e',
+    m / e -->* m' / e' ->  m / IREPlus e e2 -->* m' / IREPlus e' e2.
+Proof. intros e2; finishmExp. Qed.
+
+Lemma mPlus2 : forall e1, Value e1 -> forall m e m' e',
+    m / e -->* m' / e' ->  m / IREPlus e1 e -->* m' / IREPlus e1 e'.
+Proof. intros e1 HV; finishmExp. Qed.
+
+
+Lemma mBox1 : forall t m e m' e',
+    m / e -->* m' / e' ->  m / IREBox t e -->* m' / IREBox t e'.
+Proof.
+  intros t; finishmExp. Qed.
+
+
+Lemma mUnbox1 : forall t m e m' e',
+    m / e -->* m' / e' ->  m / IREUnbox t e -->* m' / IREUnbox t e'.
+Proof. intros t; finishmExp. Qed.
+
+
+
+
 

@@ -143,6 +143,15 @@ Inductive Value : IRE -> Prop :=
 .
 
 
+Lemma valnil : forall Γ e,
+  Γ |= e : TgNil -> Value e -> e = IRENil.
+Proof.
+  intros Γ e HT HV.
+  inversion HV;
+  inversion HT; subst; congruence.
+Qed.
+
+
 Lemma valint : forall Γ e,
     Γ |= e : TgInt -> Value e -> exists n, e = IRENum n.
 Proof.

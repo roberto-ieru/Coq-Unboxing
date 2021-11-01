@@ -441,6 +441,12 @@ Proof.
 Qed.
 
 
+Ltac breakNatDec :=
+  repeat match goal with
+  [ |- context C [Nat.eq_dec ?V1 ?V2] ] =>
+    destruct (Nat.eq_dec V1 V2) end.
+
+
 Lemma mem_correct_update : forall m a idx e,
   mem_correct m -> Value e -> MEmpty |= e : IRTStar ->
       mem_correct (Update a idx e m).
@@ -448,8 +454,7 @@ Proof.
   intros m a idx e Hmc.
   unfold mem_correct; intros.
   simpl.
-  destruct (Nat.eq_dec a0 a); destruct (Nat.eq_dec n idx);
-  simpl; subst; simpl; eauto using IRTyping,Value.
+  breakNatDec; eauto using IRTyping,Value.
 Qed.
 
 

@@ -181,12 +181,79 @@ Proof.
     * inversion H1; trivial.
 Qed.
 
+
+Lemma stepBigstep : forall m e m' e' m'' e'',
+    mem_correct m ->
+    m / e --> m' / e' -> m' / e' ==> m'' / e'' -> m / e ==> m'' / e''.
+Proof.
+  intros m e m' e' m'' e'' HM HSt HB.
+  remember (Some e') as E eqn:HEq.
+  generalize dependent e'.
+  generalize dependent m''.
+  generalize dependent e''.
+  induction HSt; intros ? ? ? HEq HB; inversion HEq; clear HEq; subst;
+  inversion HB; subst;
+  (* ~half cases values are not values *)
+  try match goal with
+  | [ H: Value _ |- _ ] =>
+      inversion H; subst; eauto using bigStep,Value; fail
+  end;
+  (* extract equalities from "value" steps *)
+  repeat match goal with
+  | [ HB: bigStep _ ?E _ _ |- _] =>
+    eapply valueNormal in HB; only 2: (eauto using Value; fail);
+    intuition; subst
+  end;
+  (* extract equalities from injections *)
+  repeat match goal with
+  | [H: Some _ = Some _ |- _] => injection H as H; subst
+  end;
+  (* clear useless equalities *)
+  repeat match goal with | [H: ?E = ?E |- _] => clear H end;
+  eauto using bigStep,Value;
+  (* contradictions about query not being a value *)
+  try match goal with
+    |[H: ?E = query _ _ _ |- _] =>
+        assert (HC: Value E) by (rewrite H; apply HM); inversion HC
+    end.
+  - subst. rewrite <- H in HB.
+    assert (HH: m = m'' /\ Some (IRELamb var IRTStar body) =
+                Some (IRELamb var0 IRTStar e0)).
+    { eapply valueNormal; eauto using Value. }
+    inversion HH. inversion H1. subst.
+    rewrite H. eapply BStGet; eauto using bigStep,Value.
+  - subst. rewrite <- H in HB.
+    assert (HH: m = m'' /\ Some (IREBox t e') = Some (IREBox t e)).
+    { eapply valueNormal; eauto using Value. }
+    inversion HH. inversion H2. subst.
+    rewrite H. eapply BStGet; eauto using bigStep,Value.
+Qed.
+
+
+Theorem smallBig : forall m e t m' e',
+    mem_correct m ->
+    MEmpty |= e : t ->
+    m / e -->* m' / e' ->
+    Value e' ->
+    m / e ==> m' / e'.
+Proof.
+  intros m e t m' e' MC MTy MSt.
+  remember (Some e') as E'.
+  generalize dependent e'.
+  induction MSt; intros ? HEq HV; inversion HEq; subst; clear HEq.
+  - eauto using bigStep.
+  - eapply stepBigstep; eauto.
+    eapply IHMSt; eauto; eapply Preservation; eauto.
+Qed.
+
+
+(* Propagate 'mem_correct' to all memories *)
 Ltac memC :=
   match goal with
-    | [ M : Mem |- _] =>
+    | [ M : Mem |- _] =>  (* for all memories *)
       match goal with
-      | [ H : mem_correct M |- _] => fail 1
-      | [ H' : _ |- _] =>
+      | [ H : mem_correct M |- _] => fail 1  (* already done *)
+      | [ |- _] =>  (* else *)
          assert(mem_correct M) by (eapply BPreservation; eauto)
       end
     end.
@@ -211,12 +278,11 @@ Proof.
   eauto using Value,BStValue,dynValue,dynFresh,bigStep;
   repeat match goal with
     | [ MC: mem_correct ?M,
-        HT: MEmpty |= ?E : _ |- _] =>  idtac MC HT E;
+        HT: MEmpty |= ?E : _ |- _] =>
       match goal with
       | [ IH: mem_correct M -> forall _, MEmpty |= E : _ ->
         forall _, Some ?E' = Some _ -> _
          |- _] =>
-      idtac IH MC E E';
         specialize (IH MC _ HT E' eq_refl); simpl in IH
       end
     end; eauto using bigStep.

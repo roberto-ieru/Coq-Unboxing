@@ -36,7 +36,7 @@ Fixpoint dyn (e : IRE) : IRE :=
 
 Lemma dynIdempotent : forall e, dyn e = dyn (dyn e).
 Proof. induction e; simpl; congruence. Qed.
-  
+
 
 Fixpoint dynType (t : EType) : EType :=
   match t with
@@ -75,6 +75,18 @@ Proof.
 Qed.
 
 
+Lemma dynSubst : forall var e1 e2,
+    ([var := dyn e1](dyn e2)) = dyn ([var := e1]e2).
+Proof.
+  intros var e1 e2.
+  induction e2; simpl;
+  try match goal with
+    [|- context C [string_dec ?V1 ?V2]] =>
+       destruct (string_dec V1 V2); simpl
+  end;
+  congruence.
+Qed.
+
 
 Lemma mPlus1 : forall e2 m e m' e',
     m / e -->* m' / e' ->  m / IREPlus e e2 -->* m' / IREPlus e' e2.
@@ -87,4 +99,48 @@ Proof.
   eauto using step,multistep.
 Qed.
 
+
+Fixpoint dynMem (m : Mem) : Mem :=
+  match m with
+  | EmptyMem => EmptyMem
+  | Update a n e m => Update a n (dyn e) (dynMem m)
+  end.
+
+
+Lemma dynMemCorrect : forall m, mem_correct m -> mem_correct (dynMem m).
+Proof.
+  unfold mem_correct.
+  intros m H a n. specialize (H a n) as [? ?].
+  induction m; split;
+  auto using Value;
+  simpl in *; breakNatDec;
+    try (apply IHm; easy).
+  - auto using dynValue.
+  - replace (ETn IRTStar) with (dynType IRTStar) by reflexivity.
+    replace MEmpty with (dynGamma MEmpty) by reflexivity.
+    auto using dynTyping.
+Qed.
+
+
+Lemma dynQuery : forall m a idx,
+    dyn (query a idx m) = query a idx (dynMem m).
+Proof.
+  intros. induction m; simpl; breakNatDec; trivial.
+Qed.
+
+
+Lemma dynFreshAux : forall m, freshaux m = freshaux (dynMem m).
+Proof.
+  induction m; trivial; simpl; congruence.
+Qed.
+
+
+Lemma dynFresh : forall m free m',
+   (free, m') = fresh m -> (free, dynMem m') = fresh (dynMem m).
+Proof.
+  induction m; intros free m' H; inversion H; subst.
+  - reflexivity.
+  - simpl. unfold fresh.
+    f_equal; f_equal; rewrite dynFreshAux; trivial.
+Qed.
 

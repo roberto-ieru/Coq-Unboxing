@@ -10,6 +10,8 @@ Require Import LIR.maps.
 
 Require Import LIR.lir.
 
+Require Import LIR.dyn.
+
 
 Reserved Notation "m '/' e ==> m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
@@ -134,12 +136,12 @@ Qed.
 
 
 Lemma BPreservation : forall (m m' : Mem) e e' t,
+  m / e ==> m' / e' ->
   mem_correct m ->
   MEmpty |= e : t ->
-  m / e ==> m' / e' ->
      mem_correct m' /\ MEmpty |= e' : t /\ Value e'.
 Proof.
-  intros m m' e e' t HMC HTy Hst.
+  intros m m' e e' t Hst HMC HTy.
   remember MEmpty as Γ.
   remember (Some e') as E'.
   generalize dependent e'.
@@ -179,43 +181,62 @@ Proof.
     * inversion H1; trivial.
 Qed.
 
+Ltac memC :=
+  match goal with
+    | [ M : Mem |- _] =>
+      match goal with
+      | [ H : mem_correct M |- _] => fail 1
+      | [ H' : _ |- _] =>
+         assert(mem_correct M) by (eapply BPreservation; eauto)
+      end
+    end.
 
 
-Lemma stepBigstep : forall m e m' e' m'' e'', 
-    m / e --> m' / e' -> m / e ==> m'' / e'' -> m' / e' ==> m'' / e''.
+Theorem bigDyn : forall e t m e' m',
+   m / e ==> m' / e' -> MEmpty |= e : t -> mem_correct m ->
+   dynMem m / dyn e ==> dynMem m' / dyn e'.
 Proof.
-  intros m e m' e' m'' e'' HSt HB. 
-  remember (Some e') as E eqn:HEq.
+  intros e t m e' m' HB HTy HM.
+  remember MEmpty as Γ eqn:Heq.
+  remember (Some e') as E'.
   generalize dependent e'.
-  generalize dependent m''.
-  generalize dependent e''.
-  induction HSt; intros ? ? HB ? HEq; inversion HEq; clear HEq; subst;
-  inversion HB; subst;
-  (* ~half cases values are not values *)
-  try match goal with
-  | [ H: Value _ |- _ ] =>
-      inversion H; subst; eauto using bigStep,Value; fail
-  end;
-  (* extract equalities from "value" steps *)
+  generalize dependent t.
+  induction HB; intros ? HTy ? Heq1;
+  inversion Heq1; clear Heq1;
+  inversion Heq; inversion HTy; subst; simpl;
+  try match goal with [H : Value _ |- _] => inversion H end;
+  repeat memC;
+  simpl;
+  try (eapply BStValue; eauto using Value; fail);
+  eauto using Value,BStValue,dynValue,dynFresh,bigStep;
   repeat match goal with
-  | [ HB: bigStep _ ?E _ _ |- _] =>
-    eapply valueNormal in HB; only 2: (eauto using Value; fail);
-    intuition; subst
-  end;
-  (* extract equalities from injections *)
-  repeat match goal with
-  | [H: Some _ = Some _ |- _] => injection H as H; subst
-  end;
-  (* clear useless equalities *)
-  repeat match goal with | [H: ?E = ?E |- _] => clear H end;
-  eauto using bigStep,Value.
-  - assert(free = free0) by congruence.
-    assert(m' = m'') by congruence.
-   subst. eauto using bigStep,Value.
-  - shelve.
-
-    
-
-
+    | [ MC: mem_correct ?M,
+        HT: MEmpty |= ?E : _ |- _] =>  idtac MC HT E;
+      match goal with
+      | [ IH: mem_correct M -> forall _, MEmpty |= E : _ ->
+        forall _, Some ?E' = Some _ -> _
+         |- _] =>
+      idtac IH MC E E';
+        specialize (IH MC _ HT E' eq_refl); simpl in IH
+      end
+    end; eauto using bigStep.
+  - rewrite dynQuery. eauto using bigStep.
+  - apply (BStLambapp _ _ (dynMem m') var IRTStar (dyn body) _
+                          (dynMem m'') (dyn v2)); eauto.
+    + rewrite dynSubst. eapply IHHB3; eauto.
+      assert (MEmpty |= IRELamb var t body : ETLamb t1 t0).
+      { eapply BPreservation; eauto. }
+      eapply subst_typing; inversion H2; eauto.
+      eapply BPreservation; eauto.
+  - eapply (BStFunapp _ _ (dynMem m') var (dyn body) _ (dynMem m'')
+            (dyn v2)); eauto using bigStep.
+    + rewrite dynSubst. eapply IHHB3; eauto.
+      assert (HTF: MEmpty |= IREFun (IRELamb var IRTStar body) : TgFun).
+      { eapply BPreservation; eauto. }
+      inversion HTF; subst.
+      eapply subst_typing.
+      * inversion H5; eauto.
+      * eapply BPreservation; eauto.
+Qed.
 
 

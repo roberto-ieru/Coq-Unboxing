@@ -34,10 +34,11 @@ Inductive bigStep : Mem -> IRE -> Mem -> option IRE -> Prop :=
 | BStCstr : forall m m' free,
     (free, m') = fresh m ->
     m / IRECnst ==> m' / IREAddr free
-| BStGet : forall m e1 m' a e2 m'' idx,
+| BStGet : forall m e1 m' a e2 m'' v idx,
     m / e1 ==> m' / IREAddr a ->
     m'/ e2 ==> m'' / IRENum idx ->
-    m / IREGet e1 e2 ==> m'' / query a idx m''
+    v = query a idx m'' ->
+    m / IREGet e1 e2 ==> m'' / v
 | BStGet1F : forall m e1 e2,
     m / e1 ==> fail ->
     m / IREGet e1 e2 ==> fail
@@ -198,9 +199,12 @@ Proof.
   | [ H: Value _ |- _ ] =>
       inversion H; subst; eauto using bigStep,Value; fail
   end;
+  (* rewrite queries to its real values in the step *)
+  repeat match goal with
+  | [ H: _ = query _ _ _ |- _ ] => rewrite <- H in HB end;
   (* extract equalities from "value" steps *)
   repeat match goal with
-  | [ HB: bigStep _ ?E _ _ |- _] =>
+  | [ HB: bigStep _ _ _ _ |- _] =>
     eapply valueNormal in HB; only 2: (eauto using Value; fail);
     intuition; subst
   end;
@@ -215,18 +219,14 @@ Proof.
   try match goal with
     |[H: ?E = query _ _ _ |- _] =>
         assert (HC: Value E) by (rewrite H; apply HM); inversion HC
-    end.
-  - subst. rewrite <- H in HB.
-    assert (HH: m = m'' /\ Some (IRELamb var IRTStar body) =
-                Some (IRELamb var0 IRTStar e0)).
-    { eapply valueNormal; eauto using Value. }
-    inversion HH. inversion H1. subst.
-    rewrite H. eapply BStGet; eauto using bigStep,Value.
-  - subst. rewrite <- H in HB.
-    assert (HH: m = m'' /\ Some (IREBox t e') = Some (IREBox t e)).
-    { eapply valueNormal; eauto using Value. }
-    inversion HH. inversion H2. subst.
-    rewrite H. eapply BStGet; eauto using bigStep,Value.
+    end;
+  (* queries being complex values (fun and lambdas which must be
+     broken to extract some equalities *)
+  (
+    eapply valueNormal in HB as [? HB1]; eauto using Value;
+    inversion HB1; subst;
+    eapply BStGet; eauto using bigStep,Value; congruence
+  ).
 Qed.
 
 

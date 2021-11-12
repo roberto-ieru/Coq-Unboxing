@@ -45,7 +45,7 @@ Lemma TPeqRefl : forall t, TPeq t t = true.
 Proof. intros t. apply dec_TP. trivial. Qed.
 
 
-Definition Environment := Map PType.
+Definition PEnvironment := Map PType.
 
 Inductive PE : Set :=
 | PENil : PE
@@ -64,7 +64,7 @@ Inductive PE : Set :=
 Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
-Inductive PTyping : Environment -> PE -> PType -> Prop :=
+Inductive PTyping : PEnvironment -> PE -> PType -> Prop :=
 | PTyNil : forall Γ, Γ |= PENil : PTNil
 | PTyInt : forall Γ n, Γ |= PENum n : PTInt
 | PTyVal : forall Γ var T,
@@ -237,7 +237,7 @@ Lemma tagOfT : forall Γ e T, typeOf Γ e = Some T -> tagOf Γ e = PT2IRT T.
 Proof. intros. unfold tagOf. rewrite H. trivial. Qed.
 
 
-Fixpoint Pall2Lir (Γ : Environment) (e : PE) : IRE :=
+Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   match e with
   | PENil => IRENil
   | PENum a => IRENum a

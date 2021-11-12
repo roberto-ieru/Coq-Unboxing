@@ -8,7 +8,10 @@ Require Import Lia.
 
 Require Import LIR.maps.
 
+
+Require Import LIR.pallene.
 Require Import LIR.lir.
+Require Import LIR.dyn.
 
 
 Inductive LE : Set :=
@@ -23,36 +26,6 @@ Inductive LE : Set :=
 | LEFun : string -> LE -> LE
 .
 
-(*
-Inductive LTyping : IREnvironment -> LE -> Prop :=
-| LTyNil : forall Γ, LTyping Γ LENil
-| LTyNum : forall Γ n, LTyping Γ (LENum n)
-| LTyPlus : forall Γ e1 e2,
-      LTyping Γ e1 ->
-      LTyping Γ e2 ->
-      LTyping Γ (LEPlus e1 e2)
-| LTyCnst : forall Γ, LTyping Γ LECnst
-| LTyGet :  forall Γ e1 e2,
-      LTyping Γ e1 ->
-      LTyping Γ e2 ->
-      LTyping Γ (LEGet e1 e2)
-| LTySet :  forall Γ e1 e2 e3,
-      LTyping Γ e1 ->
-      LTyping Γ e2 ->
-      LTyping Γ e3 ->
-      LTyping Γ (LESet e1 e2 e3)
-| LTyVar : forall Γ var T,
-    In Γ var = Some T ->
-    LTyping Γ (LEVar var)
-| LTyApp :  forall Γ e1 e2,
-      LTyping Γ e1 ->
-      LTyping Γ e2 ->
-      LTyping Γ (LEApp e1 e2)
-| LTyFun :  forall Γ var body,
-      LTyping (var |=> IRTStar; Γ) body ->
-      LTyping Γ (LEFun var body)
-.
-*)
 
 Fixpoint Lua2Lir (Γ : IREnvironment) (e : LE) : IRE :=
   match e with
@@ -103,6 +76,71 @@ Proof.
 Qed.
 
 
+Lemma LuaIsDyn : forall Γ e, Lua2Lir Γ e = dyn (Lua2Lir Γ e).
+Proof.
+  intros Γ e.
+  generalize dependent Γ.
+  induction e; intros Γ; simpl; try congruence.
+  destruct (In Γ s); trivial.
+Qed.
+
+
 Corollary Lua2LirType : forall e, MEmpty |= Lua2Lir MEmpty e : IRTStar.
 Proof. intros e. eapply Lua2LirTypeAux. discriminate. Qed.
+
+
+Fixpoint Pall2Lua (e : PE) : LE :=
+  match e with
+  | PENil => LENil
+  | PENum n => LENum n
+  | PEPlus e1 e2 => LEPlus (Pall2Lua e1) (Pall2Lua e2)
+  | PENew _ => LECnst
+  | PEGet e1 e2 => LEGet (Pall2Lua e1) (Pall2Lua e2)
+  | PESet e1 e2 e3 => LESet (Pall2Lua e1) (Pall2Lua e2) (Pall2Lua e3)
+  | PEVar var => LEVar var
+  | PEApp e1 e2 => LEApp (Pall2Lua e1) (Pall2Lua e2)
+  | PEFun var _ e => LEFun var (Pall2Lua e)
+  | PECast e _ => Pall2Lua e
+  end.
+
+
+(*
+Ltac destructTag :=
+  simpl;
+  match goal with
+  [ |- context F [tagOf ?C ?E] ] =>
+     idtac C E; destruct (tagOf C E); simpl end.
+
+
+Lemma all : forall Γ e t,
+    PTyping Γ e t ->
+    dyn (Pall2Lir Γ e) = Lua2Lir (TP2TGamma Γ) (Pall2Lua e).
+Proof.
+  intros Γ e.
+  generalize dependent Γ.
+  induction e; intros Γ ? HTy; inversion HTy; subst;
+  repeat match goal with
+  |[ HT : PTyping ?C ?E ?T,
+     IH : forall _, PTyping ?C ?E _ -> _ |- _] =>
+      specialize (IH T HT) end;
+  simpl; try (repeat destructTag; congruence).
+  - repeat match goal with
+   [ HT: PTyping ?G ?E ?T,
+     IH: forall _ _, PTyping _ ?E _ -> _ |- _] =>
+         specialize (IH G T HT)
+     end. congruence.
+  - repeat match goal with
+   [ HT: PTyping ?G ?E ?T,
+     IH: forall _ _, PTyping _ ?E _ -> _ |- _] =>
+         specialize (IH G T HT)
+     end.
+     destructTag; congruence.
+
+  - repeat f_equal. rewrite IHe1.
+  - inversion H1.
+  - destruct (tagOf (s |=> p; MEmpty) e); simpl.
+  - admit.
+Admitted.
+*)
+
 

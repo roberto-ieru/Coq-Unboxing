@@ -1,0 +1,5 @@
+coqc -Q . LIR lir.v
+coqc -Q . LIR dyn.v
+coqc -Q . LIR biglir.v
+coqc -Q . LIR pallene.v
+coqc -Q . LIR lua.v

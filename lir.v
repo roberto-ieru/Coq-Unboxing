@@ -43,7 +43,7 @@ Inductive IRE : Set :=
 | IREGet : IRE -> IRE -> IRE
 | IRESet : IRE -> IRE -> IRE -> IRE
 | IREVar : string -> IRE
-| IRELamb : string -> EType -> IRE -> IRE
+| IRELamb : string -> IRType -> IRE -> IRE
 | IREFun : IRE -> IRE
 | IRELambApp : IRE -> IRE -> IRE
 | IREFunApp : IRE -> IRE -> IRE

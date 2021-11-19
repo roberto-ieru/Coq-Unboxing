@@ -17,32 +17,8 @@ Inductive PType : Set :=
 .
 
 
-Fixpoint TPeq (t1 t2 : PType) : bool :=
-  match t1, t2 with
-  | PTStar, PTStar => true
-  | PTNil, PTNil => true
-  | PTInt, PTInt => true
-  | TParr t1', TParr t2' => TPeq t1' t2'
-  | TPfun t1' t1'', TPfun t2' t2'' => TPeq t1' t2' && TPeq t1'' t2''
-  | _, _ => false
-  end.
-
-
-Lemma dec_TP : forall (t1 t2 : PType), TPeq t1 t2 = true <-> t1 = t2.
-Proof.
-  split.
-  - generalize dependent t2.
-    induction t1; intros t2 H; destruct t2 eqn:?; try easy.
-    + f_equal. auto.
-    + simpl in H.  apply andb_prop in H.
-      destruct H. f_equal; auto.
-  - intros H; subst. induction t2; trivial.
-    simpl. auto using andb_true_intro.
-Qed.
-
-
-Lemma TPeqRefl : forall t, TPeq t t = true.
-Proof. intros t. apply dec_TP. trivial. Qed.
+Lemma dec_TP : forall (t1 t2 : PType), {t1 = t2} + {t1 <> t2}.
+Proof. decide equality. Qed.
 
 
 Definition PEnvironment := Map PType.
@@ -117,14 +93,14 @@ Fixpoint typeOf Γ e : option PType :=
   | PESet e1 e2 e3 =>
     match (typeOf Γ e1), (typeOf Γ e2), (typeOf Γ e3) with
     | Some (TParr T), Some PTInt, Some T' =>
-        if TPeq T T' then Some PTStar else None
+        if dec_TP T T' then Some PTStar else None
     | _, _, _ => None
     end
   | PEVar var => In Γ var
   | PEApp e1 e2 =>
     match typeOf Γ e1, typeOf Γ e2 with
     | Some (TPfun T1 T2), Some T1' =>
-        if TPeq T1 T1' then Some T2 else None
+        if dec_TP T1 T1' then Some T2 else None
     | _, _ => None
     end
   | PEFun var Tv e =>
@@ -147,8 +123,9 @@ Proof.
   induction Hty; try easy;
   simpl;
   repeat match goal with
-  | [H: typeOf _ _ = Some _ |- _] => rewrite H; clear H end;
-  try easy; rewrite TPeqRefl; trivial.
+  | [H: typeOf _ _ = Some _ |- _] => rewrite H; clear H
+  | [ |- context [dec_TP ?V1 ?V2] ] => destruct (dec_TP V1 V2)
+  end; easy.
 Qed.
 
 
@@ -167,13 +144,11 @@ Proof.
   - destTOf Γ e1.
     destTOf Γ e2.
     destruct (typeOf Γ e3) eqn:?; try easy.
-    destruct (TPeq p p0) eqn:?; try easy.
-    assert(p = p0) by (apply dec_TP; trivial).
+    destruct (dec_TP p p0) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
   - destTOf Γ e1.
     destruct (typeOf Γ e2) eqn:?; try easy.
-    destruct (TPeq p p1) eqn:?; try easy.
-    assert (p = p1) by (apply dec_TP; trivial).
+    destruct (dec_TP p p1) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
   - destruct (typeOf (s |=> p; Γ) e) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
@@ -269,7 +244,7 @@ Lemma invertCall : forall Γ e1 e2 T1 T2 t,
 Proof.
   intros Γ e1 r2 T1 T2 t H1 H2.
   unfold tagOf. simpl. rewrite H1. rewrite H2.
-  rewrite TPeqRefl. congruence.
+  destruct (dec_TP T1 T1); congruence.
 Qed.
 
 

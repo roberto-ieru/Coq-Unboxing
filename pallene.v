@@ -244,10 +244,11 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   | PEPlus e1 e2 => IREPlus (Pall2Lir Γ e1) (Pall2Lir Γ e2)
   | PENew _ => IRECnst
   | PEGet e1 e2 =>
-         <tagOf Γ e <= IRTStar> (IREGet (Pall2Lir Γ e1) (Pall2Lir Γ e2))
+         <tagOf Γ e <= IRTStar>
+           (IREGet (Pall2Lir Γ e1) (<IRTStar <= TgInt> (Pall2Lir Γ e2)))
   | PESet e1 e2 e3 =>
          (IRESet (Pall2Lir Γ e1)
-                 (Pall2Lir Γ e2)
+                 (<IRTStar <= TgInt> (Pall2Lir Γ e2))
                  (<IRTStar <= tagOf Γ e3> Pall2Lir Γ e3))
   | PEVar var => IREVar var
   | PEFun var T e => let Γ' := (var |=> T; Γ) in

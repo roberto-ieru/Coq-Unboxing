@@ -19,11 +19,8 @@ Fixpoint dyn (e : IRE) : IRE :=
                                            (IREUnbox TgInt (dyn e2)))
   | IRECnst => IREBox TgTbl IRECnst
   | IREAddr a => IREBox TgTbl (IREAddr a)
-  | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1))
-                           (IREUnbox TgInt (dyn e2))
-  | IRESet e1 e2 e3 => IRESet (IREUnbox TgTbl (dyn e1))
-                              (IREUnbox TgInt (dyn e2))
-                              (dyn e3)
+  | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1)) (dyn e2)
+  | IRESet e1 e2 e3 => IRESet (IREUnbox TgTbl (dyn e1)) (dyn e2) (dyn e3)
   | IREVar var => IREVar var
   | IRELamb var t e => IRELamb var IRTStar (dyn e)
   | IRELambApp e1 e2 => IRELambApp (dyn e1) (dyn e2)
@@ -113,7 +110,7 @@ Proof.
   intros m H a n. specialize (H a n) as [? ?].
   induction m; split;
   auto using Value;
-  simpl in *; breakNatDec;
+  simpl in *; breakIndexDec;
     try (apply IHm; easy).
   - auto using dynValue.
   - replace (ETn IRTStar) with (dynType IRTStar) by reflexivity.
@@ -122,10 +119,15 @@ Proof.
 Qed.
 
 
+
+Axiom DynIndex : forall e, ToIndex e = ToIndex (dyn e).
+
 Lemma dynQuery : forall m a idx,
-    dyn (query a idx m) = query a idx (dynMem m).
+    dyn (query a idx m) = query a (dyn idx) (dynMem m).
 Proof.
-  intros. induction m; simpl; breakNatDec; trivial.
+  intros. induction m; simpl; trivial.
+  rewrite <- DynIndex.
+  breakIndexDec; trivial.
 Qed.
 
 

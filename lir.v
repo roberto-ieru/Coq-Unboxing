@@ -71,11 +71,11 @@ Inductive IRTyping : IREnvironment -> IRE -> EType -> Prop :=
 | IRTyAddr : forall Γ addr, Γ |= IREAddr addr : TgTbl
 | IRTyGet : forall Γ e1 e2,
     Γ |= e1 : TgTbl ->
-    Γ |= e2 : TgInt ->
+    Γ |= e2 : IRTStar ->
     Γ |= (IREGet e1 e2) : IRTStar
 | IRTySet : forall Γ e1 e2 e3,
     Γ |= e1 : TgTbl ->
-    Γ |= e2 : TgInt ->
+    Γ |= e2 : IRTStar ->
     Γ |= e3 : IRTStar ->
     Γ |= (IRESet e1 e2 e3) : IRTStar
 | IRTyLamb : forall Γ var tvar e te,
@@ -204,18 +204,24 @@ Proof.
 Qed.
 
 
+Axiom Index : Set.
+Axiom ToIndex : IRE -> Index.
+
+Axiom Index_dec : Index -> Index -> bool.
+
+
 Inductive Mem : Set :=
 | EmptyMem : Mem
-| Update : address -> nat -> IRE -> Mem -> Mem.
+| Update : address -> Index -> IRE -> Mem -> Mem.
 
 
 Definition BoxedNil := IREBox TgNil IRENil.
 
-Fixpoint query (a : address) (idx : nat) (m : Mem) :=
+Fixpoint query (a : address) (idx : IRE) (m : Mem) :=
   match m with
   | EmptyMem => BoxedNil
   | Update a' idx' e m' => if Nat.eq_dec a a' then
-                           if Nat.eq_dec idx idx' then e
+                           if Index_dec (ToIndex idx) idx' then e
                            else query  a idx m'
                          else query  a idx m'
   end.
@@ -229,7 +235,7 @@ Fixpoint freshaux (m : Mem) : address :=
 
 
 Definition fresh (m : Mem) : (address * Mem) :=
-  let f := freshaux m in (f, Update f 1 BoxedNil m).
+  let f := freshaux m in (f, Update f (ToIndex IRENil) BoxedNil m).
 
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
@@ -329,8 +335,9 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
     Value e1 ->
     m /e2 --> fail ->
     m / IREGet e1 e2 --> fail
-| StGet : forall m a n,
-    m / IREGet (IREAddr a) (IRENum n) --> m / query a n m
+| StGet : forall m a idx,
+    Value idx ->
+    m / IREGet (IREAddr a) idx --> m / query a idx m
 | StSet1 : forall m e1 e2 e3 m' e1',
     m / e1 --> m' / e1' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1' e2 e3
@@ -353,9 +360,10 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
     Value e1 -> Value e2 ->
     m / e3 --> fail ->
     m / IRESet e1 e2 e3 --> fail
-| StSet : forall m a n v,
+| StSet : forall m a idx v,
+    Value idx ->
     Value v ->
-    m / IRESet (IREAddr a) (IRENum n) v --> Update a n v m / v
+    m / IRESet (IREAddr a) idx v --> Update a (ToIndex idx) v m / v
 | StFun1 : forall m e m' e',
     m / e --> m' / e' ->
     m / IREFun e --> m' / IREFun e'
@@ -441,10 +449,13 @@ Proof.
 Qed.
 
 
-Ltac breakNatDec :=
+Ltac breakIndexDec :=
   repeat match goal with
-  [ |- context C [Nat.eq_dec ?V1 ?V2] ] =>
-    destruct (Nat.eq_dec V1 V2) end.
+  | [ |- context C [Nat.eq_dec ?V1 ?V2] ] =>
+    destruct (Nat.eq_dec V1 V2)
+  | [ |- context C [Index_dec ?V1 ?V2] ] =>
+    destruct (Index_dec V1 V2)
+  end.
 
 
 Lemma mem_correct_update : forall m a idx e,
@@ -454,7 +465,7 @@ Proof.
   intros m a idx e Hmc.
   unfold mem_correct; intros.
   simpl.
-  breakNatDec; eauto using IRTyping,Value.
+  breakIndexDec; eauto using IRTyping,Value.
 Qed.
 
 

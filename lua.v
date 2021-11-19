@@ -19,6 +19,7 @@ Inductive LE : Set :=
 | LENum : nat -> LE
 | LEPlus : LE -> LE -> LE
 | LECnst : LE
+| LEAddr : address -> LE
 | LEGet  : LE -> LE -> LE
 | LESet : LE -> LE -> LE -> LE
 | LEVar : string -> LE
@@ -34,11 +35,11 @@ Fixpoint Lua2Lir (Γ : IREnvironment) (e : LE) : IRE :=
   | LEPlus e1 e2 => IREBox TgInt (IREPlus (IREUnbox TgInt (Lua2Lir Γ e1))
                                           (IREUnbox TgInt (Lua2Lir Γ e2)))
   | LECnst => IREBox TgTbl IRECnst
-  | LEGet e1 e2 => IREGet (IREUnbox TgTbl (Lua2Lir Γ e1))
-                          (IREUnbox TgInt (Lua2Lir Γ e2))
+  | LEGet e1 e2 => IREGet (IREUnbox TgTbl (Lua2Lir Γ e1)) (Lua2Lir Γ e2)
   | LESet e1 e2 e3 => IRESet (IREUnbox TgTbl (Lua2Lir Γ e1))
-                             (IREUnbox TgInt (Lua2Lir Γ e2))
+                             (Lua2Lir Γ e2)
                              (Lua2Lir Γ e3)
+  | LEAddr a => IREBox TgTbl (IREAddr a)
   | LEVar var =>
       match In Γ var with
       | Some _ => IREVar var

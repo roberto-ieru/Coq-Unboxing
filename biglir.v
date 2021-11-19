@@ -36,7 +36,7 @@ Inductive bigStep : Mem -> IRE -> Mem -> option IRE -> Prop :=
     m / IRECnst ==> m' / IREAddr free
 | BStGet : forall m e1 m' a e2 m'' v idx,
     m / e1 ==> m' / IREAddr a ->
-    m'/ e2 ==> m'' / IRENum idx ->
+    m'/ e2 ==> m'' / idx ->
     v = query a idx m'' ->
     m / IREGet e1 e2 ==> m'' / v
 | BStGet1F : forall m e1 e2,
@@ -48,9 +48,9 @@ Inductive bigStep : Mem -> IRE -> Mem -> option IRE -> Prop :=
     m / IREGet e1 e2 ==> fail
 | BStSet : forall m e1 m' a e2 m'' idx m''' e3 val,
     m / e1 ==> m' / IREAddr a ->
-    m'/ e2 ==> m'' / IRENum idx ->
+    m'/ e2 ==> m'' / idx ->
     m''/ e3 ==> m''' / val ->
-    m / IRESet e1 e2 e3 ==> Update a idx val m''' / val
+    m / IRESet e1 e2 e3 ==> Update a (ToIndex idx) val m''' / val
 | BStSet1F : forall m e1 e2 e3,
     m / e1 ==> fail ->
     m / IRESet e1 e2 e3 ==> fail
@@ -287,6 +287,7 @@ Proof.
       end
     end; eauto using bigStep.
   - rewrite dynQuery. eauto using bigStep.
+  - rewrite DynIndex. eauto using bigStep.
   - apply (BStLambapp _ _ (dynMem m') var IRTStar (dyn body) _
                           (dynMem m'') (dyn v2)); eauto.
     + rewrite dynSubst. eapply IHHB3; eauto.

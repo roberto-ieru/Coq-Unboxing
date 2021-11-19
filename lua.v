@@ -65,6 +65,117 @@ Proof.
 Qed.
 
 
+Inductive LMem : Set :=
+| LEmptyMem : LMem
+| LUpdate : address -> nat -> LE -> LMem -> LMem.
+
+
+Fixpoint Lquery (a : address) (idx : nat) (m : LMem) :=
+  match m with
+  | LEmptyMem => LENil
+  | LUpdate a' idx' e m' => if Nat.eq_dec a a' then
+                           if Nat.eq_dec idx idx' then e
+                           else Lquery  a idx m'
+                         else Lquery  a idx m'
+  end.
+
+
+Fixpoint Lfreshaux (m : LMem) : address :=
+  match m with
+  | LEmptyMem => 1
+  | LUpdate _ _ _ m' => S (Lfreshaux m')
+  end.
+
+
+Definition Lfresh (m : LMem) : (address * LMem) :=
+  let f := Lfreshaux m in (f, LUpdate f 1 LENil m).
+
+
+Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
+
+
+Fixpoint substitution (var : string) (y : LE)  (e : LE) : LE :=
+ match e with
+ | LENil => e
+ | LENum n => e
+ | LEPlus e1 e2 => LEPlus ([var := y] e1) ([var := y] e2)
+ | LECnst => e
+ | LEAddr a => e
+ | LEGet e1 e2 => LEGet ([var := y] e1) ([var := y] e2)
+ | LESet e1 e2 e3 => LESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
+ | LEVar var' => if string_dec var var' then y else e
+ | LEFun var' body => if string_dec var var' then e
+                       else LEFun var' ([var := y] body)
+ | LEApp e1 e2 => LEApp ([var := y] e1) ([var := y] e2)
+end
+where "'[' x ':=' s ']' t" := (substitution x s t)
+.
+
+
+Inductive LValue : LE -> Prop :=
+| LVnil : LValue LENil
+| LVnum : forall n, LValue (LENum n)
+| LVtbl : forall a, LValue (LEAddr a)
+| LVfun : forall var e, LValue (LEFun var e)
+.
+
+
+Reserved Notation "m '/' e --> m1 '/' e1"
+(at level 40, e at level 39, m1 at level 39, e1 at level 39).
+
+Inductive Lstep : LMem -> LE -> LMem -> LE -> Prop :=
+| LStPlus1 : forall m e1 e2 m' e1',
+    m / e1 --> m' / e1' ->
+    m / LEPlus e1 e2 --> m' / LEPlus e1' e2
+| LStPlus2 : forall m e1 e2 m' e2',
+    LValue e1 ->
+    m / e2 --> m' / e2' ->
+    m /  LEPlus e1 e2 --> m' /  LEPlus e1 e2'
+| LStPlus : forall m n1 n2,
+    m /  LEPlus (LENum n1) (LENum n2) --> m /  LENum (n1 + n2)
+| LStCstr : forall m m' free,
+    (free, m') = Lfresh m ->
+    m / LECnst --> m' / LEAddr free
+| LStGet1 : forall m e1 e2 m' e1',
+    m /e1 --> m' /e1' ->
+    m / LEGet e1 e2 --> m' / LEGet e1' e2
+| LStGet2 : forall m e1 e2 m' e2',
+    LValue e1 ->
+    m /e2 --> m' /e2' ->
+    m / LEGet e1 e2 --> m' / LEGet e1 e2'
+| LStGet : forall m a n,
+    m / LEGet (LEAddr a) (LENum n) --> m / Lquery a n m
+| LStSet1 : forall m e1 e2 e3 m' e1',
+    m / e1 --> m' / e1' ->
+    m / LESet e1 e2 e3 --> m' / LESet e1' e2 e3
+| LStSet2 : forall m e1 e2 e3 m' e2',
+    LValue e1 ->
+    m / e2 --> m' / e2' ->
+    m / LESet e1 e2 e3 --> m' / LESet e1 e2' e3
+| LStSet3 : forall m e1 e2 e3 m' e3',
+    LValue e1 -> LValue e2 ->
+    m / e3 --> m' / e3' ->
+    m / LESet e1 e2 e3 --> m' / LESet e1 e2 e3'
+| LStSet : forall m a n v,
+    LValue v ->
+    m / LESet (LEAddr a) (LENum n) v --> LUpdate a n v m / v
+| LStApp1 : forall m e1 e2 m' e1',
+    m / e1 --> m' / e1' ->
+    m / LEApp e1 e2 --> m' / LEApp e1' e2
+| LStApp2 : forall m e1 e2 m' e2',
+    LValue e1 ->
+    m / e2 --> m' / e2' ->
+    m / LEApp e1 e2 --> m' / LEApp e1 e2'
+| LStApp : forall m var e1 v2,
+     LValue v2 ->
+     m / LEApp (LEFun var e1) v2 -->
+     m / ([var := v2] e1)
+
+where "m / e --> m1 / e1" := (Lstep m e m1 e1)
+.
+
+
+
 (* Issues: 1. globals; 2. type of assignments *)
 Lemma Lua2LirTypeAux : forall Γ e, LuaEnv Γ -> Γ |= Lua2Lir Γ e : IRTStar.
 Proof.

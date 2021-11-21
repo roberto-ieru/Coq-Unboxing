@@ -207,6 +207,8 @@ Qed.
 Axiom Index : Set.
 Axiom ToIndex : IRE -> Index.
 
+Coercion ToIndex : IRE >-> Index.
+
 Axiom Index_dec : Index -> Index -> bool.
 
 
@@ -221,7 +223,7 @@ Fixpoint query (a : address) (idx : IRE) (m : Mem) :=
   match m with
   | EmptyMem => BoxedNil
   | Update a' idx' e m' => if Nat.eq_dec a a' then
-                           if Index_dec (ToIndex idx) idx' then e
+                           if Index_dec idx idx' then e
                            else query  a idx m'
                          else query  a idx m'
   end.
@@ -235,7 +237,7 @@ Fixpoint freshaux (m : Mem) : address :=
 
 
 Definition fresh (m : Mem) : (address * Mem) :=
-  let f := freshaux m in (f, Update f (ToIndex IRENil) BoxedNil m).
+  let f := freshaux m in (f, Update f BoxedNil BoxedNil m).
 
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
@@ -363,7 +365,7 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
 | StSet : forall m a idx v,
     Value idx ->
     Value v ->
-    m / IRESet (IREAddr a) idx v --> Update a (ToIndex idx) v m / v
+    m / IRESet (IREAddr a) idx v --> Update a idx v m / v
 | StFun1 : forall m e m' e',
     m / e --> m' / e' ->
     m / IREFun e --> m' / IREFun e'

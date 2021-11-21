@@ -73,6 +73,7 @@ Proof.
   - eauto using InNotEq.
 Qed.
 
+
 Lemma inclusion_shadow' : forall A (M : Map A) var t1 t2,
   inclusion (var |=> t1; M) (var |=> t1; (var |=> t2; M)).
 Proof.
@@ -94,4 +95,16 @@ Proof.
   subst; congruence.
 Qed.
 
+
+Definition map_eq {A} (M M' : Map A) := forall var, In M var = In M' var.
+
+
+Lemma eq_shadow : forall A (M : Map A) var t1 t2,
+   map_eq (var |=> t1; M) (var |=> t1; (var |=> t2; M)).
+Proof.
+  intros A M var t1 t2.
+  intros var'.
+  simpl.
+  destruct (string_dec var' var); trivial.
+Qed.
 

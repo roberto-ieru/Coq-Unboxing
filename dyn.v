@@ -85,18 +85,6 @@ Proof.
 Qed.
 
 
-Lemma mPlus1 : forall e2 m e m' e',
-    m / e -->* m' / e' ->  m / IREPlus e e2 -->* m' / IREPlus e' e2.
-Proof.
-  intros e2.
-  intros m e m' e' Hmt.
-  remember (Some e') as E' eqn:Heq.
-  generalize dependent e'.
-  induction Hmt; intros e1 Heq; inversion Heq; subst;
-  eauto using step,multistep.
-Qed.
-
-
 Fixpoint dynMem (m : Mem) : Mem :=
   match m with
   | EmptyMem => EmptyMem

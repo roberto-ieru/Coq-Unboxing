@@ -599,6 +599,26 @@ where "m / e -->* m1 / e1" := (multistep m e m1 (Some e1))
   and "m / e -->* 'fail'" := (multistep m e m None)
 .
 
+Theorem multiRefl : forall m0 e0 m1 e1 m2 e2,
+    m0 / e0 -->* m1 / e1 ->
+    m1 / e1 -->* m2 / e2 ->
+    m0 / e0 -->* m2 / e2.
+Proof.
+  intros m0 e0 m1 e1 m2 e2 H0 H1.
+  remember (Some e1) as E1.
+  generalize dependent e1.
+  generalize dependent m2.
+  generalize dependent e2.
+  induction H0; intros ? ? ? Heq H2; inversion Heq; subst; trivial.
+  eauto using multistep.
+Qed.
+
+
+Lemma multistep1 : forall m0 e0 m1 e1,
+    m0 / e0 --> m1 / e1 ->
+    m0 / e0 -->* m1 / e1.
+Proof. eauto using multistep. Qed.
+
 
 Theorem MultiProgress : forall m e t m' e',
     mem_correct m ->
@@ -613,35 +633,6 @@ Proof.
   - eauto using Progress.
   - eapply IHHMulti; trivial; eapply Preservation; eauto.
 Qed.
-
-
-Ltac finishmExp :=
-  intros m e m' e' Hmt;
-  remember (Some e') as E' eqn:Heq;
-  generalize dependent e';
-  induction Hmt; intros ? Heq; inversion Heq; subst;
-  eauto using step,multistep.
-
-Lemma mPlus1 : forall e2 m e m' e',
-    m / e -->* m' / e' ->  m / IREPlus e e2 -->* m' / IREPlus e' e2.
-Proof. intros e2; finishmExp. Qed.
-
-Lemma mPlus2 : forall e1, Value e1 -> forall m e m' e',
-    m / e -->* m' / e' ->  m / IREPlus e1 e -->* m' / IREPlus e1 e'.
-Proof. intros e1 HV; finishmExp. Qed.
-
-
-Lemma mBox1 : forall t m e m' e',
-    m / e -->* m' / e' ->  m / IREBox t e -->* m' / IREBox t e'.
-Proof.
-  intros t; finishmExp. Qed.
-
-
-Lemma mUnbox1 : forall t m e m' e',
-    m / e -->* m' / e' ->  m / IREUnbox t e -->* m' / IREUnbox t e'.
-Proof. intros t; finishmExp. Qed.
-
-
 
 
 

@@ -25,12 +25,6 @@ Inductive IRType : Set :=
 
 Coercion IRTTag : Tag >-> IRType.
 
-Inductive EType : Set :=
-| ETn : IRType -> EType
-| ETLamb : IRType -> EType -> EType
-.
-
-Coercion ETn : IRType >-> EType.
 
 Definition address := nat.
 
@@ -43,9 +37,8 @@ Inductive IRE : Set :=
 | IREGet : IRE -> IRE -> IRE
 | IRESet : IRE -> IRE -> IRE -> IRE
 | IREVar : string -> IRE
-| IRELamb : string -> IRType -> IRE -> IRE
-| IREFun : IRE -> IRE
-| IRELambApp : IRE -> IRE -> IRE
+| IRELet : string -> IRType -> IRE -> IRE -> IRE
+| IREFun : string -> IRE -> IRE
 | IREFunApp : IRE -> IRE -> IRE
 | IREBox : Tag -> IRE -> IRE
 | IREUnbox : Tag -> IRE -> IRE
@@ -57,7 +50,7 @@ Definition IREnvironment := Map IRType.
 Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
-Inductive IRTyping : IREnvironment -> IRE -> EType -> Prop :=
+Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
 | IRTyNil : forall Γ, Γ |= IRENil : TgNil
 | IRTyVar : forall Γ var T,
     In Γ var = Some T ->
@@ -78,16 +71,13 @@ Inductive IRTyping : IREnvironment -> IRE -> EType -> Prop :=
     Γ |= e2 : IRTStar ->
     Γ |= e3 : IRTStar ->
     Γ |= (IRESet e1 e2 e3) : IRTStar
-| IRTyLamb : forall Γ var tvar e te,
-    var |=> tvar; Γ |= e : te ->
-    Γ |= (IRELamb var tvar e) : (ETLamb tvar te)
-| IRTyLambApp : forall Γ e1 e2 t1 t2,
-    Γ |= e1 : (ETLamb t1 t2) ->
-    Γ |= e2 : t1 ->
-    Γ |= (IRELambApp e1 e2) : t2
-| IRTyFun : forall Γ e,
-    Γ |= e : (ETLamb IRTStar IRTStar) ->
-    Γ |= (IREFun e) : TgFun
+| IRTyLet : forall Γ var tvar e body tb,
+    Γ |= e : tvar ->
+    var |=> tvar; Γ |= body : tb ->
+    Γ |= (IRELet var tvar e body) : tb
+| IRTyFun : forall Γ var body,
+    var |=> IRTStar; Γ |= body : IRTStar ->
+    Γ |= (IREFun var body) : TgFun
 | IRTyFunApp : forall Γ e1 e2,
     Γ |= e1 : TgFun ->
     Γ |= e2 : IRTStar ->
@@ -98,12 +88,9 @@ Inductive IRTyping : IREnvironment -> IRE -> EType -> Prop :=
 | IRTyUnbox : forall Γ e (t : Tag),
     Γ |= e : IRTStar ->
     Γ |= (IREUnbox t e) : t
+
 where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 .
-
-Lemma lambUnique : forall t1 t1' t2 t2',
-     ETLamb t1 t2 = ETLamb t1' t2' -> t2 = t2'.
-Proof. intros. injection H. trivial. Qed.
 
 
 Theorem typeUnique : forall Γ e t t',
@@ -112,7 +99,7 @@ Proof.
   intros Γ e t t' H1.
   generalize dependent t'.
   induction H1; intros t' H2; inversion H2; subst; f_equal;
-  eauto using lambUnique; congruence.
+  eauto ; congruence.
 Qed.
 
 
@@ -121,15 +108,14 @@ Theorem envExt : forall Γ Γ' e t,
 Proof.
   intros Γ Γ' e t Hinc Hty.
   generalize dependent Γ'.
-  induction Hty; intros Γ' Hinc; subst; eauto using IRTyping.
-  - constructor. apply IHHty.
-    auto using inclusion_update.
+  induction Hty; intros Γ' Hinc; subst;
+  eauto using IRTyping, inclusion_update.
 Qed.
 
 
 
 Example TypeFunId : forall Γ var,
-  Γ |= IREFun (IRELamb var IRTStar (IREVar var)) : TgFun.
+  Γ |= IREFun var (IREVar var) : TgFun.
 Proof. eauto using IRTyping,  InEq. Qed.
 
 
@@ -137,9 +123,8 @@ Inductive Value : IRE -> Prop :=
 | Vnil : Value IRENil
 | Vnum : forall n, Value (IRENum n)
 | Vtbl : forall a, Value (IREAddr a)
-| Vfun : forall var e, Value (IREFun (IRELamb var IRTStar e))
+| Vfun : forall var e, Value (IREFun var e)
 | Vbox : forall gt v, Value v -> Value (IREBox gt v)
-| Vlam : forall var t e, Value (IRELamb var t e)
 .
 
 
@@ -173,22 +158,12 @@ Qed.
 
 
 Lemma valfun : forall Γ e,
-    Γ |= e : TgFun -> Value e -> exists var b, e = IREFun (IRELamb var IRTStar b).
+    Γ |= e : TgFun -> Value e -> exists var b, e = IREFun var b.
 Proof.
   intros Γ e HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
-  eexists; eexists; split; eauto 1 using Value.
-Qed.
-
-
-Lemma vallam : forall {Γ e t1 t2},
-    Γ |= e : ETLamb t1 t2 -> Value e -> exists var b, e = IRELamb var t1 b.
-Proof.
-  intros Γ e t1 t2 HT HV.
-  inversion HV;
-  inversion HT; subst; try discriminate.
-  eexists; eexists; eauto 1.
+  eexists; eexists. eauto 1 using Value.
 Qed.
 
 
@@ -252,10 +227,11 @@ Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
  | IREGet e1 e2 => IREGet ([var := y] e1) ([var := y] e2)
  | IRESet e1 e2 e3 => IRESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
  | IREVar var' => if string_dec var var' then y else e
- | IRELamb var' type body => if string_dec var var' then e
-                       else IRELamb var' type ([var := y] body)
- | IREFun e  => IREFun ([var := y] e)
- | IRELambApp e1 e2 => IRELambApp ([var := y] e1) ([var := y] e2)
+ | IRELet var' type exp body =>
+        if string_dec var var' then IRELet var' type ([var := y] exp) body
+        else IRELet var' type ([var := y] exp) ([var := y] body)
+ | IREFun var' body  => if string_dec var var' then e
+                    else IREFun var' ([var := y] body)
  | IREFunApp e1 e2 => IREFunApp ([var := y] e1) ([var := y] e2)
  | IREBox tg e  => IREBox tg ([var := y] e)
  | IREUnbox tg e  => IREUnbox tg ([var := y] e)
@@ -286,14 +262,15 @@ Proof.
   induction e2; intros Γ var tv te e1 HT2 HT1;
   simpl; inversion HT2; subst; eauto using IRTyping.
   - destruct (string_dec var s); subst.
-    + assert (T = tv). { rewrite InEq in H1. congruence. }
+    + assert (te = tv). { rewrite InEq in H1. congruence. }
       subst. eauto using typing_empty.
-    + constructor. apply InNotEq with var T; try congruence.
-      simpl. destruct (string_dec s var); subst; try easy.
-      eauto using InNotEq.
-  - destruct (string_dec var s); subst.
-    + eauto using inclusion_typing, inclusion_shadow, IRTyping.
-    + eauto using inclusion_typing, inclusion_permute, IRTyping.
+    + constructor. apply InNotEq with var tv; try congruence.
+  - destruct (string_dec var s); subst;
+      eauto 6 using inclusion_typing, inclusion_shadow,
+                    inclusion_permute, IRTyping.
+  - destruct (string_dec var s); subst;
+      eauto using inclusion_shadow, inclusion_permute,
+                  inclusion_typing, IRTyping.
 Qed.
 
 
@@ -366,30 +343,15 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
     Value idx ->
     Value v ->
     m / IRESet (IREAddr a) idx v --> Update a idx v m / v
-| StFun1 : forall m e m' e',
-    m / e --> m' / e' ->
-    m / IREFun e --> m' / IREFun e'
-| StFun1F : forall m e,
-    m / e --> fail ->
-    m / IREFun e --> fail
-| StLambapp1 : forall m e1 e2 m' e1',
-    m / e1 --> m' / e1' ->
-    m / IRELambApp e1 e2 --> m' / IRELambApp e1' e2
-| StLambapp1F : forall m e1 e2,
-    m / e1 --> fail ->
-    m / IRELambApp e1 e2 --> fail
-| StLambapp2 : forall m e1 e2 m' e2',
-    Value e1 ->
-    m / e2 --> m' / e2' ->
-    m / IRELambApp e1 e2 --> m' / IRELambApp e1 e2'
-| StLambapp2F : forall m e1 e2,
-    Value e1 ->
-    m / e2 --> fail ->
-    m / IRELambApp e1 e2 --> fail
-| StLambapp : forall m var t e1 v2,
-     Value v2 ->
-     m / IRELambApp (IRELamb var t e1) v2 -->
-     m / ([var := v2] e1)
+| StLet1 : forall m var t exp body m' exp',
+    m / exp --> m' / exp' ->
+    m / IRELet var t exp body --> m' / IRELet var t exp' body
+| StLet1F : forall m var t exp body,
+    m / exp --> fail ->
+    m / IRELet var t exp body --> fail
+| StLet : forall m var t exp body,
+    Value exp ->
+    m / IRELet var t exp body --> m / [var := exp] body
 | StFunapp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / IREFunApp e1 e2 --> m' / IREFunApp e1' e2
@@ -404,10 +366,10 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
     Value e1 ->
     m / e2 --> fail ->
     m / IREFunApp e1 e2 --> fail
-| StFunapp : forall m var b v2,
+| StFunapp : forall m var body v2,
     Value v2 ->
-    m / IREFunApp (IREFun (IRELamb var IRTStar b)) v2 -->
-    m / IRELambApp (IRELamb var IRTStar b) v2
+    m / IREFunApp (IREFun var body) v2 -->
+    m / [var := v2] body
 | StBox1 : forall m t e m' e',
     m / e --> m' / e' ->
     m / IREBox t e --> m' / IREBox t e'
@@ -522,9 +484,7 @@ Lemma value_normal : forall m e,
 Proof.
   intros m e HV.
   induction HV; intros HEx; destruct HEx as [m' [v' Hst]];
-  inversion Hst; subst; eauto;
-  match goal with
-  | [H: step _ (IRELamb _ _ _) _ _ |- _] => inversion H end.
+  inversion Hst; subst; eauto.
 Qed.
 
 
@@ -567,9 +527,7 @@ Proof.
           decompose [ex or and] Ht
   end; subst;
   (* try cases that became easy after breaking values *)
-  try (right; right; eauto using step,eq_refl; fail);
-  (* 'fun' value needed to break its inner lambda *)
-  auto using Value.
+  try (right; right; eauto using step, eq_refl; fail).
   - (* unboxing has to handle success vs. failure *)
     match goal with | [t1:Tag, t2:Tag |- _] => destruct (dec_Tag t1 t2) end;
     right; subst; eauto using step.

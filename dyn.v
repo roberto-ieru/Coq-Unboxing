@@ -22,9 +22,8 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1)) (dyn e2)
   | IRESet e1 e2 e3 => IRESet (IREUnbox TgTbl (dyn e1)) (dyn e2) (dyn e3)
   | IREVar var => IREVar var
-  | IRELamb var t e => IRELamb var IRTStar (dyn e)
-  | IRELambApp e1 e2 => IRELambApp (dyn e1) (dyn e2)
-  | IREFun e => IREBox TgFun (IREFun (dyn e))
+  | IRELet var t exp body => IRELet var IRTStar (dyn exp) (dyn body)
+  | IREFun var e => IREBox TgFun (IREFun var (dyn e))
   | IREFunApp e1 e2 => IREFunApp (IREUnbox TgFun (dyn e1)) (dyn e2)
   | IREBox _ e => dyn e
   | IREUnbox _ e => dyn e
@@ -33,13 +32,6 @@ Fixpoint dyn (e : IRE) : IRE :=
 
 Lemma dynIdempotent : forall e, dyn e = dyn (dyn e).
 Proof. induction e; simpl; congruence. Qed.
-
-
-Fixpoint dynType (t : EType) : EType :=
-  match t with
-  | ETn _ => IRTStar
-  | ETLamb t1 t2 => ETLamb IRTStar (dynType t2)
-  end.
 
 
 Fixpoint dynGamma (Γ : IREnvironment) : IREnvironment :=
@@ -59,7 +51,7 @@ Qed.
 
 
 Theorem dynTyping : forall Γ e T,
-    Γ |= e : T -> dynGamma Γ |= (dyn e) : dynType T.
+    Γ |= e : T -> dynGamma Γ |= (dyn e) : IRTStar.
 Proof.
   intros Γ e T Hty.
   induction Hty; eauto using IRTyping,TP2TGammaIn.
@@ -101,9 +93,8 @@ Proof.
   simpl in *; breakIndexDec;
     try (apply IHm; easy).
   - auto using dynValue.
-  - replace (ETn IRTStar) with (dynType IRTStar) by reflexivity.
-    replace MEmpty with (dynGamma MEmpty) by reflexivity.
-    auto using dynTyping.
+  - replace MEmpty with (dynGamma MEmpty) by reflexivity.
+    eauto using dynTyping.
 Qed.
 
 

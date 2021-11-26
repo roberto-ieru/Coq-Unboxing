@@ -59,9 +59,57 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   | LEAddr a => IREBox TgTbl (IREAddr a)
   | LEVar var => IREVar var
   | LEFun var body =>
-      IREBox TgFun (IREFun (IRELamb var IRTStar (Lua2Lir body)))
+      IREBox TgFun (IREFun var
+        (IRELet var IRTStar (IREVar var) (Lua2Lir body)))
   | LEApp e1 e2 => IREFunApp (IREUnbox TgFun (Lua2Lir e1)) (Lua2Lir e2)
   end.
+
+
+Fixpoint Pall2Lua (e : PE) : LE :=
+  match e with
+  | PENil => LENil
+  | PENum n => LENum n
+  | PEPlus e1 e2 => LEPlus (Pall2Lua e1) (Pall2Lua e2)
+  | PENew _ => LECnst
+  | PEGet e1 e2 => LEGet (Pall2Lua e1) (Pall2Lua e2)
+  | PESet e1 e2 e3 => LESet (Pall2Lua e1) (Pall2Lua e2) (Pall2Lua e3)
+  | PEVar var => LEVar var
+  | PEApp e1 e2 => LEApp (Pall2Lua e1) (Pall2Lua e2)
+  | PEFun var _ e => LEFun var (Pall2Lua e)
+  | PECast e _ => Pall2Lua e
+  end.
+
+
+Lemma dynCast : forall (t1 t2 : IRType) (e : IRE),
+    dyn (Cast t1 t2 e) = dyn e.
+Proof.
+  intros t1 t2 e.
+  unfold Cast.
+  destruct t1; destruct t2; simpl; trivial.
+  destruct (dec_Tag t t0); simpl; trivial.
+Qed.
+
+
+Theorem PallLua : forall Γ e t,
+    PTyping Γ e t -> Lua2Lir (Pall2Lua e) = dyn (Pall2Lir Γ e).
+Proof.
+  intros Γ e.
+  generalize dependent Γ.
+  induction e; intros Γ t Hty; inversion Hty; subst;
+  trivial;
+  (* instantiate induction hypotheses *)
+  repeat match goal with
+  [IH: _ -> _ -> PTyping _ ?E _ -> _,
+   HTy: PTyping _ ?E _ |- _ ] =>
+    specialize (IH _ _ HTy)
+  end;
+  (* eliminate casts *)
+  simpl;
+  repeat rewrite dynCast;
+  repeat match goal with [ |- context [tagOf ?G ?E] ] =>
+    destruct (tagOf G E) end;
+  simpl; congruence.
+Qed.
 
 
 Lemma LuaIsDyn : forall e, Lua2Lir e = dyn (Lua2Lir e).
@@ -291,7 +339,7 @@ Proof.
   intros Γ e.
   generalize dependent Γ.
   induction e; intros Γ HLE; inversion HLE; subst; simpl;
-  eauto 8 using IRTyping.
+  eauto 8 using IRTyping, InEq, envExt, inclusion_shadow'.
 Qed.
 
 
@@ -368,41 +416,31 @@ Proof.
     + eapply BStUnbox.
       replace (IREBox TgInt (IRENum n1)) with (Lua2Lir (LENum n1))
         by trivial.
-      eapply IHHSt1; trivial.
+      eauto.
     + eapply BStUnbox.
       replace (IREBox TgInt (IRENum n2)) with (Lua2Lir (LENum n2))
         by trivial.
-      eapply IHHSt2; trivial.
+      eauto.
   - simpl. rewrite LuaIndex.
     eapply BStSet; eauto.
     eapply BStUnbox.
     replace (IREBox TgTbl (IREAddr a)) with (Lua2Lir (LEAddr a))
       by trivial. eauto.
   - simpl. eapply BStFunapp; eauto.
-    eapply BStUnbox.
-    specialize (IHHSt1 HMC H2). eapply IHHSt1.
-    fold Lua2Lir. rewrite <- L2LirSubst.
-    eapply IHHSt3; eauto.
-     assert (LEWT MEmpty (LEFun var body)).
-     { eapply (luaPreservation e1 m); eauto. }
-     inversion H1; subst.
-     eapply subst_WT; eauto.
-     eapply (luaPreservation e2 m'); eauto.
+    + eapply BStUnbox.
+      simpl in IHHSt1. eauto.
+    + simpl. destruct (string_dec var var); try easy.
+      eapply BStLet.
+      * apply BStValue.
+        apply L2LirValue.
+        eapply (luaPreservation _ m'); eauto.
+      * simpl. rewrite <- L2LirSubst.
+        apply IHHSt3; eauto.
+        assert (HX: LEWT MEmpty (LEFun var body)).
+        { eapply (luaPreservation e1 m); eauto. }
+        inversion HX; subst.
+        apply subst_WT. auto.
+        eapply (luaPreservation e2 m'); eauto.
 Qed.
-
-
-Fixpoint Pall2Lua (e : PE) : LE :=
-  match e with
-  | PENil => LENil
-  | PENum n => LENum n
-  | PEPlus e1 e2 => LEPlus (Pall2Lua e1) (Pall2Lua e2)
-  | PENew _ => LECnst
-  | PEGet e1 e2 => LEGet (Pall2Lua e1) (Pall2Lua e2)
-  | PESet e1 e2 e3 => LESet (Pall2Lua e1) (Pall2Lua e2) (Pall2Lua e3)
-  | PEVar var => LEVar var
-  | PEApp e1 e2 => LEApp (Pall2Lua e1) (Pall2Lua e2)
-  | PEFun var _ e => LEFun var (Pall2Lua e)
-  | PECast e _ => Pall2Lua e
-  end.
 
 

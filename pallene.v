@@ -226,11 +226,11 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
                  (<IRTStar <= TgInt> (Pall2Lir Γ e2))
                  (<IRTStar <= tagOf Γ e3> Pall2Lir Γ e3))
   | PEVar var => IREVar var
-  | PEFun var T e => let Γ' := (var |=> T; Γ) in
-        IREFun (IRELamb var IRTStar
-                      (IRELambApp (IRELamb var (PT2IRT T)
-                                  (<IRTStar <= tagOf Γ' e> (Pall2Lir Γ' e)))
-                                  (<PT2IRT T <= IRTStar> (IREVar var))))
+  | PEFun var T body => let Γ' := (var |=> T; Γ) in
+        IREFun var (
+          IRELet var (PT2IRT T)
+                     (<PT2IRT T <= IRTStar> (IREVar var))
+                     (<IRTStar <= tagOf Γ' body> (Pall2Lir Γ' body)))
   | PEApp e1 e2 => <tagOf Γ e <= IRTStar>
          (IREFunApp (Pall2Lir Γ e1)
                   (<IRTStar <= (tagOf Γ e2)> Pall2Lir Γ e2))
@@ -270,14 +270,17 @@ Proof with eauto using IRTyping.
     destruct (PT2IRT T) eqn:?; simpl...
   - unfold tagOf. rewrite H1.
     destruct (PT2IRT T) eqn:?; simpl...
-  - apply IRTyFun. apply IRTyLamb. apply IRTyLambApp with (PT2IRT Tvar).
-    apply IRTyLamb.
-    + apply envExt with (var |=> PT2IRT Tvar; TP2TGamma Γ).
-      apply inclusion_shadow'.
-      breakTagOf.
-    + apply tagOfT in H;
-      destruct (PT2IRT Tvar) eqn:?;
-      eauto using IRTyping,InEq.
+  - apply IRTyFun. apply IRTyLet.
+    + destruct (PT2IRT Tvar);  eauto using IRTyping, InEq.
+    + destruct (tagOf (var |=> Tvar; Γ)) eqn:?; subst.
+      * apply IRTyBox.
+        eapply envExt.
+        ** eapply inclusion_shadow'.
+        ** rewrite <- Heqi. breakTagOf.
+      * unfold tagOf in Heqi. rewrite H in Heqi. rewrite <- Heqi.
+        eapply envExt.
+        ** eapply inclusion_shadow'.
+        ** auto.
   - destruct (tagOf Γ (PEApp e1 e2)) eqn:?;
       rewrite (invertCall _ _ _ _ _ _ H H0 Heqi);
       breakTagOf.
@@ -286,4 +289,5 @@ Proof with eauto using IRTyping.
     destruct (PT2IRT T2) eqn:?...
     destruct (dec_Tag t0 t); subst; try easy...
 Qed.
+
 

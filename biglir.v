@@ -362,21 +362,6 @@ Proof.
     * eapply multiRefl.
       ** eauto using multistep1, StLet, BstepValue.
       ** eauto using subst_typing, BstepValue, BstepTy.
-  -
-
-(*  - eapply multiRefl.
-    + eauto using mLambapp1.
-    + eapply multiRefl.
-      ** eauto using mLambapp2, Value.
-      ** eapply multiRefl.
-         *** eauto using multistep1, StLambapp, Value, BstepValue.
-         *** eapply IHHSt3; eauto.
-             eapply subst_typing.
-             2: { eapply BPreservation; eauto. }
-             assert (HX : MEmpty |= IRELamb var t body : ETLamb t1 t0).
-             { eapply BPreservation; eauto. }
-             inversion HX; subst.
-             eassumption.
 
   - eapply multiRefl.
     + eauto using mFunapp1.
@@ -384,10 +369,20 @@ Proof.
       ** eauto using mFunapp2, Value.
       ** eapply multiRefl.
          *** eauto using multistep1, StFunapp, Value, BstepValue.
-         ***
-    +
-  -  *)
-Admitted.
+         *** eapply IHHSt3; eauto.
+             assert (HTyF : MEmpty |= IREFun var body : TgFun)
+                by (eapply BPreservation; eauto).
+             inversion HTyF; subst.
+             eapply subst_typing; eauto.
+             eapply BPreservation; eauto.
+  - auto using mBox1.
+  - eapply multiRefl.
+    + eauto using mUnbox1.
+    + apply multistep1. eapply StUnbox.
+      assert (HV: Value (IREBox t e'0))
+                by (eapply BPreservation; eauto).
+      inversion HV; subst. trivial.
+Qed.
 
 
 (* }================================================================== *)

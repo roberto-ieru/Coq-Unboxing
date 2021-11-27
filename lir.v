@@ -99,7 +99,7 @@ Proof.
   intros Γ e t t' H1.
   generalize dependent t'.
   induction H1; intros t' H2; inversion H2; subst; f_equal;
-  eauto ; congruence.
+  auto ; congruence.
 Qed.
 
 
@@ -143,7 +143,7 @@ Proof.
   intros Γ e HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
-  eexists; eauto 1.
+  eexists; auto 1.
 Qed.
 
 
@@ -153,7 +153,7 @@ Proof.
   intros Γ e HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
-  eexists; eauto 1.
+  eexists; auto 1.
 Qed.
 
 
@@ -163,7 +163,7 @@ Proof.
   intros Γ e HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
-  eexists; eexists. eauto 1 using Value.
+  eexists; eexists. auto 1 using Value.
 Qed.
 
 
@@ -175,7 +175,7 @@ Proof.
   inversion HT; subst; try discriminate.
   match goal with
   | [H: IREBox _ _ = IREBox _ _ |- _ ] => inversion H; subst end.
-  (eexists; eexists; eauto using Value).
+  (eexists; eexists; auto using Value).
 Qed.
 
 
@@ -260,17 +260,12 @@ Lemma subst_typing : forall e2 Γ var tv te e1,
        Γ |= ([var := e1] e2) : te.
 Proof.
   induction e2; intros Γ var tv te e1 HT2 HT1;
-  simpl; inversion HT2; subst; eauto using IRTyping.
-  - destruct (string_dec var s); subst.
-    + assert (te = tv). { rewrite InEq in H1. congruence. }
+  simpl; inversion HT2; subst;
+  breakStrDec;
+  eauto 6 using inclusion_typing, inclusion_shadow, inclusion_permute,
+    IRTyping, typing_empty, InNotEq.
+  - assert (te = tv). { rewrite InEq in H1. congruence. }
       subst. eauto using typing_empty.
-    + constructor. apply InNotEq with var tv; try congruence.
-  - destruct (string_dec var s); subst;
-      eauto 6 using inclusion_typing, inclusion_shadow,
-                    inclusion_permute, IRTyping.
-  - destruct (string_dec var s); subst;
-      eauto using inclusion_shadow, inclusion_permute,
-                  inclusion_typing, IRTyping.
 Qed.
 
 
@@ -400,17 +395,17 @@ Definition mem_correct (m : Mem) :=
   forall a n, Value (query a n m) /\ MEmpty |= (query a n m) : IRTStar.
 
 
+Lemma MCValue : forall m a n, mem_correct m -> Value (query a n m).
+Proof. intros. apply H. Qed.
+
+
+Lemma MCTy : forall m a n Γ,
+    mem_correct m -> Γ |= (query a n m) : IRTStar.
+Proof. intros. apply typing_empty. apply H. Qed.
+
+
 Lemma mem_correct_empty : mem_correct EmptyMem.
 Proof. unfold mem_correct; eauto using Value,IRTyping. Qed.
-
-
-Lemma mem_correct_query : forall Γ m a n,
-  mem_correct m -> Γ |= (query a n m) : IRTStar.
-Proof.
-  intros Γ m a n Hmc.
-  specialize (Hmc a n) as [? ?].
-  eauto using envExt, inclusion_empty.
-Qed.
 
 
 Ltac breakIndexDec :=
@@ -465,7 +460,7 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HT; intros e' m' Hst; inversion Hst; subst;
-  eauto using IRTyping, mem_correct_query;
+  eauto using IRTyping, MCTy;
   match goal with
   | [ H: _ |= _ : _ |- _ ] =>
         (inversion H; subst; eauto using IRTyping, subst_typing; fail)
@@ -477,6 +472,15 @@ Theorem Preservation : forall m e t m' e',
   mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' ->
     mem_correct m' /\ MEmpty |= e' : t.
 Proof. intuition; eauto using memPreservation,expPreservation. Qed.
+
+
+Lemma PresMC : forall m e t m' e',
+  mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' -> mem_correct m'.
+Proof. apply Preservation. Qed.
+
+Lemma PresTy : forall m e t m' e',
+  mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' -> MEmpty |= e' : t.
+Proof. apply Preservation. Qed.
 
 
 Lemma value_normal : forall m e,
@@ -513,9 +517,9 @@ Proof.
       decompose [or ex and] (H eq_refl); clear H
   end; subst;
   (* trivial steps and failures *)
-  try (right; eauto using step; fail);
+  try (right; auto using step; fail);
   (* trivial values *)
-  eauto using Value;
+  auto using Value;
   (* break values *)
   repeat open_value valint;
   try open_value valtbl;
@@ -589,7 +593,7 @@ Proof.
   remember (Some e') as E eqn:Heq.
   induction HMulti; inversion Heq; subst.
   - eauto using Progress.
-  - eapply IHHMulti; trivial; eapply Preservation; eauto.
+  - eauto using PresTy, PresMC.
 Qed.
 
 

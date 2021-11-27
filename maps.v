@@ -20,6 +20,13 @@ Arguments MCons {A}.
 Notation "v |=> T ; M" := (MCons v T M) (at level 40).
 
 
+Ltac breakStrDec :=
+  repeat match goal with
+  | [ |- context [string_dec ?v ?v'] ] =>
+      destruct (string_dec v v'); subst; try easy
+  | [ H: context [string_dec ?v ?v'] |- _ ] =>
+      destruct (string_dec v v') in H; subst; try easy
+end.
 
 
 Fixpoint In {A} M var : option A :=
@@ -28,15 +35,21 @@ Fixpoint In {A} M var : option A :=
   | var' |=> T; M' => if string_dec var var' then Some T else In M' var
   end.
 
+
+Lemma InEq' : forall A (M : Map A) var r r',
+    In (var |=> r; M) var = Some r' -> r = r'.
+Proof. intros. simpl in *. breakStrDec.
+       congruence.
+Qed.
+
+
 Theorem InEq : forall A (M : Map A) var r, In (var |=> r; M) var = Some r.
-Proof. intros. simpl. destruct (string_dec var var); easy. Qed.
+Proof. intros. simpl. breakStrDec. Qed.
 
 
 Theorem InNotEq : forall A (M : Map A) var var' r r',
     var <> var' -> In (var' |=> r; M) var = r' -> In M var = r'.
-Proof.
-  intros. simpl in *. destruct (string_dec var var'); subst; easy.
-Qed.
+Proof. intros. simpl in *. breakStrDec. Qed.
 
 
 Definition inclusion {A} (M : Map A) M' :=
@@ -57,19 +70,17 @@ Lemma inclusion_update : forall A (M : Map A) M' var tvar,
 Proof.
   intros A M M' var tvar Hinc.
   unfold inclusion; intros v tv Hin.
-  destruct (string_dec v var); subst.
-  - simpl. simpl in Hin. destruct (string_dec var var); try easy.
-  - simpl. simpl in Hin. destruct (string_dec v var); try easy.
-    auto.
+  simpl in *; breakStrDec; auto.
 Qed.
+
 
 Lemma inclusion_shadow : forall A (M : Map A) var t1 t2,
   inclusion (var |=> t1; (var |=> t2; M)) (var |=> t1; M).
 Proof.
   unfold inclusion.
   intros A M var t1 t2 var' t' Hin.
-  simpl. destruct (string_dec var'); subst.
-  - rewrite InEq in Hin. congruence.
+  simpl. breakStrDec.
+  - rewrite InEq in Hin. congruence with InEq.
   - eauto using InNotEq.
 Qed.
 
@@ -79,10 +90,9 @@ Lemma inclusion_shadow' : forall A (M : Map A) var t1 t2,
 Proof.
   unfold inclusion.
   intros A M var t1 t2 var' t' Hin.
-  simpl. destruct (string_dec var'); subst.
-  - simpl in Hin. destruct (string_dec var) in Hin; subst; easy.
-  - simpl in Hin. destruct (string_dec var') in Hin; subst; easy.
+  simpl in *; breakStrDec.
 Qed.
+
 
 Lemma inclusion_permute : forall A (M : Map A) var1 var2 t1 t2,
   var1 <> var2 ->
@@ -91,8 +101,7 @@ Lemma inclusion_permute : forall A (M : Map A) var1 var2 t1 t2,
 Proof.
   unfold inclusion. simpl.
   intros A M var1 var2 t1 t2 Hneq var' t' HIn.
-  destruct (string_dec var' var2); destruct (string_dec var' var1);
-  subst; congruence.
+  breakStrDec.
 Qed.
 
 
@@ -105,6 +114,6 @@ Proof.
   intros A M var t1 t2.
   intros var'.
   simpl.
-  destruct (string_dec var' var); trivial.
+  breakStrDec.
 Qed.
 

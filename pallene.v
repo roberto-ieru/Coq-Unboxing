@@ -181,9 +181,9 @@ Fixpoint TP2TGamma (Γ : Map PType) : Map IRType :=
 Lemma TP2TGammaIn : forall Γ var T,
     In Γ var = Some T -> In (TP2TGamma Γ) var = Some (PT2IRT T).
 Proof.
-  induction Γ; intros var T H; simpl in *.
-  - easy.
-  - destruct (string_dec var s); auto; congruence.
+  induction Γ; intros var T H; simpl in *; breakStrDec;
+  auto;
+  congruence.
 Qed.
 
 

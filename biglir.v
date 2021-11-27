@@ -114,13 +114,23 @@ where "m / e ==> m1 / e1" := (bigStep m e m1 (Some e1))
 .
 
 
+Lemma splitAnd : forall A B C,
+    (A -> (B /\ C)) -> (A -> B) /\ (A -> C).
+Proof. intros. intuition. Qed.
+
+
+Ltac splitAnd :=
+  repeat match goal with
+  [ H: _ -> _ /\ _ |- _ ] => apply splitAnd in H; destruct H end.
+
+
 Lemma valueNormal : forall m e m' res,
     bigStep m e m' res -> Value e -> m = m' /\ res = Some e.
 Proof.
   intros m e m' res HB HV.
   induction HB; inversion HV; subst; eauto using Value;
-  try specialize (IHHB (Vlam _ _ _));
-  try intuition congruence.
+  splitAnd;
+  intuition congruence.
 Qed.
 
 
@@ -139,30 +149,21 @@ Proof.
   (* impossible cases *)
   inversion HE'; subst;
   (* apply type judgment and break 'and's *)
-  inversion HTy; subst; (split; only 2: split);
-  repeat (
+  inversion HTy; subst; split;
   (* instantiate induction hypotheses when possible *)
-  match goal with
+  repeat match goal with
   | [ HM : mem_correct ?M,
       HT : _ |= ?E : _,
       IH : mem_correct ?M -> _ -> _ |= ?E : _ -> _ |- _] =>
         specialize (IH HM _ HT _ eq_refl) as [? [? ?]]
-  end
-  (* handle cases that need substitution *
-  try match goal with
-    | [HT: MEmpty |= IRELamb ?V _ ?B : ETLamb ?T1 ?T2,
-       HTV: MEmpty |= ?Arg : (ETn ?T1) |- _] =>
-        assert (MEmpty |= [V := Arg] B : T2) by
-      (inversion HT; subst; eauto using subst_typing)
-    end *)
-  );
+  end;
   eauto using IRTyping,Value,mem_correct_fresh,mem_correct_update;
   (* handle substitutions inside FUN (not pretty yet) *)
   try (assert (MEmpty |= [var := v2] body : IRTStar) by (
       inversion H0; inversion H9; subst; eauto using subst_typing);
     eapply IHHst3; eauto).
   - (* use mem_correct for queries *)
-    unfold mem_correct in H3. split; eapply H3.
+    split; auto using MCTy, MCValue.
   - eapply IHHst2; eauto.
     inversion HTy; subst. eauto using subst_typing.
   - eapply IHHst2; eauto.
@@ -265,10 +266,8 @@ Proof.
   intros m e t m' e' MC MTy MSt.
   remember (Some e') as E'.
   generalize dependent e'.
-  induction MSt; intros ? HEq HV; inversion HEq; subst; clear HEq.
-  - eauto using bigStep.
-  - eapply stepBigstep; eauto.
-    eapply IHMSt; eauto; eapply Preservation; eauto.
+  induction MSt; intros ? HEq HV; inversion HEq; subst; clear HEq;
+  eauto using bigStep, stepBigstep, PresMC, PresTy.
 Qed.
 
 
@@ -331,6 +330,10 @@ Lemma mUnbox1 : forall t m e m' e',
 Proof. intros t; finishmExp. Qed.
 
 
+Lemma invertTyBox : forall t e, Value (IREBox t e) -> Value e.
+Proof. intros t e H. inversion H. trivial. Qed.
+
+
 Theorem bigSmall : forall m e t m' e',
     mem_correct m ->
     MEmpty |= e : t ->
@@ -362,7 +365,6 @@ Proof.
     * eapply multiRefl.
       ** eauto using multistep1, StLet, BstepValue.
       ** eauto using subst_typing, BstepValue, BstepTy.
-
   - eapply multiRefl.
     + eauto using mFunapp1.
     + eapply multiRefl.
@@ -376,12 +378,8 @@ Proof.
              eapply subst_typing; eauto.
              eapply BPreservation; eauto.
   - auto using mBox1.
-  - eapply multiRefl.
-    + eauto using mUnbox1.
-    + apply multistep1. eapply StUnbox.
-      assert (HV: Value (IREBox t e'0))
-                by (eapply BPreservation; eauto).
-      inversion HV; subst. trivial.
+  - eauto 8 using multiRefl, mUnbox1, multistep1,
+      StUnbox, invertTyBox, BstepValue.
 Qed.
 
 

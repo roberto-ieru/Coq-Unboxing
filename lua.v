@@ -282,11 +282,10 @@ Lemma subst_WT : forall e2 Γ var e1,
   LEWT (var |=> IRTStar; Γ) e2 -> LEWT MEmpty e1 -> LEWT Γ ([var := e1] e2).
 Proof.
   induction e2; intros Γ var e1 HWT2 HWT1; simpl;
-  inversion HWT2; subst; eauto using LEWT.
-  - destruct (string_dec var s); eauto using WT_empty, InNotEq, LEWT.
-  - destruct (string_dec var s); subst.
-    + eauto using inclusion_WT, inclusion_shadow, LEWT.
-    + eauto using inclusion_WT, inclusion_permute, LEWT.
+  inversion HWT2; subst;
+  breakStrDec;
+  eauto using LEWT, WT_empty, InNotEq, inclusion_WT, inclusion_shadow,
+  inclusion_permute.
 Qed.
 
 
@@ -380,11 +379,9 @@ Lemma L2LirSubst : forall e1 var e2,
   lir.substitution var (Lua2Lir e1) (Lua2Lir e2).
 Proof.
   intros e1 var e2.
-  induction e2; simpl; try congruence.
-  - destruct (string_dec var s).
-    + destruct (string_dec s s); easy.
-    + destruct (string_dec s var); easy.
-  - destruct (string_dec var s); simpl; congruence.
+  induction e2; simpl;
+  breakStrDec;
+  simpl; try congruence.
 Qed.
 
 
@@ -429,7 +426,7 @@ Proof.
   - simpl. eapply BStFunapp; eauto.
     + eapply BStUnbox.
       simpl in IHHSt1. eauto.
-    + simpl. destruct (string_dec var var); try easy.
+    + simpl. breakStrDec.
       eapply BStLet.
       * apply BStValue.
         apply L2LirValue.

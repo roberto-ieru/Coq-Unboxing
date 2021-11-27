@@ -44,9 +44,9 @@ Fixpoint dynGamma (Γ : IREnvironment) : IREnvironment :=
 Lemma TP2TGammaIn : forall Γ var T,
     In Γ var = Some T -> In (dynGamma Γ) var = Some IRTStar.
 Proof.
-  induction Γ; intros var T H; simpl in *.
+  induction Γ; intros var T H; simpl in *; breakStrDec.
   - easy.
-  - destruct (string_dec var s); eauto.
+  - eauto.
 Qed.
 
 
@@ -60,7 +60,7 @@ Qed.
 
 Lemma dynValue : forall e, Value e -> Value (dyn e).
 Proof.
-  intros e HV. induction HV; simpl; eauto using Value.
+  intros e HV. induction HV; simpl; auto using Value.
 Qed.
 
 
@@ -68,12 +68,9 @@ Lemma dynSubst : forall var e1 e2,
     ([var := dyn e1](dyn e2)) = dyn ([var := e1]e2).
 Proof.
   intros var e1 e2.
-  induction e2; simpl;
-  try match goal with
-    [|- context C [string_dec ?V1 ?V2]] =>
-       destruct (string_dec V1 V2); simpl
-  end;
-  congruence.
+  induction e2;
+  simpl; breakStrDec;
+  simpl; congruence.
 Qed.
 
 
@@ -82,6 +79,10 @@ Fixpoint dynMem (m : Mem) : Mem :=
   | EmptyMem => EmptyMem
   | Update a n e m => Update a n (dyn e) (dynMem m)
   end.
+
+Lemma dynMemEmpty : MEmpty = dynGamma MEmpty.
+Proof. trivial. Qed.
+
 
 
 Lemma dynMemCorrect : forall m, mem_correct m -> mem_correct (dynMem m).
@@ -93,8 +94,7 @@ Proof.
   simpl in *; breakIndexDec;
     try (apply IHm; easy).
   - auto using dynValue.
-  - replace MEmpty with (dynGamma MEmpty) by reflexivity.
-    eauto using dynTyping.
+  - rewrite dynMemEmpty; eauto using dynTyping.
 Qed.
 
 
@@ -119,9 +119,7 @@ Qed.
 Lemma dynFresh : forall m free m',
    (free, m') = fresh m -> (free, dynMem m') = fresh (dynMem m).
 Proof.
-  induction m; intros free m' H; inversion H; subst.
-  - reflexivity.
-  - simpl. unfold fresh.
-    f_equal; f_equal; rewrite dynFreshAux; trivial.
+  induction m; intros free m' H; inversion H; subst; trivial.
+  - rewrite dynFreshAux. trivial.
 Qed.
 

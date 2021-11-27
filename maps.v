@@ -43,11 +43,11 @@ Proof. intros. simpl in *. breakStrDec.
 Qed.
 
 
-Theorem InEq : forall A (M : Map A) var r, In (var |=> r; M) var = Some r.
+Lemma InEq : forall A (M : Map A) var r, In (var |=> r; M) var = Some r.
 Proof. intros. simpl. breakStrDec. Qed.
 
 
-Theorem InNotEq : forall A (M : Map A) var var' r r',
+Lemma InNotEq : forall A (M : Map A) var var' r r',
     var <> var' -> In (var' |=> r; M) var = r' -> In M var = r'.
 Proof. intros. simpl in *. breakStrDec. Qed.
 

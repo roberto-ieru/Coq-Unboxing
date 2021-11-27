@@ -156,7 +156,7 @@ Proof.
     inversion Heq; subst. eauto using PTyping.
 Qed.
 
-Theorem typeOfCorrect : forall Γ e T, typeOf Γ e = Some T <-> Γ |= e : T.
+Lemma typeOfCorrect : forall Γ e T, typeOf Γ e = Some T <-> Γ |= e : T.
 Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 
 

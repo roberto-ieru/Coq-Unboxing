@@ -30,7 +30,7 @@ Fixpoint dyn (e : IRE) : IRE :=
   end.
 
 
-Lemma dynIdempotent : forall e, dyn e = dyn (dyn e).
+Theorem dynIdempotent : forall e, dyn e = dyn (dyn e).
 Proof. induction e; simpl; congruence. Qed.
 
 

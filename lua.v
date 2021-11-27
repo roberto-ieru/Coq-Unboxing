@@ -112,7 +112,7 @@ Proof.
 Qed.
 
 
-Lemma LuaIsDyn : forall e, Lua2Lir e = dyn (Lua2Lir e).
+Theorem LuaIsDyn : forall e, Lua2Lir e = dyn (Lua2Lir e).
 Proof.
   induction e; simpl; congruence.
 Qed.

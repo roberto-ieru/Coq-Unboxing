@@ -93,7 +93,7 @@ where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 .
 
 
-Theorem typeUnique : forall Γ e t t',
+Lemma typeUnique : forall Γ e t t',
    (Γ  |= e : t) -> (Γ |= e : t') -> t = t'.
 Proof.
   intros Γ e t t' H1.
@@ -103,7 +103,7 @@ Proof.
 Qed.
 
 
-Theorem envExt : forall Γ Γ' e t,
+Lemma envExt : forall Γ Γ' e t,
     inclusion Γ Γ' -> Γ |= e : t  -> Γ' |= e : t.
 Proof.
   intros Γ Γ' e t Hinc Hty.
@@ -249,7 +249,7 @@ Proof.
 Qed.
 
 
-Corollary typing_empty : forall Γ e te, MEmpty |= e : te -> Γ |= e : te.
+Lemma typing_empty : forall Γ e te, MEmpty |= e : te -> Γ |= e : te.
 Proof.
   eauto using inclusion_typing, inclusion_empty.
 Qed.
@@ -561,7 +561,7 @@ where "m / e -->* m1 / e1" := (multistep m e m1 (Some e1))
   and "m / e -->* 'fail'" := (multistep m e m None)
 .
 
-Theorem multiRefl : forall m0 e0 m1 e1 m2 e2,
+Lemma multiRefl : forall m0 e0 m1 e1 m2 e2,
     m0 / e0 -->* m1 / e1 ->
     m1 / e1 -->* m2 / e2 ->
     m0 / e0 -->* m2 / e2.
@@ -582,7 +582,7 @@ Lemma multistep1 : forall m0 e0 m1 e1,
 Proof. eauto using multistep. Qed.
 
 
-Theorem MultiProgress : forall m e t m' e',
+Theorem Soundness : forall m e t m' e',
     mem_correct m ->
     MEmpty |= e : t  ->
     m / e -->* m' / e' ->

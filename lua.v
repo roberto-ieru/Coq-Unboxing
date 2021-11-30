@@ -402,7 +402,7 @@ Theorem SymLua : forall e m v m',
     LEWT MEmpty e ->
     m /e ==> m' / v  ->
     bigStep (MLua2Lir m) (Lua2Lir e)
-            (MLua2Lir m') (Some (Lua2Lir v)).
+            (MLua2Lir m') (Lua2Lir v).
 Proof.
   intros e m v m' HMC HWT HSt.
   induction HSt; inversion HWT; subst;

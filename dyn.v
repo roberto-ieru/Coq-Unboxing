@@ -9,6 +9,7 @@ Require Import Lia.
 Require Import LIR.maps.
 
 Require Import LIR.lir.
+Require Import LIR.biglir.
 
 
 Fixpoint dyn (e : IRE) : IRE :=
@@ -123,3 +124,38 @@ Proof.
   - rewrite dynFreshAux. trivial.
 Qed.
 
+
+Theorem bigDyn : forall e t m e' m',
+   m / e ==> m' / e' -> MEmpty |= e : t -> mem_correct m ->
+   dynMem m / dyn e ==> dynMem m' / dyn e'.
+Proof.
+  intros e t m e' m' HB HTy HM.
+  remember MEmpty as Γ eqn:Heq.
+  generalize dependent t.
+  induction HB; intros ? HTy;
+  inversion Heq; inversion HTy; subst; simpl;
+  try match goal with [H : Value _ |- _] => inversion H end;
+  repeat memC;
+  simpl;
+  try (eapply BStValue; eauto using Value; fail);
+  eauto using Value,BStValue,dynValue,dynFresh,bigStep;
+  repeat match goal with
+    | [ MC: mem_correct ?M,
+        HT: MEmpty |= ?E : _,
+        IH: mem_correct ?M -> forall _, MEmpty |= ?E : _ -> _
+         |- _] =>
+        specialize (IH MC _ HT); simpl in IH
+    end; eauto using bigStep.
+  - rewrite dynQuery. eauto using bigStep.
+  - rewrite DynIndex. eauto using bigStep.
+  - eapply BStLet; eauto. rewrite dynSubst.
+    eapply IHHB2; eauto.
+    eapply subst_typing; eauto. eauto using BstepTy.
+  - eapply BStFunapp; eauto.
+    + eapply BStUnbox. eauto.
+    + rewrite dynSubst. eapply IHHB3; eauto.
+      eapply subst_typing; eauto using BstepTy.
+      assert (HTyF: MEmpty |= IREFun var body : TgFun).
+      { eapply BPreservation; eauto. }
+      inversion HTyF; subst. eauto.
+Qed.

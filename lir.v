@@ -451,6 +451,21 @@ Proof.
 Qed.
 
 
+Lemma funcTyping :  forall var body e,
+    MEmpty |= IREFun var body : TgFun ->
+    MEmpty |= e : IRTStar ->
+    MEmpty |= [var := e] body : IRTStar.
+Proof.
+  intros var body e HT1 HT2.
+  inversion HT1; subst; eauto using subst_typing.
+Qed.
+
+
+Lemma boxTyping : forall e t,
+  MEmpty |= IREBox t e : IRTStar -> MEmpty |= e : t.
+Proof. intros e t H. inversion H; trivial. Qed.
+
+
 Lemma expPreservation : forall m e t m' e',
   mem_correct m ->
   MEmpty |= e : t -> m / e --> m' / e' -> MEmpty |= e' : t.
@@ -460,11 +475,7 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HT; intros e' m' Hst; inversion Hst; subst;
-  eauto using IRTyping, MCTy;
-  match goal with
-  | [ H: _ |= _ : _ |- _ ] =>
-        (inversion H; subst; eauto using IRTyping, subst_typing; fail)
-  end.
+  eauto using IRTyping, MCTy, subst_typing, funcTyping, boxTyping.
 Qed.
 
 

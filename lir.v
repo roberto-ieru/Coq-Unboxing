@@ -19,11 +19,27 @@ Proof. decide equality. Qed.
 
 
 Inductive IRType : Set :=
-| IRTTag : Tag -> IRType
+| IRTNil
+| IRTInt
+| IRTTbl
+| IRTFun: IRType -> IRType -> IRType
 | IRTStar
 .
 
-Coercion IRTTag : Tag >-> IRType.
+
+Inductive BaseType : Set :=
+| BGround : Tag  -> BaseType
+| BStar : BaseType
+.
+
+
+Definition Tag2Type (tg : Tag) : IRType :=
+  match tg with
+  | TgNil => IRTNil
+  | TgInt => IRTInt
+  | TgTbl => IRTTbl
+  | TgFun => IRTFun IRTStar IRTStar
+  end.
 
 
 Definition address := nat.
@@ -37,8 +53,7 @@ Inductive IRE : Set :=
 | IREGet : IRE -> IRE -> IRE
 | IRESet : IRE -> IRE -> IRE -> IRE
 | IREVar : string -> IRE
-| IRELet : string -> IRType -> IRE -> IRE -> IRE
-| IREFun : string -> IRE -> IRE
+| IREFun : string -> IRType -> IRE -> IRE
 | IREFunApp : IRE -> IRE -> IRE
 | IREBox : Tag -> IRE -> IRE
 | IREUnbox : Tag -> IRE -> IRE
@@ -51,43 +66,39 @@ Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
 Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
-| IRTyNil : forall Γ, Γ |= IRENil : TgNil
+| IRTyNil : forall Γ, Γ |= IRENil : IRTNil
 | IRTyVar : forall Γ var T,
     In Γ var = Some T ->
     Γ |= IREVar var : T
-| IRTyInt : forall Γ n, Γ |= IRENum n : TgInt
+| IRTyInt : forall Γ n, Γ |= IRENum n : IRTInt
 | IRTyPlus : forall Γ e1 e2,
-    Γ |= e1 : TgInt ->
-    Γ |= e2 : TgInt ->
-    Γ |= (IREPlus e1 e2) : TgInt
-| IRTyCnst : forall Γ, Γ |= IRECnst : TgTbl
-| IRTyAddr : forall Γ addr, Γ |= IREAddr addr : TgTbl
+    Γ |= e1 : IRTInt ->
+    Γ |= e2 : IRTInt ->
+    Γ |= (IREPlus e1 e2) : IRTInt
+| IRTyCnst : forall Γ, Γ |= IRECnst : IRTTbl
+| IRTyAddr : forall Γ addr, Γ |= IREAddr addr : IRTTbl
 | IRTyGet : forall Γ e1 e2,
-    Γ |= e1 : TgTbl ->
+    Γ |= e1 : IRTTbl ->
     Γ |= e2 : IRTStar ->
     Γ |= (IREGet e1 e2) : IRTStar
 | IRTySet : forall Γ e1 e2 e3,
-    Γ |= e1 : TgTbl ->
+    Γ |= e1 : IRTTbl ->
     Γ |= e2 : IRTStar ->
     Γ |= e3 : IRTStar ->
     Γ |= (IRESet e1 e2 e3) : IRTStar
-| IRTyLet : forall Γ var tvar e body tb,
-    Γ |= e : tvar ->
-    var |=> tvar; Γ |= body : tb ->
-    Γ |= (IRELet var tvar e body) : tb
-| IRTyFun : forall Γ var body,
-    var |=> IRTStar; Γ |= body : IRTStar ->
-    Γ |= (IREFun var body) : TgFun
-| IRTyFunApp : forall Γ e1 e2,
-    Γ |= e1 : TgFun ->
-    Γ |= e2 : IRTStar ->
-    Γ |= (IREFunApp e1 e2) : IRTStar
+| IRTyFun : forall Γ var t t' body,
+    var |=> t; Γ |= body : t' ->
+    Γ |= (IREFun var t body) : IRTFun t t'
+| IRTyFunApp : forall Γ t t' e1 e2,
+    Γ |= e1 : IRTFun t t' ->
+    Γ |= e2 : t ->
+    Γ |= (IREFunApp e1 e2) : t'
 | IRTyBox : forall Γ e (t : Tag),
-    Γ |= e : t ->
+    Γ |= e : (Tag2Type t) ->
     Γ |= (IREBox t e) : IRTStar
 | IRTyUnbox : forall Γ e (t : Tag),
     Γ |= e : IRTStar ->
-    Γ |= (IREUnbox t e) : t
+    Γ |= (IREUnbox t e) : Tag2Type t
 
 where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 .
@@ -98,8 +109,10 @@ Lemma typeUnique : forall Γ e t t',
 Proof.
   intros Γ e t t' H1.
   generalize dependent t'.
-  induction H1; intros t' H2; inversion H2; subst; f_equal;
-  auto ; congruence.
+  induction H1; intros ? H2; inversion H2; subst; f_equal;
+  auto ; try congruence.
+  assert (H: IRTFun t t' = IRTFun t0 t'0) by auto.
+  inversion H; subst; trivial.
 Qed.
 
 
@@ -114,8 +127,8 @@ Qed.
 
 
 
-Example TypeFunId : forall Γ var,
-  Γ |= IREFun var (IREVar var) : TgFun.
+Example TypeFunId : forall Γ t var,
+  Γ |= IREFun var t (IREVar var) : IRTFun t t.
 Proof. eauto using IRTyping,  InEq. Qed.
 
 
@@ -123,13 +136,13 @@ Inductive Value : IRE -> Prop :=
 | Vnil : Value IRENil
 | Vnum : forall n, Value (IRENum n)
 | Vtbl : forall a, Value (IREAddr a)
-| Vfun : forall var e, Value (IREFun var e)
+| Vfun : forall var t e, Value (IREFun var t e)
 | Vbox : forall gt v, Value v -> Value (IREBox gt v)
 .
 
 
 Lemma valnil : forall Γ e,
-  Γ |= e : TgNil -> Value e -> e = IRENil.
+  Γ |= e : IRTNil -> Value e -> e = IRENil.
 Proof.
   intros Γ e HT HV.
   inversion HV;
@@ -138,7 +151,7 @@ Qed.
 
 
 Lemma valint : forall Γ e,
-    Γ |= e : TgInt -> Value e -> exists n, e = IRENum n.
+    Γ |= e : IRTInt -> Value e -> exists n, e = IRENum n.
 Proof.
   intros Γ e HT HV.
   inversion HV;
@@ -148,7 +161,7 @@ Qed.
 
 
 Lemma valtbl : forall Γ e,
-    Γ |= e : TgTbl -> Value e -> exists a, e = IREAddr a.
+    Γ |= e : IRTTbl -> Value e -> exists a, e = IREAddr a.
 Proof.
   intros Γ e HT HV.
   inversion HV;
@@ -157,18 +170,19 @@ Proof.
 Qed.
 
 
-Lemma valfun : forall Γ e,
-    Γ |= e : TgFun -> Value e -> exists var b, e = IREFun var b.
+Lemma valfun : forall Γ e t t',
+    Γ |= e : IRTFun t t' -> Value e -> exists var b, e = IREFun var t b.
 Proof.
-  intros Γ e HT HV.
+  intros Γ e t t' HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
-  eexists; eexists. auto 1 using Value.
+  inversion H2; subst.
+  eexists; eexists; auto using Value.
 Qed.
 
 
 Lemma valbox : forall Γ e, Γ |= e : IRTStar -> Value e ->
-    exists o t, e = IREBox t o /\ (Γ |= o : t) /\ Value o.
+    exists o t, e = IREBox t o /\ (Γ |= o : Tag2Type t) /\ Value o.
 Proof.
   intros Γ e HT HV.
   inversion HV;
@@ -227,11 +241,8 @@ Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
  | IREGet e1 e2 => IREGet ([var := y] e1) ([var := y] e2)
  | IRESet e1 e2 e3 => IRESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
  | IREVar var' => if string_dec var var' then y else e
- | IRELet var' type exp body =>
-        if string_dec var var' then IRELet var' type ([var := y] exp) body
-        else IRELet var' type ([var := y] exp) ([var := y] body)
- | IREFun var' body  => if string_dec var var' then e
-                    else IREFun var' ([var := y] body)
+ | IREFun var' t body  => if string_dec var var' then e
+                    else IREFun var' t ([var := y] body)
  | IREFunApp e1 e2 => IREFunApp ([var := y] e1) ([var := y] e2)
  | IREBox tg e  => IREBox tg ([var := y] e)
  | IREUnbox tg e  => IREUnbox tg ([var := y] e)
@@ -275,21 +286,14 @@ Reserved Notation "m '/' e --> 'fail'"
 (at level 40, e at level 39).
 
 
-Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
+Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
 | StPlus1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / IREPlus e1 e2 --> m' / IREPlus e1' e2
-| StPlus1F : forall m e1 e2,
-    m / e1 --> fail ->
-    m / IREPlus e1 e2 --> fail
 | StPlus2 : forall m e1 e2 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
     m /  IREPlus e1 e2 --> m' /  IREPlus e1 e2'
-| StPlus2F : forall m e1 e2,
-    Value e1 ->
-    m / e2 --> fail ->
-    m /  IREPlus e1 e2 --> fail
 | StPlus : forall m n1 n2,
     m /  IREPlus (IRENum n1) (IRENum n2) --> m /  IRENum (n1 + n2)
 | StCstr : forall m m' free,
@@ -298,95 +302,97 @@ Inductive step : Mem -> IRE -> Mem -> option IRE -> Prop :=
 | StGet1 : forall m e1 e2 m' e1',
     m /e1 --> m' /e1' ->
     m / IREGet e1 e2 --> m' / IREGet e1' e2
-| StGet1F : forall m e1 e2,
-    m /e1 --> fail ->
-    m / IREGet e1 e2 --> fail
 | StGet2 : forall m e1 e2 m' e2',
     Value e1 ->
     m /e2 --> m' /e2' ->
     m / IREGet e1 e2 --> m' / IREGet e1 e2'
-| StGet2F : forall m e1 e2,
-    Value e1 ->
-    m /e2 --> fail ->
-    m / IREGet e1 e2 --> fail
 | StGet : forall m a idx,
     Value idx ->
     m / IREGet (IREAddr a) idx --> m / query a idx m
 | StSet1 : forall m e1 e2 e3 m' e1',
     m / e1 --> m' / e1' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1' e2 e3
-| StSet1F : forall m e1 e2 e3,
-    m / e1 --> fail ->
-    m / IRESet e1 e2 e3 --> fail
 | StSet2 : forall m e1 e2 e3 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1 e2' e3
-| StSet2F : forall m e1 e2 e3,
-    Value e1 ->
-    m / e2 --> fail ->
-    m / IRESet e1 e2 e3 --> fail
 | StSet3 : forall m e1 e2 e3 m' e3',
     Value e1 -> Value e2 ->
     m / e3 --> m' / e3' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1 e2 e3'
-| StSet3F : forall m e1 e2 e3,
-    Value e1 -> Value e2 ->
-    m / e3 --> fail ->
-    m / IRESet e1 e2 e3 --> fail
 | StSet : forall m a idx v,
     Value idx ->
     Value v ->
     m / IRESet (IREAddr a) idx v --> Update a idx v m / v
-| StLet1 : forall m var t exp body m' exp',
-    m / exp --> m' / exp' ->
-    m / IRELet var t exp body --> m' / IRELet var t exp' body
-| StLet1F : forall m var t exp body,
-    m / exp --> fail ->
-    m / IRELet var t exp body --> fail
-| StLet : forall m var t exp body,
-    Value exp ->
-    m / IRELet var t exp body --> m / [var := exp] body
 | StFunapp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / IREFunApp e1 e2 --> m' / IREFunApp e1' e2
-| StFunapp1F : forall m e1 e2,
-    m / e1 --> fail ->
-    m / IREFunApp e1 e2 --> fail
 | StFunapp2 : forall m e1 e2 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
     m / IREFunApp e1 e2 --> m' / IREFunApp e1 e2'
-| StFunapp2F : forall m e1 e2,
-    Value e1 ->
-    m / e2 --> fail ->
-    m / IREFunApp e1 e2 --> fail
-| StFunapp : forall m var body v2,
+| StFunapp : forall m var t body v2,
     Value v2 ->
-    m / IREFunApp (IREFun var body) v2 -->
+    m / IREFunApp (IREFun var t body) v2 -->
     m / [var := v2] body
 | StBox1 : forall m t e m' e',
     m / e --> m' / e' ->
     m / IREBox t e --> m' / IREBox t e'
-| StBox1F : forall m t e,
-    m / e --> fail ->
-    m / IREBox t e --> fail
 | StUnbox1 : forall m t e m' e',
     m / e --> m' / e' ->
     m / IREUnbox t e --> m' / IREUnbox t e'
-| StUnbox1F : forall m t e,
-    m / e --> fail ->
-    m / IREUnbox t e --> fail
 | StUnbox : forall m t v,
     Value v ->
     m / IREUnbox t (IREBox t v) --> m / v
+
+where "m / e --> m1 / e1" := (step m e m1 e1).
+
+
+Inductive stepF : Mem -> IRE -> Prop :=
+| StPlus1F : forall m e1 e2,
+    m / e1 --> fail ->
+    m / IREPlus e1 e2 --> fail
+| StPlus2F : forall m e1 e2,
+    Value e1 ->
+    m / e2 --> fail ->
+    m /  IREPlus e1 e2 --> fail
+| StGet1F : forall m e1 e2,
+    m /e1 --> fail ->
+    m / IREGet e1 e2 --> fail
+| StGet2F : forall m e1 e2,
+    Value e1 ->
+    m /e2 --> fail ->
+    m / IREGet e1 e2 --> fail
+| StSet1F : forall m e1 e2 e3,
+    m / e1 --> fail ->
+    m / IRESet e1 e2 e3 --> fail
+| StSet2F : forall m e1 e2 e3,
+    Value e1 ->
+    m / e2 --> fail ->
+    m / IRESet e1 e2 e3 --> fail
+| StSet3F : forall m e1 e2 e3,
+    Value e1 -> Value e2 ->
+    m / e3 --> fail ->
+    m / IRESet e1 e2 e3 --> fail
+| StFunapp1F : forall m e1 e2,
+    m / e1 --> fail ->
+    m / IREFunApp e1 e2 --> fail
+| StFunapp2F : forall m e1 e2,
+    Value e1 ->
+    m / e2 --> fail ->
+    m / IREFunApp e1 e2 --> fail
+| StBox1F : forall m t e,
+    m / e --> fail ->
+    m / IREBox t e --> fail
+| StUnbox1F : forall m t e,
+    m / e --> fail ->
+    m / IREUnbox t e --> fail
 | StUnboxF : forall m t t' v,
     t <> t' ->
     Value v ->
     m / IREUnbox t (IREBox t' v) --> fail
 
-where "m / e --> m1 / e1" := (step m e m1 (Some e1))
-  and "m / e --> 'fail'" := (step m e m None)
+ where "m / e --> 'fail'" := (stepF m e)
 .
 
 
@@ -451,18 +457,18 @@ Proof.
 Qed.
 
 
-Lemma funcTyping :  forall var body e,
-    MEmpty |= IREFun var body : TgFun ->
-    MEmpty |= e : IRTStar ->
-    MEmpty |= [var := e] body : IRTStar.
+Lemma funcTyping :  forall var t1 t2 body e t',
+    MEmpty |= IREFun var t1 body : IRTFun t2 t' ->
+    MEmpty |= e : t2 ->
+    MEmpty |= [var := e] body : t'.
 Proof.
-  intros var body e HT1 HT2.
+  intros var t1 t2 body e t' HT1 HT2.
   inversion HT1; subst; eauto using subst_typing.
 Qed.
 
 
 Lemma boxTyping : forall e t,
-  MEmpty |= IREBox t e : IRTStar -> MEmpty |= e : t.
+  MEmpty |= IREBox t e : IRTStar -> MEmpty |= e : Tag2Type t.
 Proof. intros e t H. inversion H; trivial. Qed.
 
 
@@ -475,7 +481,7 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HT; intros e' m' Hst; inversion Hst; subst;
-  eauto using IRTyping, MCTy, subst_typing, funcTyping, boxTyping.
+  eauto using IRTyping, MCTy, boxTyping, funcTyping.
 Qed.
 
 
@@ -526,9 +532,10 @@ Proof.
   repeat match goal with
   | [H : _ -> _ \/ (_ \/ _) |- _] =>
       decompose [or ex and] (H eq_refl); clear H
-  end; subst;
+  end;
+  subst;
   (* trivial steps and failures *)
-  try (right; auto using step; fail);
+  try (right; auto using stepF; fail);
   (* trivial values *)
   auto using Value;
   (* break values *)
@@ -545,7 +552,7 @@ Proof.
   try (right; right; eauto using step, eq_refl; fail).
   - (* unboxing has to handle success vs. failure *)
     match goal with | [t1:Tag, t2:Tag |- _] => destruct (dec_Tag t1 t2) end;
-    right; subst; eauto using step.
+    right; subst; eauto using step, stepF.
 Qed.
 
 
@@ -554,12 +561,18 @@ Reserved Notation "m '/' e -->* m1 '/' e1"
 Reserved Notation "m '/' e -->* 'fail'"
 (at level 40, e at level 39).
 
-Inductive multistep : Mem -> IRE -> Mem -> option IRE -> Prop :=
+Inductive multistep : Mem -> IRE -> Mem -> IRE -> Prop :=
 | MStRefl : forall m e, m / e -->* m / e
 | MStMStep : forall m e m' e' m'' e'',
     m / e --> m' / e' ->
     m' / e' -->* m'' / e'' ->
     m / e -->* m'' / e''
+
+where "m / e -->* m1 / e1" := (multistep m e m1 e1)
+.
+
+
+Inductive multistepF : Mem -> IRE -> Prop :=
 | MStStepF : forall m e,
     m / e --> fail ->
     m / e -->* fail
@@ -568,8 +581,7 @@ Inductive multistep : Mem -> IRE -> Mem -> option IRE -> Prop :=
     m' / e' -->* fail ->
     m / e -->* fail
 
-where "m / e -->* m1 / e1" := (multistep m e m1 (Some e1))
-  and "m / e -->* 'fail'" := (multistep m e m None)
+where "m / e -->* 'fail'" := (multistepF m e)
 .
 
 Lemma multiRefl : forall m0 e0 m1 e1 m2 e2,
@@ -578,11 +590,9 @@ Lemma multiRefl : forall m0 e0 m1 e1 m2 e2,
     m0 / e0 -->* m2 / e2.
 Proof.
   intros m0 e0 m1 e1 m2 e2 H0 H1.
-  remember (Some e1) as E1.
-  generalize dependent e1.
   generalize dependent m2.
   generalize dependent e2.
-  induction H0; intros ? ? ? Heq H2; inversion Heq; subst; trivial.
+  induction H0; intros ? H2; trivial.
   eauto using multistep.
 Qed.
 
@@ -606,6 +616,4 @@ Proof.
   - eauto using Progress.
   - eauto using PresTy, PresMC.
 Qed.
-
-
 

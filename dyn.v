@@ -9,7 +9,6 @@ Require Import Lia.
 Require Import LIR.maps.
 
 Require Import LIR.lir.
-Require Import LIR.biglir.
 
 
 Fixpoint dyn (e : IRE) : IRE :=
@@ -23,8 +22,7 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1)) (dyn e2)
   | IRESet e1 e2 e3 => IRESet (IREUnbox TgTbl (dyn e1)) (dyn e2) (dyn e3)
   | IREVar var => IREVar var
-  | IRELet var t exp body => IRELet var IRTStar (dyn exp) (dyn body)
-  | IREFun var e => IREBox TgFun (IREFun var (dyn e))
+  | IREFun var t exp => IREBox TgFun (IREFun var IRTStar (dyn exp))
   | IREFunApp e1 e2 => IREFunApp (IREUnbox TgFun (dyn e1)) (dyn e2)
   | IREBox _ e => dyn e
   | IREUnbox _ e => dyn e
@@ -53,9 +51,13 @@ Qed.
 
 Theorem dynTyping : forall Γ e T,
     Γ |= e : T -> dynGamma Γ |= (dyn e) : IRTStar.
-Proof.
+Proof with apply IRTyUnbox; trivial.
   intros Γ e T Hty.
-  induction Hty; eauto using IRTyping,TP2TGammaIn.
+  induction Hty; simpl; eauto using IRTyping, TP2TGammaIn.
+  - apply IRTyBox. apply IRTyPlus...
+  - apply IRTyGet; trivial...
+  - apply IRTySet; trivial...
+  - eapply IRTyFunApp; eauto...
 Qed.
 
 
@@ -111,51 +113,3 @@ Proof.
 Qed.
 
 
-Lemma dynFreshAux : forall m, freshaux m = freshaux (dynMem m).
-Proof.
-  induction m; trivial; simpl; congruence.
-Qed.
-
-
-Lemma dynFresh : forall m free m',
-   (free, m') = fresh m -> (free, dynMem m') = fresh (dynMem m).
-Proof.
-  induction m; intros free m' H; inversion H; subst; trivial.
-  - rewrite dynFreshAux. trivial.
-Qed.
-
-
-Theorem bigDyn : forall e t m e' m',
-   m / e ==> m' / e' -> MEmpty |= e : t -> mem_correct m ->
-   dynMem m / dyn e ==> dynMem m' / dyn e'.
-Proof.
-  intros e t m e' m' HB HTy HM.
-  remember MEmpty as Γ eqn:Heq.
-  generalize dependent t.
-  induction HB; intros ? HTy;
-  inversion Heq; inversion HTy; subst; simpl;
-  try match goal with [H : Value _ |- _] => inversion H end;
-  repeat memC;
-  simpl;
-  try (eapply BStValue; eauto using Value; fail);
-  eauto using Value,BStValue,dynValue,dynFresh,bigStep;
-  repeat match goal with
-    | [ MC: mem_correct ?M,
-        HT: MEmpty |= ?E : _,
-        IH: mem_correct ?M -> forall _, MEmpty |= ?E : _ -> _
-         |- _] =>
-        specialize (IH MC _ HT); simpl in IH
-    end; eauto using bigStep.
-  - rewrite dynQuery. eauto using bigStep.
-  - rewrite DynIndex. eauto using bigStep.
-  - eapply BStLet; eauto. rewrite dynSubst.
-    eapply IHHB2; eauto.
-    eapply subst_typing; eauto. eauto using BstepTy.
-  - eapply BStFunapp; eauto.
-    + eapply BStUnbox. eauto.
-    + rewrite dynSubst. eapply IHHB3; eauto.
-      eapply subst_typing; eauto using BstepTy.
-      assert (HTyF: MEmpty |= IREFun var body : TgFun).
-      { eapply BPreservation; eauto. }
-      inversion HTyF; subst. eauto.
-Qed.

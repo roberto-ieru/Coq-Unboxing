@@ -42,6 +42,13 @@ Definition Tag2Type (tg : Tag) : IRType :=
   end.
 
 
+Definition Base2Type (bt : BaseType) : IRType :=
+  match bt with
+  | BGround tg => Tag2Type tg
+  | BStar => IRTStar
+  end.
+
+
 Definition address := nat.
 
 Inductive IRE : Set :=
@@ -93,12 +100,13 @@ Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
     Γ |= e1 : IRTFun t t' ->
     Γ |= e2 : t ->
     Γ |= (IREFunApp e1 e2) : t'
-| IRTyBox : forall Γ e (t : Tag),
-    Γ |= e : (Tag2Type t) ->
-    Γ |= (IREBox t e) : IRTStar
-| IRTyUnbox : forall Γ e (t : Tag),
+| IRTyBox : forall Γ e (tg : Tag),
+    Γ |= e : (Tag2Type tg) ->
+    Γ |= (IREBox tg e) : IRTStar
+| IRTyUnbox : forall Γ e tg t,
+    t = Tag2Type tg ->
     Γ |= e : IRTStar ->
-    Γ |= (IREUnbox t e) : Tag2Type t
+    Γ |= (IREUnbox tg e) : t
 
 where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 .

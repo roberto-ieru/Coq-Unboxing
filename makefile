@@ -5,8 +5,8 @@ lir.vo: lir.v
 
 
 lir.vo: maps.vo
-biglir.vo: maps.vo lir.vo
-dyn.vo: maps.vo lir.vo biglir.vo
+dyn.vo: maps.vo lir.vo
+precision.vo: maps.vo lir.vo dyn.vo
 pallene.vo: maps.vo lir.vo
-lua.vo: maps.vo pallene.vo lir.vo biglir.vo dyn.vo
+lua.vo: maps.vo pallene.vo lir.vo dyn.vo
 

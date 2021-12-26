@@ -227,17 +227,19 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 (* Γ⊑ ⊢ d ⊑ e : ★ ⊑ ★
    ----------------------------------
    Γ⊑ ⊢ unbox[g](d) ⊑ e : g ⊑ *		*)
-| PUnboxL : forall Γ d e g,
+| PUnboxL : forall Γ d e g tg,
+    tg = Tag2Type g ->
     Precision Γ d IRTStar e IRTStar ->
-    Precision Γ (IREUnbox g d) (Tag2Type g) e IRTStar
+    Precision Γ (IREUnbox g d) tg e IRTStar
 
 (* Γ⊑ ⊢ d ⊑ e : t ⊑ ★ , t ⊑ g
    ----------------------------------
    Γ⊑ ⊢ d ⊑ unbox[g](d) : t ⊑ g	*)
-| PUnboxR : forall Γ d e t g,
+| PUnboxR : forall Γ d e t g tg,
     t <| (Tag2Type g) ->
+    tg = Tag2Type g ->
     Precision Γ d t e IRTStar ->
-    Precision Γ d t (IREUnbox g e) (Tag2Type g)
+    Precision Γ d t (IREUnbox g e) tg
 
 .
 
@@ -264,7 +266,7 @@ Lemma PPT : forall Γ e1 t1 e2 t2,
 Proof.
   unfold PEnvP.
   intros Γ e1 t1 e2 t2 HPE HP.
-  induction HP; eauto using TPrecision, TPrecisionRefl.
+  induction HP; subst; eauto using TPrecision, TPrecisionRefl.
   - apply PRFun. trivial.
     apply IHHP; intros.
     inversion H0.
@@ -278,7 +280,7 @@ Lemma PrecisionType1: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv1 Γ) |= e1 : t1.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
-  induction HP; eauto using IRTyping, InP1.
+  induction HP; subst; eauto using IRTyping, InP1.
 Qed.
 
 
@@ -286,7 +288,7 @@ Lemma PrecisionType2: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv2 Γ) |= e2 : t2.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
-  induction HP; eauto using IRTyping, InP2.
+  induction HP; subst; eauto using IRTyping, InP2.
 Qed.
 
 
@@ -518,11 +520,7 @@ Lemma PrecisionDyn : forall Γ e t,
 Proof with apply PUnboxR; eauto using TPrecision, TPrecisionRefl.
   intros Γ e t H.
   induction H; simpl; eauto using Precision, TPrecision, InEnv2Dyn.
-  - apply PBoxR.
-    apply PPlus...
-  - apply PGet; trivial...
-  - apply PSet; trivial...
-  - eapply PFunApp; eauto...
+  - eapply PFunApp; eauto; eapply PUnboxR; eauto using TPFun.
 Qed.
 
 

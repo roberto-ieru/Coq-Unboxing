@@ -63,12 +63,36 @@ Proof.
 Qed.
 
 
+Inductive TPrecOption : option IRType -> option IRType -> Prop :=
+| TPrecN : TPrecOption None None
+| TPrecS : forall t1 t2, t1 <| t2 -> TPrecOption (Some t1) (Some t2)
+.
+
+
 Definition EnvComp (Γ1 Γ2 : IREnvironment) : Prop :=
-  forall var t1 t2, In Γ1 var = Some t1 -> In Γ2 var = Some t2 -> t1 <| t2.
+    forall var, TPrecOption (In Γ1 var) (In Γ2 var).
 
 
 Infix "<E|" := EnvComp (at level 70).
 
+
+Lemma EnvCompTrans : forall Γ1 Γ2 Γ3,
+    Γ1 <E| Γ2 -> Γ2 <E| Γ3 -> Γ1 <E| Γ3.
+Proof.
+  unfold EnvComp.
+  intros Γ1 Γ2 Γ3 H12 H23 var.
+  specialize (H12 var).
+  specialize (H23 var).
+  destruct (In Γ1 var);
+  inversion H12; subst;
+    match goal with
+      [H: _ = In _ _ |- _] => rewrite <- H in *
+    end;
+  inversion H23; subst;
+  constructor;
+  eauto using TPrecisionTrans.
+Qed.
+  
 
 Inductive PEnvironment :=
 | PEnv : forall Γ1 Γ2, Γ1 <E| Γ2 -> PEnvironment.
@@ -90,13 +114,22 @@ Lemma PEnvIn : forall Γ var t1 t2,
     In (PEnv1 Γ) var = Some t1 ->
     In (PEnv2 Γ) var = Some t2 ->
     t1 <| t2.
-Proof. intros Γ. destruct Γ. eauto. Qed.
+Proof.
+  intros Γ var t1 t2 H1 H2.
+  destruct Γ.
+  unfold EnvComp in e.
+  simpl in *.
+  specialize (e var).
+  rewrite H1 in e.
+  rewrite H2 in e.
+  inversion e. trivial.
+Qed.
 
 
 Definition Env2P : IREnvironment -> PEnvironment.
 refine (fun Γ => (PEnv Γ Γ _)).
-  unfold EnvComp. intros ? t1 t2 ? ?.
-  replace t1 with t2 by congruence; auto using TPrecisionRefl.
+  unfold EnvComp. intros var.
+  destruct (In Γ var); auto using TPrecOption, TPrecisionRefl.
 Defined.
 
 
@@ -106,10 +139,9 @@ refine (fun Γ var t1 t2 H12 =>
     match Γ with
     | PEnv Γ1 Γ2 H12' => PEnv (var |=> t1; Γ1) (var |=> t2; Γ2) _
     end).
-  unfold EnvComp; intros var' t1' t2' HN1 HN2.
-  destruct (string_dec var' var); subst.
-  - apply InEq' in HN1; apply InEq' in HN2; subst; trivial.
-  - eauto using InNotEq.
+  unfold EnvComp; intros var'.
+  simpl.
+  destruct (string_dec var' var); auto using TPrecOption.
 Defined.
 
 
@@ -130,6 +162,27 @@ Proof. intros Γ. trivial. Qed.
 Inductive PEEquiv : PEnvironment -> PEnvironment -> Prop :=
 | PEE : forall Γ1 Γ2 P1 P2, PEEquiv (PEnv Γ1 Γ2 P1) (PEnv Γ1 Γ2 P2)
 .
+
+
+Lemma PEEquiv' : forall Γ1 Γ2,
+  PEnv1 Γ1 = PEnv1 Γ2 -> PEnv2 Γ1 = PEnv2 Γ2 -> PEEquiv Γ1 Γ2.
+Proof.
+  intros Γ1 Γ2 H1 H2.
+  destruct Γ1.
+  destruct Γ2.
+  simpl in *; subst.
+  constructor.
+Qed.
+
+
+Lemma PEEquivTrans : forall Γ1 Γ2 Γ3,
+    PEEquiv Γ1 Γ2 -> PEEquiv Γ2 Γ3 -> PEEquiv Γ1 Γ3.
+Proof.
+  intros Γ1 Γ2 Γ3 H12 H23.
+  inversion H12; subst.
+  inversion H23; subst.
+  constructor.
+Qed.
 
 
 Lemma ExpandEquiv : forall Γ1 Γ2 var t1 t2 P1 P2,
@@ -374,21 +427,23 @@ Ltac EnvUnique :=
     rewrite H1 in H2; injection H2; intros; subst
   end.
 
-
 (*
 Lemma PrecisionTrans : forall Γ1 Γ2 Γ3 e1 t1 e2 t2 e3 t3 P12 P23,
   Precision (PEnv Γ1 Γ2 P12) e1 t1 e2 t2 ->
-  Precision Γ23 e2 t2 e3 t3 ->
-  Precision (EnvJoin Γ12 Γ23) e1 t1 e3 t3.
+  Precision (PEnv Γ2 Γ3 P23) e2 t2 e3 t3 ->
+  Precision (PEnv Γ1 Γ3 (EnvCompTrans Γ1 Γ2 Γ3 P12 P23)) e1 t1 e3 t3.
 Proof with eauto using Precision.
-  intros Γ12 Γ23 e1 t1 e2 t2 e3 t3 HT HP12 HP23 H12 H23.
+  intros Γ1 Γ2 Γ3 e1 t1 e2 t2 e3 t3 P12 P23 H12 H23.
   generalize dependent e3.
   generalize dependent t3.
-  generalize dependent Γ23.
-  induction H12; intros ? HT HP23 ? ? H23.
+  generalize dependent Γ3.
+  remember (PEnv Γ1 Γ2 P12) as PΓ12.
+  generalize dependent Γ2.
+  generalize dependent Γ1.
+  induction H12; intros.
   - (* var *) inversion H23; subst.
     + eauto using Precision.
-    + inversion H0; subst.
+    + inversion H23; subst.
       EnvUnique...
       NoTag2Star.
   - (* plus *) inversion H23; subst...
@@ -455,12 +510,24 @@ Proof.
 Qed.
 
 
+Lemma NInEnv2Dyn : forall Γ var,
+    In Γ var = None -> In (Env2Dyn Γ) var = None.
+Proof.
+  intros.
+  induction Γ; try easy.
+  simpl in H.
+  destruct (string_dec var s); subst; simpl.
+  - destruct (string_dec s s); easy.
+  - destruct (string_dec var s); try easy; auto.
+Qed.
+
+
 Definition PEnvDyn (Γ : IREnvironment) : PEnvironment.
 refine (PEnv Γ (Env2Dyn Γ) _).
   unfold EnvComp. intros.
-  apply InEnv2Dyn in H.
-  replace t2 with IRTStar by congruence.
-  constructor.
+  destruct (In Γ var) eqn:?.
+  - rewrite InEnv2Dyn with (t := i); auto using TPrecOption, TPrecision.
+  - rewrite NInEnv2Dyn; auto using TPrecOption.
 Defined.
 
 
@@ -472,15 +539,13 @@ Proof. intros. constructor. Qed.
 
 Lemma PrecisionDyn : forall Γ e t,
   Γ |= e : t -> Precision (PEnvDyn Γ) e t (dyn e) IRTStar.
-Proof with apply PUnboxR; eauto using TPrecision, TPrecisionRefl.
+Proof.
   intros Γ e t H.
   induction H; simpl; eauto using Precision, TPrecision, InEnv2Dyn.
-  - apply PVar.
-    + unfold PEnvDyn. simpl. trivial.
-    + unfold PEnvDyn. simpl. eauto using InEnv2Dyn.
+  - apply PVar; unfold PEnvDyn; simpl; eauto using InEnv2Dyn.
   - apply PBoxR. apply PFun with (TPStar t).
     eauto using PrecisionIrrel, EquivDyn.
-  - eapply PFunApp; eauto; eapply PUnboxR; eauto using TPFun.
+  - eapply PFunApp; eauto; eauto using Precision, TPFun.
 Qed.
 
 

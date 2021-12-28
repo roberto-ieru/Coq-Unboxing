@@ -40,6 +40,15 @@ Proof.
 Qed.
 
 
+Lemma TPrecisionAsym : forall t1 t2,
+  t1 <| t2 -> t2 <| t1 -> t1 = t2.
+Proof.
+  intros t1 t2 H12.
+  induction H12; intros H21; trivial; inversion H21; subst;
+  f_equal; auto.
+Qed.
+
+
 Lemma TPFun : forall t1 t2, IRTFun t1 t2 <| Tag2Type TgFun.
 Proof.
   intros t1 t2.
@@ -54,100 +63,93 @@ Proof.
 Qed.
 
 
-Definition PEnvironment := Map (IRType * IRType).
+Definition EnvComp (Γ1 Γ2 : IREnvironment) : Prop :=
+  forall var t1 t2, In Γ1 var = Some t1 -> In Γ2 var = Some t2 -> t1 <| t2.
 
 
-Fixpoint PEnv1 (Γ : PEnvironment) : IREnvironment :=
+Infix "<E|" := EnvComp (at level 70).
+
+
+Inductive PEnvironment :=
+| PEnv : forall Γ1 Γ2, Γ1 <E| Γ2 -> PEnvironment.
+
+
+Definition PEnv1 (Γ : PEnvironment) : IREnvironment :=
   match Γ with
-  | MEmpty => MEmpty
-  | MCons var (t, _) Γ' => MCons var t (PEnv1 Γ')
+  | PEnv Γ1 _ _ => Γ1
   end.
 
 
-Lemma InP1 : forall Γ var t1 t2,
-    In Γ var = Some (t1, t2) -> In (PEnv1 Γ) var = Some t1.
-Proof.
-  intros Γ var t1 t2 HIn.
-  induction Γ.
-  - discriminate.
-  - destruct a. simpl in *.
-    breakStrDec; try congruence; auto.
-Qed.
-
-
-Fixpoint PEnv2 (Γ : PEnvironment) : IREnvironment :=
+Definition PEnv2 (Γ : PEnvironment) : IREnvironment :=
   match Γ with
-  | MEmpty => MEmpty
-  | MCons var (_, t) Γ' => MCons var t (PEnv2 Γ')
+  | PEnv _ Γ2 _ => Γ2
   end.
 
 
-Lemma InP2 : forall Γ var t1 t2,
-    In Γ var = Some (t1,  t2) -> In (PEnv2 Γ) var = Some t2.
-Proof.
-  intros Γ var t1 t2 HIn.
-  induction Γ.
-  - discriminate.
-  - destruct a. simpl in *.
-    breakStrDec; try congruence; auto.
-Qed.
+Lemma PEnvIn : forall Γ var t1 t2,
+    In (PEnv1 Γ) var = Some t1 ->
+    In (PEnv2 Γ) var = Some t2 ->
+    t1 <| t2.
+Proof. intros Γ. destruct Γ. eauto. Qed.
 
 
-Fixpoint Env2P (Γ : IREnvironment) : PEnvironment :=
-  match Γ with
-  | MEmpty => MEmpty
-  | MCons var t Γ' => MCons var (t,  t) (Env2P Γ')
-  end.
+Definition Env2P : IREnvironment -> PEnvironment.
+refine (fun Γ => (PEnv Γ Γ _)).
+  unfold EnvComp. intros ? t1 t2 ? ?.
+  replace t1 with t2 by congruence; auto using TPrecisionRefl.
+Defined.
+
+
+Definition ExpandPEnv : PEnvironment -> string ->
+    forall t1 t2, t1 <| t2 -> PEnvironment.
+refine (fun Γ var t1 t2 H12 =>
+    match Γ with
+    | PEnv Γ1 Γ2 H12' => PEnv (var |=> t1; Γ1) (var |=> t2; Γ2) _
+    end).
+  unfold EnvComp; intros var' t1' t2' HN1 HN2.
+  destruct (string_dec var' var); subst.
+  - apply InEq' in HN1; apply InEq' in HN2; subst; trivial.
+  - eauto using InNotEq.
+Defined.
+
+
+Lemma Expand1 : forall Γ var t1 t2 H12,
+    PEnv1 (ExpandPEnv Γ var t1 t2 H12) = (var |=> t1; PEnv1 Γ).
+Proof. intros Γ. destruct Γ. trivial. Qed.
+
+
+Lemma Expand2 : forall Γ var t1 t2 H12,
+    PEnv2 (ExpandPEnv Γ var t1 t2 H12) = (var |=> t2; PEnv2 Γ).
+Proof. intros Γ. destruct Γ. trivial. Qed.
 
 
 Lemma Env2Env : forall Γ, PEnv1 (Env2P Γ) = Γ.
+Proof. intros Γ. trivial. Qed.
+
+
+Inductive PEEquiv : PEnvironment -> PEnvironment -> Prop :=
+| PEE : forall Γ1 Γ2 P1 P2, PEEquiv (PEnv Γ1 Γ2 P1) (PEnv Γ1 Γ2 P2)
+.
+
+
+Lemma ExpandEquiv : forall Γ1 Γ2 var t1 t2 P1 P2,
+    PEEquiv Γ1 Γ2 ->
+    PEEquiv (ExpandPEnv Γ1 var t1 t2 P1) (ExpandPEnv Γ2 var t1 t2 P2).
 Proof.
-  intros Γ. induction Γ; trivial.
-  simpl. congruence.
+  intros Γ1 Γ2 var t1 t2 P1 P2 HEE.
+  destruct HEE. constructor.
 Qed.
 
 
-Lemma InP12 : forall Γ var t,
-    In Γ var = Some t ->
-    In (Env2P Γ) var = Some (t, t).
-Proof.
-  intros Γ var t HIn.
-  induction Γ.
-  - discriminate.
-  - simpl in *.
-    breakStrDec; auto.
-    injection HIn; intros; subst; trivial.
-Qed.
+Lemma Expand2P : forall Γ var t,
+    PEEquiv (Env2P (var |=> t; Γ))
+            (ExpandPEnv (Env2P Γ) var t t (TPrecisionRefl t)).
+Proof. intros Γ var t. constructor. Qed.
 
-
-Lemma InE2PType : forall Γ var t1 t2,
-  In (Env2P Γ) var = Some (t1, t2) -> t1 = t2.
-Proof.
-  intros Γ var t1 t2 HIn.
-  induction Γ.
-  - discriminate.
-  - simpl in *; breakStrDec; auto;
-    injection HIn; intros; subst; trivial.
-Qed.
-
-
-Lemma InE2PVar : forall Γ var t1 t2,
-  In (Env2P Γ) var = Some (t1, t2) -> In Γ var = Some t2.
-Proof.
-  intros Γ var t1 t2 HIn.
-  induction Γ.
-  - discriminate.
-  - simpl in *; breakStrDec; auto;
-    injection HIn; intros; subst; trivial.
-Qed.
-
-
-Definition PEnvP (Γ : PEnvironment) : Prop :=
-  forall var t1 t2, In Γ var = Some (t1, t2) -> t1 <| t2.
 
 
 Inductive Precision : PEnvironment -> IRE -> IRType ->
-                                       IRE -> IRType -> Prop :=
+                                      IRE -> IRType -> Prop :=
 
 | PNil : forall Γ, Precision Γ IRENil IRTNil IRENil IRTNil
 
@@ -155,7 +157,8 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 ------------------
 Γ⊑ ⊢ x ⊑ x : σ ⊑ τ	*)
 | PVar : forall Γ var t1 t2,
-    In Γ var = Some (t1,  t2) ->
+    In (PEnv1 Γ) var = Some t1 ->
+    In (PEnv2 Γ) var = Some t2 ->
     Precision Γ (IREVar var) t1 (IREVar var) t2
 
 (* ----------------------
@@ -196,9 +199,8 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 (* Γ⊑, x : σ ⊑ τ ⊢ d ⊑ e : σ′ ⊑ τ′
    ------------------------------------------------
    Γ⊑ ⊢ (λx:σ.d) ⊑ (λx:τ.e) : fun[σ→σ′] ⊑ fun[τ→τ′]	*)
-| PFun : forall Γ var t1 t2 d1 t1' d2 t2',
-    t1 <| t2 ->
-    Precision (var |=> (t1,  t2); Γ) d1 t1' d2 t2' ->
+| PFun : forall Γ var t1 t2 d1 t1' d2 t2' (H12 : t1 <| t2),
+    Precision (ExpandPEnv Γ var t1 t2 H12) d1 t1' d2 t2' ->
     Precision Γ (IREFun var t1 d1) (IRTFun t1 t1')
                 (IREFun var t2 d2) (IRTFun t2 t2')
 
@@ -252,6 +254,7 @@ Lemma BoxCongruent : forall Γ d e g,
     Precision Γ (IREBox g d) IRTStar (IREBox g e) IRTStar.
 Proof. eauto using Precision. Qed.
 
+
 (* Γ⊑ ⊢ d ⊑ e : ★ ⊑ ★
    ----------------------------------
    Γ⊑ ⊢ unbox[g](d) ⊑ unbox[g](e) : g ⊑ g	*)
@@ -261,18 +264,38 @@ Lemma UnboxCongruent: forall Γ d e g,
 Proof. eauto using Precision, TPrecisionRefl. Qed.
 
 
-Lemma PPT : forall Γ e1 t1 e2 t2,
-    PEnvP Γ -> Precision Γ e1 t1 e2 t2 -> t1 <| t2.
+Lemma PrecisionIrrel : forall Γ1 Γ2 e1 t1 e2 t2,
+   PEEquiv Γ1 Γ2 ->
+   Precision Γ1 e1 t1 e2 t2 ->
+   Precision Γ2 e1 t1 e2 t2.
 Proof.
-  unfold PEnvP.
-  intros Γ e1 t1 e2 t2 HPE HP.
-  induction HP; subst; eauto using TPrecision, TPrecisionRefl.
-  - apply PRFun. trivial.
-    apply IHHP; intros.
-    inversion H0.
-    breakStrDec; eauto.
-    injection H2; intros; subst; trivial.
-  - apply IHHP1 in HPE. inversion HPE; trivial.
+  intros Γ1 Γ2 e1 t1 e2 t2 HEE HP.
+  destruct HEE.
+  remember (PEnv Γ1 Γ2 P1) as Γ eqn:Heq.
+  generalize dependent Γ1.
+  generalize dependent Γ2.
+  induction HP; intros; subst; eauto using Precision.
+  apply PFun with H12.
+  eapply IHHP. easy.
+Qed.
+
+
+Lemma PrecisionRefl: forall Γ e t,
+    Γ |= e : t ->  Precision (Env2P Γ) e t e t.
+Proof.
+  intros Γ e t Hty.
+  induction Hty; subst; eauto using Precision, UnboxCongruent, Expand2P,
+      PrecisionIrrel.
+Qed.
+
+
+Lemma PPT : forall Γ e1 t1 e2 t2,
+    Precision Γ e1 t1 e2 t2 -> t1 <| t2.
+Proof.
+  intros Γ e1 t1 e2 t2 HP.
+  induction HP; subst; eauto using TPrecision, TPrecisionRefl,
+    PEnvIn.
+  - inversion IHHP1; subst; trivial.
 Qed.
 
 
@@ -280,7 +303,8 @@ Lemma PrecisionType1: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv1 Γ) |= e1 : t1.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
-  induction HP; subst; eauto using IRTyping, InP1.
+  induction HP; subst; eauto using IRTyping.
+  rewrite Expand1 in IHHP. eauto using IRTyping.
 Qed.
 
 
@@ -288,7 +312,8 @@ Lemma PrecisionType2: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv2 Γ) |= e2 : t2.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
-  induction HP; subst; eauto using IRTyping, InP2.
+  induction HP; subst; eauto using IRTyping.
+  rewrite Expand2 in IHHP. eauto using IRTyping.
 Qed.
 
 
@@ -297,7 +322,11 @@ Lemma PrecisionType: forall Γ e t,
 Proof.
   intros Γ e t.
   split; intros H.
-  - induction H; eauto using Precision, InP12, TPrecisionRefl.
+  - induction H; eauto using Precision, TPrecisionRefl.
+    + assert (Γ |= IREFun var t body : IRTFun t t') by eauto using IRTyping.
+      auto using PrecisionRefl.
+    + assert (Γ |= IREUnbox tg e : t) by eauto using IRTyping.
+      auto using PrecisionRefl.
   - apply PrecisionType1 in H.
     rewrite Env2Env in H. trivial.
 Qed.
@@ -346,85 +375,9 @@ Ltac EnvUnique :=
   end.
 
 
-Definition EnvTrans (Γ1 Γ2 : PEnvironment) : Prop := PEnv2 Γ1 = PEnv1 Γ2.
-
-
-Fixpoint EnvJoin (Γ1 Γ2 : PEnvironment) : PEnvironment :=
-  match Γ1, Γ2 with
-  | MEmpty, MEmpty => MEmpty
-  | (MCons var (t1, _) Γ1'), (MCons _ (_, t3) Γ2') =>
-       MCons var (t1, t3) (EnvJoin Γ1' Γ2')
-  | _, _ => MEmpty
-  end.
-
-
-Lemma aux1 : forall var t1 t2 Γ1 Γ2,
-  EnvTrans (var |=> (t1, t2); Γ1) Γ2 ->
-  exists t3 Γ2', Γ2 = MCons var (t2, t3) Γ2' /\ EnvTrans Γ1 Γ2'.
-Proof.
-  unfold EnvTrans.
-  intros.
-  destruct Γ2.
-  - discriminate.
-  - destruct p. exists i0. exists Γ2.
-    simpl in H. injection H; intros; subst; intuition.
-Qed.
-
-
-Lemma aux2 : forall var t2 t3 Γ1 Γ2,
-  EnvTrans Γ1 (var |=> (t2, t3); Γ2) ->
-  exists t1 Γ1', Γ1 = MCons var (t1, t2) Γ1' /\ EnvTrans Γ1' Γ2.
-Proof.
-  unfold EnvTrans.
-  intros.
-  destruct Γ1.
-  - discriminate.
-  - destruct p. exists i. exists Γ1.
-    simpl in H. injection H; intros; subst; intuition.
-Qed.
-
-
-Lemma JoinE1 : forall Γ1 Γ2,
-    EnvTrans Γ1 Γ2 -> PEnv1 (EnvJoin Γ1 Γ2) = PEnv1 Γ1.
-Proof.
-  intros Γ1.
-  unfold EnvTrans.
-  induction Γ1; intros Γ2 H.
-  - simpl in H. destruct Γ2; easy.
-  - destruct a.
-    apply aux1 in H. destruct H as [? [? [? ?]]].
-    rewrite H. simpl.
-    f_equal. auto.
-Qed.
-
-
-Lemma JoinE2 : forall Γ1 Γ2,
-    EnvTrans Γ1 Γ2 -> PEnv2 (EnvJoin Γ1 Γ2) = PEnv2 Γ2.
-Proof.
-  unfold EnvTrans.
-  intros Γ1 Γ2.
-  generalize dependent Γ1.
-  induction Γ2; intros Γ1 H.
-  -  simpl in H. destruct Γ1; trivial.
-     destruct p. simpl in H. discriminate.
-  - destruct a.
-    apply aux2 in H. destruct H as [? [? [? ?]]].
-    rewrite H. simpl.
-    f_equal. auto.
-Qed.
-
-
-Lemma JoinTrans : forall Γ1 Γ2,
-  EnvTrans Γ1 Γ2 -> PEnvP Γ1 -> PEnvP Γ2 -> PEnvP (EnvJoin Γ1 Γ2).
-Proof.
-  intros Γ1 Γ2 HT HP1 HP2.
-  unfold PEnvP. intros.
-Abort.
-
 (*
-Lemma PrecisionTrans : forall Γ12 Γ23 e1 t1 e2 t2 e3 t3,
-  EnvTrans Γ12 Γ23 -> PEnvP Γ12 -> PEnvP Γ23 ->
-  Precision Γ12 e1 t1 e2 t2 ->
+Lemma PrecisionTrans : forall Γ1 Γ2 Γ3 e1 t1 e2 t2 e3 t3 P12 P23,
+  Precision (PEnv Γ1 Γ2 P12) e1 t1 e2 t2 ->
   Precision Γ23 e2 t2 e3 t3 ->
   Precision (EnvJoin Γ12 Γ23) e1 t1 e3 t3.
 Proof with eauto using Precision.
@@ -482,44 +435,51 @@ Qed.
 *)
 
 
-Fixpoint Env2Dyn (Γ : IREnvironment) : PEnvironment :=
+Fixpoint Env2Dyn (Γ : IREnvironment) : IREnvironment :=
   match Γ with
   | MEmpty => MEmpty
-  | MCons k t Γ' => MCons k (t,  IRTStar) (Env2Dyn Γ')
+  | MCons var _ Γ' => MCons var IRTStar (Env2Dyn Γ')
   end.
 
 
-Lemma EnvDynP : forall Γ, PEnvP (Env2Dyn Γ).
-Proof.
-  unfold PEnvP.
-  intros.
-  induction Γ.
-  - discriminate.
-  - simpl in *.
-    breakStrDec; auto.
-    injection H; intros; subst; auto using TPrecision.
-Qed.
-
-
-
 Lemma InEnv2Dyn : forall Γ var t,
-  In Γ var = Some t ->
-  In (Env2Dyn Γ) var = Some (t,  IRTStar).
+    In Γ var = Some t ->
+    In (Env2Dyn Γ) var = Some IRTStar.
 Proof.
-  intros Γ var t H.
-  induction Γ.
-  - discriminate.
-  - simpl in *.
-    breakStrDec; auto.
-    injection H; intros; subst; trivial.
+  intros.
+  induction Γ; try easy.
+  simpl in H.
+  destruct (string_dec var s); subst; simpl.
+  - destruct (string_dec s s); easy.
+  - destruct (string_dec var s); auto.
 Qed.
+
+
+Definition PEnvDyn (Γ : IREnvironment) : PEnvironment.
+refine (PEnv Γ (Env2Dyn Γ) _).
+  unfold EnvComp. intros.
+  apply InEnv2Dyn in H.
+  replace t2 with IRTStar by congruence.
+  constructor.
+Defined.
+
+
+Lemma EquivDyn : forall Γ var t P,
+  PEEquiv (PEnvDyn (var |=> t; Γ))
+          (ExpandPEnv (PEnvDyn Γ) var t IRTStar P).
+Proof. intros. constructor. Qed.
 
 
 Lemma PrecisionDyn : forall Γ e t,
-  Γ |= e : t -> Precision (Env2Dyn Γ) e t (dyn e) IRTStar.
+  Γ |= e : t -> Precision (PEnvDyn Γ) e t (dyn e) IRTStar.
 Proof with apply PUnboxR; eauto using TPrecision, TPrecisionRefl.
   intros Γ e t H.
   induction H; simpl; eauto using Precision, TPrecision, InEnv2Dyn.
+  - apply PVar.
+    + unfold PEnvDyn. simpl. trivial.
+    + unfold PEnvDyn. simpl. eauto using InEnv2Dyn.
+  - apply PBoxR. apply PFun with (TPStar t).
+    eauto using PrecisionIrrel, EquivDyn.
   - eapply PFunApp; eauto; eapply PUnboxR; eauto using TPFun.
 Qed.
 

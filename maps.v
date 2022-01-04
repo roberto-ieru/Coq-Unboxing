@@ -105,6 +105,28 @@ Proof.
 Qed.
 
 
+Lemma InInclusionEq : forall A (M M' : Map A) var t, 
+    inclusion (var |=> t; M) M' ->
+    In M' var = Some t.
+Proof.
+  intros * HI.
+  unfold inclusion in HI.
+  apply HI.
+  eauto using InEq.
+Qed.
+
+
+Lemma InInclusion : forall A (M M' : Map A) var t, 
+    inclusion (var |=> t; M) M' ->
+    In M' var = Some t.
+Proof.
+  intros * HI.
+  unfold inclusion in HI.
+  apply HI.
+  eauto using InEq.
+Qed.
+
+
 Definition map_eq {A} (M M' : Map A) := forall var, In M var = In M' var.
 
 
@@ -116,4 +138,5 @@ Proof.
   simpl.
   breakStrDec.
 Qed.
+
 

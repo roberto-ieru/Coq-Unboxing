@@ -56,10 +56,26 @@ Proof.
 Qed.
 
 
+Lemma GroundTop : forall t g1 g2,
+  t <| Tag2Type g1 -> t <| Tag2Type g2 -> g1 = g2.
+Proof.
+  intros * H1 H2.
+  destruct t; destruct g1; destruct g2; trivial;
+  inversion H1; inversion H2.
+Qed.
+
+
 Lemma GroundFlat: forall g g', (Tag2Type g) <| (Tag2Type g') -> g = g'.
 Proof.
-  intros g g'.
-  destruct g; destruct g'; easy.
+  intros * H.
+  eauto using GroundTop, TPrecisionRefl.
+Qed.
+
+
+Lemma NoneBiggerThanStar : forall t, IRTStar <| t -> IRTStar = t.
+Proof.
+  intros t H.
+  destruct t; inversion H; trivial.
 Qed.
 
 
@@ -76,7 +92,26 @@ Definition EnvComp (Γ1 Γ2 : IREnvironment) : Prop :=
 Infix "<E|" := EnvComp (at level 70).
 
 
-Lemma EnvCompTrans : forall Γ1 Γ2 Γ3,
+Lemma EnvCompRefl : forall Γ, Γ <E| Γ.
+Proof.
+  unfold EnvComp.
+  intros.
+  destruct (In Γ var); auto using TPrecOption, TPrecisionRefl.
+Qed.
+
+
+Lemma EnvCompExt : forall Γ1 Γ2 var t,
+    Γ1 <E| Γ2 -> var |=> t; Γ1 <E| var |=> t; Γ2.
+Proof.
+  unfold EnvComp.
+  intros.
+  simpl.
+  destruct (string_dec var0 var); subst;
+  auto using TPrecOption, TPrecisionRefl.
+Qed.
+
+
+Lemma EnvCompTrans : forall {Γ1} {Γ2} {Γ3},
     Γ1 <E| Γ2 -> Γ2 <E| Γ3 -> Γ1 <E| Γ3.
 Proof.
   unfold EnvComp.
@@ -96,6 +131,13 @@ Qed.
 
 Inductive PEnvironment :=
 | PEnv : forall Γ1 Γ2, Γ1 <E| Γ2 -> PEnvironment.
+
+
+Definition PEmpty : PEnvironment.
+refine (PEnv MEmpty MEmpty _).
+  unfold EnvComp.
+  intros. simpl. constructor.
+Defined.
 
 
 Definition PEnv1 (Γ : PEnvironment) : IREnvironment :=
@@ -175,6 +217,13 @@ Proof.
 Qed.
 
 
+Lemma PEEquivRefl : forall Γ1 Γ2, PEEquiv Γ1 Γ2 -> PEEquiv Γ2 Γ1.
+Proof.
+  intros Γ1 Γ2 H.
+  inversion H; constructor.
+Qed.
+
+
 Lemma PEEquivTrans : forall Γ1 Γ2 Γ3,
     PEEquiv Γ1 Γ2 -> PEEquiv Γ2 Γ3 -> PEEquiv Γ1 Γ3.
 Proof.
@@ -200,6 +249,22 @@ Lemma Expand2P : forall Γ var t,
 Proof. intros Γ var t. constructor. Qed.
 
 
+Lemma Expand12 : forall Γ1 Γ2 P12 var t1 t2 H12,
+  exists P12', 
+    ExpandPEnv (PEnv Γ1 Γ2 P12) var t1 t2 H12 =
+    PEnv (var |=> t1; Γ1) (var |=> t2; Γ2) P12'.
+Proof. intros. eexists. constructor. Qed.
+
+
+Lemma PEEquivShadow : forall Γ Γ' var t0 t1 t2 t3 H0 H12,
+    PEEquiv (ExpandPEnv Γ var t1 t2 H12) Γ' ->
+    PEEquiv (ExpandPEnv Γ var t0 t3 H0)
+            (ExpandPEnv Γ' var t0 t3 H0).
+Proof.
+  intros * HPE.
+  destruct Γ. destruct Γ'.
+  inversion HPE; subst.
+
 
 Inductive Precision : PEnvironment -> IRE -> IRType ->
                                       IRE -> IRType -> Prop :=
@@ -216,7 +281,7 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 
 (* ----------------------
    Γ⊑ ⊢ n ⊑ n : int ⊑ int	*)
-| PInt : forall Γ n, Precision Γ (IRENum n) IRTInt (IRENum n) IRTInt
+| PNum : forall Γ n, Precision Γ (IRENum n) IRTInt (IRENum n) IRTInt
 
 (* Γ⊑ ⊢ d₁ ⊑ e₁ : int ⊑ int   Γ⊑ ⊢ d₂ ⊑ e₂ : int ⊑ int
    ----------------------------------------------------
@@ -261,8 +326,8 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
   -------------------------------------------------------------
   Γ⊑ ⊢ d₁(d₂) ⊑ e₁(e₂) : σ′ ⊑ τ′	*)
 | PFunApp : forall Γ f1 t1 t1' v1 f2 t2 t2' v2,
-    Precision Γ f1 (IRTFun t1 t1') f2 (IRTFun t2 t2') ->
     Precision Γ v1 t1 v2 t2 ->
+    Precision Γ f1 (IRTFun t1 t1') f2 (IRTFun t2 t2') ->
     Precision Γ (IREFunApp f1 v1) t1' (IREFunApp f2 v2) t2'
 
 (* Γ⊑ ⊢ d ⊑ e : t ⊑ g
@@ -317,19 +382,115 @@ Lemma UnboxCongruent: forall Γ d e g,
 Proof. eauto using Precision, TPrecisionRefl. Qed.
 
 
+Section Examples.
+
+Definition B10 := (IREBox TgInt (IRENum 10)).
+
+Definition UB10 := IREUnbox TgInt B10.
+
+Example e1 : Precision PEmpty (IRENum 10) IRTInt UB10 IRTInt.
+  eauto using Precision, TPrecisionRefl.
+Qed.
+
+Example e2 : ~ Precision PEmpty UB10 IRTInt (IRENum 10) IRTInt.
+  intros HF.
+  inversion HF.
+Qed.
+
+Example e3 : Precision PEmpty UB10 IRTInt B10 IRTStar.
+  eauto using Precision.
+Qed.
+
+Example e4 : exists e1 t1 e2 t2,
+    Precision PEmpty e1 t1 e2 t2 /\ Value e1 /\ ~Value e2.
+  eexists; eexists; eexists; eexists.
+  split; try split.
+  - apply e1.
+  - eauto using Value.
+  - intros Hcontra. inversion Hcontra.
+Qed.
+
+Example e5 : exists e1 t1 e2 t2,
+    Precision PEmpty e1 t1 e2 t2 /\ Value e2 /\ ~Value e1.
+  eexists; eexists; eexists; eexists.
+  split; try split.
+  - apply e3.
+  - eauto using Value.
+  - intros Hcontra. inversion Hcontra.
+Qed.
+
+
+End Examples.
+
+
+Definition Pinclusion (Γ Γ' : PEnvironment) : Prop :=
+  inclusion (PEnv1 Γ) (PEnv1 Γ') /\ inclusion (PEnv2 Γ) (PEnv2 Γ').
+
+
+Lemma PinclusionEmpty : forall Γ, Pinclusion PEmpty Γ.
+Proof.
+  intros. 
+  unfold Pinclusion. simpl.
+  auto using inclusion_empty.
+Qed.
+
+
+Lemma PinclusionEquiv : forall Γ Γ',
+    PEEquiv Γ Γ' -> Pinclusion Γ Γ'.
+Proof.
+  intros * H.
+  destruct H.  
+  unfold EnvComp in P1.
+  unfold Pinclusion.
+  auto using inclusion_refl.
+Qed.
+
+
+Lemma PinclusionExpand : forall Γ Γ' var t1 t2 H12,
+    Pinclusion Γ Γ' ->
+    Pinclusion (ExpandPEnv Γ var t1 t2 H12)
+               (ExpandPEnv Γ' var t1 t2 H12).
+Proof.
+  unfold Pinclusion.
+  intros * HIn.
+  destruct Γ. destruct Γ'.
+  simpl in *. destruct HIn.
+  auto using inclusion_update.
+Qed.
+
+
+Lemma ExpandShadow : forall Γ var t0 t1 t2 t3 H12 H12',
+    Pinclusion
+      (ExpandPEnv (ExpandPEnv Γ var t1 t2 H12) var t0 t3 H12')
+      (ExpandPEnv Γ var t0 t3 H12').
+Proof.
+  intros.
+  unfold Pinclusion.
+  destruct Γ.
+  simpl.
+  auto using inclusion_shadow.
+Qed.
+
+
+Lemma PrecisionInclusion : forall Γ Γ' e1 t1 e2 t2,
+    Pinclusion Γ Γ' ->
+    Precision Γ e1 t1 e2 t2 ->
+    Precision Γ' e1 t1 e2 t2.
+Proof.
+  intros * HI HP.
+  generalize dependent Γ'.
+  induction HP; intros; subst; eauto using Precision, PinclusionExpand.
+  destruct HI.
+  eauto using Precision.
+Qed.
+
+
 Lemma PrecisionIrrel : forall Γ1 Γ2 e1 t1 e2 t2,
    PEEquiv Γ1 Γ2 ->
    Precision Γ1 e1 t1 e2 t2 ->
    Precision Γ2 e1 t1 e2 t2.
 Proof.
-  intros Γ1 Γ2 e1 t1 e2 t2 HEE HP.
-  destruct HEE.
-  remember (PEnv Γ1 Γ2 P1) as Γ eqn:Heq.
-  generalize dependent Γ1.
-  generalize dependent Γ2.
-  induction HP; intros; subst; eauto using Precision.
-  apply PFun with H12.
-  eapply IHHP. easy.
+  eauto using PrecisionInclusion, PinclusionEquiv.
 Qed.
 
 
@@ -348,7 +509,7 @@ Proof.
   intros Γ e1 t1 e2 t2 HP.
   induction HP; subst; eauto using TPrecision, TPrecisionRefl,
     PEnvIn.
-  - inversion IHHP1; subst; trivial.
+  - inversion IHHP2; subst; trivial.
 Qed.
 
 
@@ -361,12 +522,30 @@ Proof.
 Qed.
 
 
+Lemma PrecisionType1Empty: forall e1 t1 e2 t2,
+  Precision PEmpty e1 t1 e2 t2 -> MEmpty |= e1 : t1.
+Proof.
+  intros.
+  replace MEmpty with (PEnv1 PEmpty) by trivial.
+  eauto using PrecisionType1.
+Qed.
+
+
 Lemma PrecisionType2: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv2 Γ) |= e2 : t2.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
   induction HP; subst; eauto using IRTyping.
   rewrite Expand2 in IHHP. eauto using IRTyping.
+Qed.
+
+
+Lemma PrecisionType2Empty: forall e1 t1 e2 t2,
+  Precision PEmpty e1 t1 e2 t2 -> MEmpty |= e2 : t2.
+Proof.
+  intros.
+  replace MEmpty with (PEnv2 PEmpty) by trivial.
+  eauto using PrecisionType2.
 Qed.
 
 
@@ -427,68 +606,6 @@ Ltac EnvUnique :=
     rewrite H1 in H2; injection H2; intros; subst
   end.
 
-(*
-Lemma PrecisionTrans : forall Γ1 Γ2 Γ3 e1 t1 e2 t2 e3 t3 P12 P23,
-  Precision (PEnv Γ1 Γ2 P12) e1 t1 e2 t2 ->
-  Precision (PEnv Γ2 Γ3 P23) e2 t2 e3 t3 ->
-  Precision (PEnv Γ1 Γ3 (EnvCompTrans Γ1 Γ2 Γ3 P12 P23)) e1 t1 e3 t3.
-Proof with eauto using Precision.
-  intros Γ1 Γ2 Γ3 e1 t1 e2 t2 e3 t3 P12 P23 H12 H23.
-  generalize dependent e3.
-  generalize dependent t3.
-  generalize dependent Γ3.
-  remember (PEnv Γ1 Γ2 P12) as PΓ12.
-  generalize dependent Γ2.
-  generalize dependent Γ1.
-  induction H12; intros.
-  - (* var *) inversion H23; subst.
-    + eauto using Precision.
-    + inversion H23; subst.
-      EnvUnique...
-      NoTag2Star.
-  - (* plus *) inversion H23; subst...
-    apply TagInt in H; subst g.
-    inversion H2; subst...
-  - (* get *) inversion H23; subst...
-    NoTag2Star.
-  - (* set *) inversion H23; subst...
-    NoTag2Star.
-  - (* fun *) inversion H23; subst; shelve.
-  - (* funapp *) inversion H23; subst.
-    + eapply PFunApp.
-      apply IHPrecision1.
-
-  inversion H23; subst;
-  try match goal with
-  [ H1: In ?Γ ?var = _,
-    H2: In ?Γ ?var = _ |- _ ] => idtac H1 H2;
-    rewrite H1 in H2; injection H2; intros; subst
-  end;
-  try NoTag2Star;
-  eauto using Precision.
-  7: { apply Tag2TypeInjective in H; subst.
-       eapply PUnboxL. eapply IHPrecision.
-       inversion H2; subst.
-       + NoTag2Star.
-       +
-  - apply PrecisionType1 in H23. inversion H23; subst.
-    erewrite (InP1 _ var t1 (Tag2Type g)) in H3; trivial;
-    inversion H3; subst; eauto using Precision.
-  - assert (g = TgInt) by (destruct g; easy); subst.
-    eapply PBoxR.
-    inversion H2; subst; eauto using Precision.
-  - admit.
-  - apply TagFun in H. destruct H as [? [? ?]]; subst.
-    eapply PBoxR.
-
-  - apply Tag2TypeInjective in H; subst.
-    eapply PBoxR.
-    inversion H2; subst; eauto using Precision;
-    NoTag2Star.
-  - eapply PUnboxL.
-Qed.
-*)
-
 
 Fixpoint Env2Dyn (Γ : IREnvironment) : IREnvironment :=
   match Γ with
@@ -537,7 +654,7 @@ Lemma EquivDyn : forall Γ var t P,
 Proof. intros. constructor. Qed.
 
 
-Lemma PrecisionDyn : forall Γ e t,
+Theorem PrecisionDyn : forall Γ e t,
   Γ |= e : t -> Precision (PEnvDyn Γ) e t (dyn e) IRTStar.
 Proof.
   intros Γ e t H.
@@ -545,7 +662,98 @@ Proof.
   - apply PVar; unfold PEnvDyn; simpl; eauto using InEnv2Dyn.
   - apply PBoxR. apply PFun with (TPStar t).
     eauto using PrecisionIrrel, EquivDyn.
-  - eapply PFunApp; eauto; eauto using Precision, TPFun.
 Qed.
 
+
+
+
+(*
+Lemma HiEnv : forall Γ1 Γ2 Γ2' P12 P12' e1 t1 e2 t2 t2',
+  Precision (PEnv Γ1 Γ2 P12) e1 t1 e2 t2 ->
+  Γ2' |= e2 : t2' ->
+  Γ2 <E| Γ2' ->
+  Precision (PEnv Γ1 Γ2' P12') e1 t1 e2 t2'.
+Proof.
+  intros until t2'.
+  intros HP.
+  remember (PEnv Γ1 Γ2 P12) as Γ.
+  generalize dependent P12.
+  generalize dependent t2'.
+  generalize dependent Γ2'.
+  generalize dependent Γ2.
+  generalize dependent Γ1.
+  induction HP; intros Γ1 Γ2 Γ2' P12' ? P12 HEq HTy HLE;
+  inversion HTy; subst;
+  eauto using Precision, TPrecision.
+  - apply PFun with (H12 := H12).
+    specialize (Expand12 Γ1 Γ2' P12' var t1 t2 H12) as [xN HN].
+    specialize (Expand12 Γ1 Γ2 P12 var t1 t2 H12) as [xN2 HN2].
+    rewrite HN.
+    eapply IHHP; eauto using EnvCompExt.
+  - apply PFunApp with (t1 := t1) (t2 := t).
+*)
+
+(*
+Lemma PrecisionTrans : forall Γ1 Γ2 Γ3 e1 t1 e2 t2 e3 t3 P12 P23,
+  Precision (PEnv Γ1 Γ2 P12) e1 t1 e2 t2 ->
+  Precision (PEnv Γ2 Γ3 P23) e2 t2 e3 t3 ->
+  Precision (PEnv Γ1 Γ3 (EnvCompTrans P12 P23)) e1 t1 e3 t3.
+Proof with eauto using Precision.
+  intros Γ1 Γ2 Γ3 e1 t1 e2 t2 e3 t3 P12 P23 H12 H23.
+  generalize dependent e3.
+  generalize dependent t3.
+  generalize dependent Γ3.
+  remember (PEnv Γ1 Γ2 P12) as PΓ12.
+  generalize dependent Γ2.
+  generalize dependent Γ1.
+  induction H12; intros.
+  - 
+
+  - (* var *) inversion H23; subst.
+    + eauto using Precision.
+    + inversion H23; subst.
+      EnvUnique...
+      NoTag2Star.
+  - (* plus *) inversion H23; subst...
+    apply TagInt in H; subst g.
+    inversion H2; subst...
+  - (* get *) inversion H23; subst...
+    NoTag2Star.
+  - (* set *) inversion H23; subst...
+    NoTag2Star.
+  - (* fun *) inversion H23; subst; shelve.
+  - (* funapp *) inversion H23; subst.
+    + eapply PFunApp.
+      apply IHPrecision1.
+
+  inversion H23; subst;
+  try match goal with
+  [ H1: In ?Γ ?var = _,
+    H2: In ?Γ ?var = _ |- _ ] => idtac H1 H2;
+    rewrite H1 in H2; injection H2; intros; subst
+  end;
+  try NoTag2Star;
+  eauto using Precision.
+  7: { apply Tag2TypeInjective in H; subst.
+       eapply PUnboxL. eapply IHPrecision.
+       inversion H2; subst.
+       + NoTag2Star.
+       +
+  - apply PrecisionType1 in H23. inversion H23; subst.
+    erewrite (InP1 _ var t1 (Tag2Type g)) in H3; trivial;
+    inversion H3; subst; eauto using Precision.
+  - assert (g = TgInt) by (destruct g; easy); subst.
+    eapply PBoxR.
+    inversion H2; subst; eauto using Precision.
+  - admit.
+  - apply TagFun in H. destruct H as [? [? ?]]; subst.
+    eapply PBoxR.
+
+  - apply Tag2TypeInjective in H; subst.
+    eapply PBoxR.
+    inversion H2; subst; eauto using Precision;
+    NoTag2Star.
+  - eapply PUnboxL.
+Qed.
+*)
 

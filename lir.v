@@ -42,6 +42,16 @@ Definition Tag2Type (tg : Tag) : IRType :=
   end.
 
 
+Definition Type2Tag (t : IRType) : option Tag :=
+  match t with
+  | IRTNil => Some TgNil
+  | IRTInt => Some TgInt
+  | IRTTbl => Some TgTbl
+  | IRTFun _ _ => Some TgFun
+  | IRTStar => None
+  end.
+
+
 Definition Base2Type (bt : BaseType) : IRType :=
   match bt with
   | BGround tg => Tag2Type tg
@@ -147,6 +157,13 @@ Inductive Value : IRE -> Prop :=
 | Vfun : forall var t e, Value (IREFun var t e)
 | Vbox : forall gt v, Value v -> Value (IREBox gt v)
 .
+
+
+Lemma valBoxVal : forall gt e, Value (IREBox gt e) -> Value e.
+Proof.
+  intros * HV.
+  inversion HV; trivial.
+Qed.
 
 
 Lemma valnil : forall Γ e,
@@ -592,7 +609,7 @@ Inductive multistepF : Mem -> IRE -> Prop :=
 where "m / e -->* 'fail'" := (multistepF m e)
 .
 
-Lemma multiRefl : forall m0 e0 m1 e1 m2 e2,
+Lemma multiTrans : forall m0 e0 m1 e1 m2 e2,
     m0 / e0 -->* m1 / e1 ->
     m1 / e1 -->* m2 / e2 ->
     m0 / e0 -->* m2 / e2.
@@ -624,4 +641,69 @@ Proof.
   - eauto using Progress.
   - eauto using PresTy, PresMC.
 Qed.
+
+
+Lemma multipreservation : forall m1 e1 m2 e2 t,
+    MEmpty |= e1 : t ->
+    mem_correct m1 ->
+    m1 / e1 -->* m2 / e2 ->
+    MEmpty |= e2 : t.
+Proof.
+  intros * Hty HM HSt.
+  induction HSt; trivial.
+  apply IHHSt;
+  eapply Preservation; eauto.
+Qed.
+
+
+Ltac finishmExp :=
+  intros * Hmt;
+  induction Hmt; eauto using step,multistep.
+
+
+Lemma CongPlus1 : forall e2 m e m' e',
+    m / e -->* m' / e' ->  m / IREPlus e e2 -->* m' / IREPlus e' e2.
+Proof. intros e2. finishmExp. Qed.
+
+Lemma CongPlus2 : forall e1, Value e1 -> forall m e m' e',
+    m / e -->* m' / e' ->  m / IREPlus e1 e -->* m' / IREPlus e1 e'.
+Proof. intros e1 HV; finishmExp. Qed.
+
+Lemma CongGet1 : forall e2 m e m' e',
+    m / e -->* m' / e' ->  m / IREGet e e2 -->* m' / IREGet e' e2.
+Proof. intros e2; finishmExp. Qed.
+
+Lemma CongGet2 : forall e1, Value e1 -> forall m e m' e',
+    m / e -->* m' / e' ->  m / IREGet e1 e -->* m' / IREGet e1 e'.
+Proof. intros e1 HV; finishmExp. Qed.
+
+Lemma CongSet1 : forall e2 e3 m e m' e',
+    m / e -->* m' / e' ->  m / IRESet e e2 e3 -->* m' / IRESet e' e2 e3.
+Proof. intros e2 e3; finishmExp. Qed.
+
+Lemma CongSet2 : forall e1, Value e1 -> forall e3 m e m' e',
+    m / e -->* m' / e' ->  m / IRESet e1 e e3 -->* m' / IRESet e1 e' e3.
+Proof. intros e1 HV e3; finishmExp. Qed.
+
+Lemma CongSet3 : forall e1 e2, Value e1 -> Value e2 -> forall m e m' e',
+    m / e -->* m' / e' ->  m / IRESet e1 e2 e -->* m' / IRESet e1 e2 e'.
+Proof. intros e1 e2 HV1 HV2; finishmExp. Qed.
+
+Lemma CongFunApp1 : forall e2 m e m' e',
+    m / e -->* m' / e' ->  m / IREFunApp e e2 -->* m' / IREFunApp e' e2.
+Proof. intros e2. finishmExp. Qed.
+
+Lemma CongFunApp2 : forall e1, Value e1 -> forall m e m' e',
+    m / e -->* m' / e' ->  m / IREFunApp e1 e -->* m' / IREFunApp e1 e'.
+Proof. intros e1 HV; finishmExp. Qed.
+
+Lemma CongBox : forall m e m' e' g, 
+    m / e -->* m' / e' -> m / IREBox g e -->* m' / IREBox g e'.
+Proof. finishmExp. Qed.
+
+Lemma CongUnbox : forall m e m' e' g, 
+    m / e -->* m' / e' -> m / IREUnbox g e -->* m' / IREUnbox g e'.
+Proof. finishmExp. Qed.
+
+
 

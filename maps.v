@@ -52,6 +52,11 @@ Lemma InNotEq : forall A (M : Map A) var var' r r',
 Proof. intros. simpl in *. breakStrDec. Qed.
 
 
+Lemma InNotEq' : forall A (M : Map A) var var' r,
+    var <> var' -> In (var' |=> r; M) var = In M var.
+Proof. intros. simpl in *. breakStrDec. Qed.
+
+
 Definition inclusion {A} (M : Map A) M' :=
   forall x v, In M x = Some v -> In M' x = Some v.
 

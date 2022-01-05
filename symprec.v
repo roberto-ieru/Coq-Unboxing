@@ -55,7 +55,7 @@ Proof.
 Qed.
 
 
-Lemma PrecFresh : forall m1 m2 free m1', 
+Lemma PrecFresh : forall m1 m2 free m1',
     m1 <M| m2 ->
     (free, m1') = fresh m1 ->
     exists m2', m1' <M| m2' /\ (free, m2') = fresh m2.
@@ -117,18 +117,10 @@ Qed.
 *)
 
 
-Lemma InInclusionNE : forall (Γ Γ' : IREnvironment) var var' t t1,
-    inclusion (var |=> t1; Γ') Γ ->
-    var <> var' ->
-    In Γ var' = Some t ->
-    In Γ' var' = Some t.
-Admitted.
-
-
 Lemma PrecSubs : forall body Γ Γ' var  body' v1 v2 t1 t2 t1' t2'
                         (H12: t1 <| t2),
     Precision PEmpty v1 t1 v2 t2 ->
-    PEEquiv (ExpandPEnv Γ var t1 t2 H12) Γ' ->
+    PEquiv (ExpandPEnv Γ var t1 t2 H12) Γ' ->
     Precision Γ' body t1' body' t2' ->
     Precision Γ ([var := v1] body) t1' ([var := v2] body') t2'.
 Proof.
@@ -137,43 +129,40 @@ Proof.
   induction HPB; intros ? HPE; eauto using Precision.
 
   - simpl.
+    destruct HPE.
     breakStrDec.
-    + destruct Γ. destruct Γ0. simpl in H. simpl in H0.
-      inversion HPE; subst.
-      apply InEq' in H.
-      apply InEq' in H0.
-      subst.
+    + specialize (H1 var0).
+      specialize (H2 var0).
+      rewrite Expand1 in H1.
+      rewrite Expand2 in H2.
+      rewrite InEq in H1.
+      rewrite InEq in H2.
+      replace t0 with t1 by congruence.
+      replace t3 with t2 by congruence.
       eauto using PrecisionInclusion, PinclusionEmpty.
-    + destruct Γ. destruct Γ0. simpl in H. simpl in H0.
-      inversion HPE; subst. 
-       eapply PVar; simpl; eauto using InNotEq.
+
+    + apply PVar.
+      * specialize (H1 var0).
+        rewrite Expand1 in H1.
+        rewrite InNotEq' in H1;
+        congruence.
+      * specialize (H2 var0).
+        rewrite Expand2 in H2.
+        rewrite InNotEq' in H2;
+        congruence.
 
   - simpl.
     breakStrDec.
     + apply PFun with (H12 := H0).
-
-    +
-
-Precision (ExpandPEnv Γ var0 t0 t3 H0) d1 t1' d2 t2'
-
-
-(*    + 
-      eauto using Precision.
-    + eapply PFun with (H12 := H0).
-      eapply IHHPB.
-      unfold Pinclusion in HPI. destruct HPI.
-      unfold Pinclusion. split.
-
-      assert (Pinclusion
-               (ExpandPEnv (ExpandPEnv Γ0 var0 t0 t3 H0) var t1 t2 H12)
-               (ExpandPEnv Γ var0 t0 t3 H0)). {
-        destruct Γ0.
-        destruct Γ.
-        rewrite Expand1 in i.
-        rewrite Expand2 in i0.
-        unfold Pinclusion. split.
-*)
-Admitted.
+      eauto using PrecisionIrrel, PEquivTrans, PEquivShadow, ExpandEquiv,
+                  PEquivSym.
+      Unshelve. trivial.
+    + apply PFun with (H12 := H0).
+      apply IHHPB.
+      eauto using PrecisionIrrel, PEquivTrans, PEquivPermute, ExpandEquiv,
+                  PEquivSym.
+      Unshelve. trivial.
+Qed.
 
 
 Lemma PrecSubs' : forall var t1 t2 t1' t2' body body' v1 v2,
@@ -310,7 +299,7 @@ Lemma ValueStarP : forall tg t v e m e',
         e' = IREBox tg o /\ Precision PEmpty v t e' IRTStar.
 Proof.
   intros * HP HSty HVP HStep HV.
-  inversion HP; subst; try (inversion HVP; fail); 
+  inversion HP; subst; try (inversion HVP; fail);
   ContraTags.
   replace g with tg in *. 2:{
     apply PPT in H.
@@ -348,7 +337,7 @@ Proof.
   try (eapply GroundType in H; only 2: (simpl; trivial);
     apply valBoxVal in H1;
     exists x0; split;
-    eauto using multiTrans, CongUnbox, step, multistep). 
+    eauto using multiTrans, CongUnbox, step, multistep).
 Qed.
 
 
@@ -356,12 +345,12 @@ Ltac BreakIH :=
   match goal with
     [IH: context [_ / ?E --> _ / _ -> (PrecMem _ _) -> _] ,
      HSt: ?M / ?E --> _ / _ ,
-     HM: ?M <M| ?M' |- _ ] => idtac E M M';
+     HM: ?M <M| ?M' |- _ ] =>
        specialize (IH eq_refl _ _ _ _ HSt HM) as [? [? [? [? ?]]]]
   end.
 
 
-Lemma NoValueUnbox : forall tg e (C : Type), 
+Lemma NoValueUnbox : forall tg e (C : Type),
     Value (IREUnbox tg e) -> C.
 Proof.
   intros * H.
@@ -376,7 +365,7 @@ Ltac NoValueUnbox :=
   end.
 
 
-Theorem Sym : forall m1 e1 t1 e2 m2 t2 m1' e1', 
+Theorem Sym : forall m1 e1 t1 e2 m2 t2 m1' e1',
   Precision PEmpty e1 t1 e2 t2 ->
   m1 / e1 --> m1' / e1'   ->
   m1 <M| m2 ->
@@ -519,7 +508,7 @@ Proof.
     + (* StFunApp *)
       clear IHHP1 IHHP2.
 
-      replace t with t1 in * by 
+      replace t with t1 in * by
         (apply PrecisionType1 in HP2; inversion HP2; subst; trivial).
 
       specialize (ValueLR m2 HP1 H4) as [? [? ?]].
@@ -570,24 +559,3 @@ Proof.
 Qed.
 
 
-
-(*
-Lemma BoxPreserveType : forall e m m' b tg,
-  m / IREBox tg e -->* m' / b ->
-  MEmpty |= e : Tag2Type tg ->
-  mem_correct m ->
-  exists o, b = IREBox tg o /\ MEmpty |= o : Tag2Type tg.
-Proof.
-  intros * HSt.
-  remember (IREBox tg e) as E.
-  generalize dependent tg.
-  generalize dependent e.
-  induction HSt; intros; subst e.
-  - exists e0; split; trivial.
-  - inversion H; subst.
-    specialize (PresTy _ _ _ _ _ H1 H0 H7) as HTy.
-    specialize (PresMC _ _ _ _ _ H1 H0 H7) as HM'.
-    specialize (IHHSt _ _ eq_refl HTy HM') as [? [? ?]].
-    exists x; split; trivial.
-Qed.
-*)

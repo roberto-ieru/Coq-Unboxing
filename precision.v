@@ -127,7 +127,7 @@ Proof.
   constructor;
   eauto using TPrecisionTrans.
 Qed.
-  
+
 
 Inductive PEnvironment :=
 | PEnv : forall Γ1 Γ2, Γ1 <E| Γ2 -> PEnvironment.
@@ -201,69 +201,73 @@ Lemma Env2Env : forall Γ, PEnv1 (Env2P Γ) = Γ.
 Proof. intros Γ. trivial. Qed.
 
 
-Inductive PEEquiv : PEnvironment -> PEnvironment -> Prop :=
-| PEE : forall Γ1 Γ2 P1 P2, PEEquiv (PEnv Γ1 Γ2 P1) (PEnv Γ1 Γ2 P2)
-.
+Definition PEquiv (Γ Γ' : PEnvironment) : Prop :=
+  (forall var, In (PEnv1 Γ) var = In (PEnv1 Γ') var) /\
+  (forall var, In (PEnv2 Γ) var = In (PEnv2 Γ') var).
 
 
-Lemma PEEquiv' : forall Γ1 Γ2,
-  PEnv1 Γ1 = PEnv1 Γ2 -> PEnv2 Γ1 = PEnv2 Γ2 -> PEEquiv Γ1 Γ2.
+Lemma PEquivSym : forall Γ1 Γ2, PEquiv Γ1 Γ2 -> PEquiv Γ2 Γ1.
 Proof.
-  intros Γ1 Γ2 H1 H2.
-  destruct Γ1.
-  destruct Γ2.
-  simpl in *; subst.
-  constructor.
-Qed.
-
-
-Lemma PEEquivRefl : forall Γ1 Γ2, PEEquiv Γ1 Γ2 -> PEEquiv Γ2 Γ1.
-Proof.
+  unfold PEquiv.
   intros Γ1 Γ2 H.
-  inversion H; constructor.
+  intuition congruence.
 Qed.
 
 
-Lemma PEEquivTrans : forall Γ1 Γ2 Γ3,
-    PEEquiv Γ1 Γ2 -> PEEquiv Γ2 Γ3 -> PEEquiv Γ1 Γ3.
+Lemma PEquivTrans : forall Γ1 Γ2 Γ3,
+    PEquiv Γ1 Γ2 -> PEquiv Γ2 Γ3 -> PEquiv Γ1 Γ3.
 Proof.
+  unfold PEquiv.
   intros Γ1 Γ2 Γ3 H12 H23.
-  inversion H12; subst.
-  inversion H23; subst.
-  constructor.
+  intuition congruence.
+Qed.
+
+
+Lemma PEquivShadow : forall Γ var t0 t1 t2 t3 H12 H12' H03,
+  PEquiv (ExpandPEnv Γ var t1 t2 H12)
+         (ExpandPEnv (ExpandPEnv Γ var t0 t3 H03) var t1 t2 H12').
+Proof.
+  unfold PEquiv.
+  intros *.
+  destruct Γ. simpl.
+  split; intros; breakStrDec.
+Qed.
+
+
+Lemma PEquivPermute : forall Γ var var' t1 t2 t1' t2' H12 H12' H12'' H12''',
+  var <> var' ->
+  PEquiv (ExpandPEnv (ExpandPEnv Γ var t1 t2 H12) var' t1' t2' H12')
+         (ExpandPEnv (ExpandPEnv Γ var' t1' t2' H12'') var t1 t2 H12''').
+Proof.
+  unfold PEquiv.
+  intros *.
+  destruct Γ. simpl.
+  split; intros; breakStrDec.
 Qed.
 
 
 Lemma ExpandEquiv : forall Γ1 Γ2 var t1 t2 P1 P2,
-    PEEquiv Γ1 Γ2 ->
-    PEEquiv (ExpandPEnv Γ1 var t1 t2 P1) (ExpandPEnv Γ2 var t1 t2 P2).
+    PEquiv Γ1 Γ2 ->
+    PEquiv (ExpandPEnv Γ1 var t1 t2 P1) (ExpandPEnv Γ2 var t1 t2 P2).
 Proof.
-  intros Γ1 Γ2 var t1 t2 P1 P2 HEE.
-  destruct HEE. constructor.
+  unfold PEquiv.
+  intros * HPE.
+  repeat rewrite Expand1 in *.
+  repeat rewrite Expand2 in *.
+  simpl.
+  split; intros; breakStrDec.
 Qed.
 
 
 Lemma Expand2P : forall Γ var t,
-    PEEquiv (Env2P (var |=> t; Γ))
+    PEquiv (Env2P (var |=> t; Γ))
             (ExpandPEnv (Env2P Γ) var t t (TPrecisionRefl t)).
-Proof. intros Γ var t. constructor. Qed.
-
-
-Lemma Expand12 : forall Γ1 Γ2 P12 var t1 t2 H12,
-  exists P12', 
-    ExpandPEnv (PEnv Γ1 Γ2 P12) var t1 t2 H12 =
-    PEnv (var |=> t1; Γ1) (var |=> t2; Γ2) P12'.
-Proof. intros. eexists. constructor. Qed.
-
-
-Lemma PEEquivShadow : forall Γ Γ' var t0 t1 t2 t3 H0 H12,
-    PEEquiv (ExpandPEnv Γ var t1 t2 H12) Γ' ->
-    PEEquiv (ExpandPEnv Γ var t0 t3 H0)
-            (ExpandPEnv Γ' var t0 t3 H0).
 Proof.
-  intros * HPE.
-  destruct Γ. destruct Γ'.
-  inversion HPE; subst.
+  intros Γ var t.
+  unfold PEquiv.
+  simpl.
+  split; intros; breakStrDec.
+Qed.
 
 
 Inductive Precision : PEnvironment -> IRE -> IRType ->
@@ -429,20 +433,19 @@ Definition Pinclusion (Γ Γ' : PEnvironment) : Prop :=
 
 Lemma PinclusionEmpty : forall Γ, Pinclusion PEmpty Γ.
 Proof.
-  intros. 
+  intros.
   unfold Pinclusion. simpl.
   auto using inclusion_empty.
 Qed.
 
 
 Lemma PinclusionEquiv : forall Γ Γ',
-    PEEquiv Γ Γ' -> Pinclusion Γ Γ'.
+    PEquiv Γ Γ' -> Pinclusion Γ Γ'.
 Proof.
   intros * H.
-  destruct H.  
-  unfold EnvComp in P1.
+  destruct H.
   unfold Pinclusion.
-  auto using inclusion_refl.
+  intuition congruence.
 Qed.
 
 
@@ -486,7 +489,7 @@ Qed.
 
 
 Lemma PrecisionIrrel : forall Γ1 Γ2 e1 t1 e2 t2,
-   PEEquiv Γ1 Γ2 ->
+   PEquiv Γ1 Γ2 ->
    Precision Γ1 e1 t1 e2 t2 ->
    Precision Γ2 e1 t1 e2 t2.
 Proof.
@@ -649,9 +652,13 @@ Defined.
 
 
 Lemma EquivDyn : forall Γ var t P,
-  PEEquiv (PEnvDyn (var |=> t; Γ))
+  PEquiv (PEnvDyn (var |=> t; Γ))
           (ExpandPEnv (PEnvDyn Γ) var t IRTStar P).
-Proof. intros. constructor. Qed.
+Proof.
+  intros.
+  unfold PEquiv.
+  split; intros; auto.
+Qed.
 
 
 Theorem PrecisionDyn : forall Γ e t,
@@ -707,7 +714,7 @@ Proof with eauto using Precision.
   generalize dependent Γ2.
   generalize dependent Γ1.
   induction H12; intros.
-  - 
+  -
 
   - (* var *) inversion H23; subst.
     + eauto using Precision.

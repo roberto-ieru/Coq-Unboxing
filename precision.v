@@ -206,6 +206,14 @@ Definition PEquiv (Γ Γ' : PEnvironment) : Prop :=
   (forall var, In (PEnv2 Γ) var = In (PEnv2 Γ') var).
 
 
+Lemma PEquivRefl : forall Γ, PEquiv Γ Γ.
+Proof.
+  unfold PEquiv.
+  intros Γ.
+  intuition trivial.
+Qed.
+
+
 Lemma PEquivSym : forall Γ1 Γ2, PEquiv Γ1 Γ2 -> PEquiv Γ2 Γ1.
 Proof.
   unfold PEquiv.
@@ -336,7 +344,7 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 
 (* Γ⊑ ⊢ d ⊑ e : t ⊑ g
    ----------------------------------
-   Γ⊑ ⊢ d ⊑ box[g](e) : g ⊑ ★	*)
+   Γ⊑ ⊢ d ⊑ box[g](e) : t ⊑ ★	*)
 | PBoxR : forall Γ d e t g,
     Precision Γ d t e (Tag2Type g) ->
     Precision Γ d t (IREBox g e) IRTStar
@@ -358,7 +366,7 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 
 (* Γ⊑ ⊢ d ⊑ e : t ⊑ ★ , t ⊑ g
    ----------------------------------
-   Γ⊑ ⊢ d ⊑ unbox[g](d) : t ⊑ g	*)
+   Γ⊑ ⊢ d ⊑ unbox[g](e) : t ⊑ g	*)
 | PUnboxR : forall Γ d e t g tg,
     t <| (Tag2Type g) ->
     tg = Tag2Type g ->
@@ -392,33 +400,33 @@ Definition B10 := (IREBox TgInt (IRENum 10)).
 
 Definition UB10 := IREUnbox TgInt B10.
 
-Example e1 : Precision PEmpty (IRENum 10) IRTInt UB10 IRTInt.
+Example example1 : Precision PEmpty (IRENum 10) IRTInt UB10 IRTInt.
   eauto using Precision, TPrecisionRefl.
 Qed.
 
-Example e2 : ~ Precision PEmpty UB10 IRTInt (IRENum 10) IRTInt.
+Example example2 : ~ Precision PEmpty UB10 IRTInt (IRENum 10) IRTInt.
   intros HF.
   inversion HF.
 Qed.
 
-Example e3 : Precision PEmpty UB10 IRTInt B10 IRTStar.
+Example example3 : Precision PEmpty UB10 IRTInt B10 IRTStar.
   eauto using Precision.
 Qed.
 
-Example e4 : exists e1 t1 e2 t2,
+Example example4 : exists e1 t1 e2 t2,
     Precision PEmpty e1 t1 e2 t2 /\ Value e1 /\ ~Value e2.
   eexists; eexists; eexists; eexists.
   split; try split.
-  - apply e1.
+  - apply example1.
   - eauto using Value.
   - intros Hcontra. inversion Hcontra.
 Qed.
 
-Example e5 : exists e1 t1 e2 t2,
+Example example5 : exists e1 t1 e2 t2,
     Precision PEmpty e1 t1 e2 t2 /\ Value e2 /\ ~Value e1.
   eexists; eexists; eexists; eexists.
   split; try split.
-  - apply e3.
+  - apply example3.
   - eauto using Value.
   - intros Hcontra. inversion Hcontra.
 Qed.
@@ -651,6 +659,10 @@ refine (PEnv Γ (Env2Dyn Γ) _).
 Defined.
 
 
+Lemma Env2DynEmpty : PEquiv (PEnvDyn MEmpty) PEmpty.
+Proof. unfold PEquiv. split; trivial. Qed.
+
+
 Lemma EquivDyn : forall Γ var t P,
   PEquiv (PEnvDyn (var |=> t; Γ))
           (ExpandPEnv (PEnvDyn Γ) var t IRTStar P).
@@ -661,7 +673,7 @@ Proof.
 Qed.
 
 
-Theorem PrecisionDyn : forall Γ e t,
+Theorem DynLessPrecise : forall Γ e t,
   Γ |= e : t -> Precision (PEnvDyn Γ) e t (dyn e) IRTStar.
 Proof.
   intros Γ e t H.
@@ -670,6 +682,14 @@ Proof.
   - apply PBoxR. apply PFun with (TPStar t).
     eauto using PrecisionIrrel, EquivDyn.
 Qed.
+
+
+Theorem PrecDynEqual : forall Γ e1 t1 e2 t2,
+    Precision Γ e1 t1 e2 t2 -> dyn e1 = dyn e2.
+Proof.
+  intros * HP. induction HP; simpl; congruence.
+Qed.
+
 
 
 

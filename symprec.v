@@ -9,6 +9,7 @@ Require Import Lia.
 Require Import LIR.maps.
 Require Import LIR.lir.
 Require Import LIR.precision.
+Require Import LIR.dyn.
 
 Set Implicit Arguments.
 
@@ -130,35 +131,30 @@ Proof.
 
   - simpl.
     destruct HPE.
+    specialize (H1 var0).
+    specialize (H2 var0).
+    rewrite Expand1 in H1.
+    rewrite Expand2 in H2.
     breakStrDec.
-    + specialize (H1 var0).
-      specialize (H2 var0).
-      rewrite Expand1 in H1.
-      rewrite Expand2 in H2.
-      rewrite InEq in H1.
+    + rewrite InEq in H1.
       rewrite InEq in H2.
       replace t0 with t1 by congruence.
       replace t3 with t2 by congruence.
       eauto using PrecisionInclusion, PinclusionEmpty.
 
     + apply PVar.
-      * specialize (H1 var0).
-        rewrite Expand1 in H1.
-        rewrite InNotEq' in H1;
+      * rewrite InNotEq' in H1;
         congruence.
-      * specialize (H2 var0).
-        rewrite Expand2 in H2.
-        rewrite InNotEq' in H2;
+      * rewrite InNotEq' in H2;
         congruence.
 
   - simpl.
     breakStrDec.
-    + apply PFun with (H12 := H0).
+    + eapply PFun.
       eauto using PrecisionIrrel, PEquivTrans, PEquivShadow, ExpandEquiv,
                   PEquivSym.
-      Unshelve. trivial.
+      Unshelve. trivial. trivial.
     + apply PFun with (H12 := H0).
-      apply IHHPB.
       eauto using PrecisionIrrel, PEquivTrans, PEquivPermute, ExpandEquiv,
                   PEquivSym.
       Unshelve. trivial.
@@ -173,18 +169,7 @@ Lemma PrecSubs' : forall var t1 t2 t1' t2' body body' v1 v2,
 Proof.
   intros * HPF HPV.
   inversion HPF; subst.
-  eapply PrecSubs; eauto.
-  unfold Pinclusion; split.
-  * unfold inclusion.
-    rewrite Expand1.
-    rewrite Expand1.
-    trivial.
-  * unfold inclusion.
-    rewrite Expand2.
-    rewrite Expand2.
-    trivial.
-
-  Unshelve. trivial.
+  eauto using PrecSubs, ExpandEquiv, PEquivRefl.
 Qed.
 
 
@@ -309,7 +294,7 @@ Proof.
 Qed.
 
 
-Lemma ValueLR : forall e1 t1 e2 t2 m,
+Lemma CatchUp : forall e1 t1 e2 t2 m,
   Precision PEmpty e1 t1 e2 t2 ->
   Value e1 ->
   exists e2', m / e2 -->* m / e2' /\ Value e2'.
@@ -378,184 +363,184 @@ Proof.
   generalize dependent m1'.
   generalize dependent m1.
   remember PEmpty as Γ.
-  induction HP; intros * Hstep HM; try (inversion Hstep; fail).
+  induction HP; intros * Hstep HM;
 
-  - (* Plus *)
-    inversion Hstep; subst.
+  (* Handle BoxR and UnboxR, which should not invert step *)
+  try (subst; BreakIH;
+    eexists; eexists; split; try split;
+    eauto using Precision, CongBox, CongUnbox;
+    fail);
 
-    + (* StPlus1 *)
-      BreakIH.
-      eexists; eexists; split; try split; eauto using Precision, CongPlus1.
+  inversion Hstep; subst; repeat BreakIH;
+  (* Handle all "first" cases *)
+  try (eexists; eexists; split; try split;
+    eauto using Precision, CongPlus1, CongGet1, CongSet1, CongFunApp1;
+    fail).
 
-    + (* StPlus2 *)
-      BreakIH.
-      specialize (ValueLR m2 HP1 H2) as [? [? ?]].
-      eexists; exists x0; split; try split;
-        eauto using multiTrans, CongPlus1, CongPlus2,
-                    Precision, PrecisionPreservationM.
+  + (* StPlus2 *)
+    specialize (CatchUp m2 HP1 H2) as [? [? ?]].
+    eexists; exists x0; split; try split;
+      eauto using multiTrans, CongPlus1, CongPlus2,
+                  Precision, PrecisionPreservationM.
 
-    + (* StPlus *)
-      clear IHHP1 IHHP2.
-      specialize (ValueLR m2 HP1 (Vnum n1)) as [? [? ?]].
-      specialize (ValueLR m2 HP2 (Vnum n2)) as [? [? ?]].
+  + (* StPlus *)
+    clear IHHP1 IHHP2.
+    specialize (CatchUp m2 HP1 (Vnum n1)) as [? [? ?]].
+    specialize (CatchUp m2 HP2 (Vnum n2)) as [? [? ?]].
 
-      assert (N1: x = IRENum n1). {
-        specialize (PrecisionPreservationM HP1 (Vnum n1) H) as NH1.
-        inversion NH1; subst; trivial; NoValueUnbox.
-      }
+    assert (N1: x = IRENum n1). {
+      specialize (PrecisionPreservationM HP1 (Vnum n1) H) as NH1.
+      inversion NH1; subst; trivial; NoValueUnbox.
+    }
 
-      assert (N2: x0 = IRENum n2). {
-        specialize (PrecisionPreservationM HP2 (Vnum n2) H1) as NH2.
-        inversion NH2; subst; trivial; NoValueUnbox.
-      }
+    assert (N2: x0 = IRENum n2). {
+      specialize (PrecisionPreservationM HP2 (Vnum n2) H1) as NH2.
+      inversion NH2; subst; trivial; NoValueUnbox.
+    }
 
-      subst.
-      exists (IRENum (n1 + n2)). exists m2. split; try split;
-        eauto 7 using multiTrans, CongPlus1, CongPlus2, multistep1, step,
-           Precision.
+    subst.
+    exists (IRENum (n1 + n2)). exists m2. split; try split;
+    eauto 7 using multiTrans, CongPlus1, CongPlus2, multistep1, step,
+         Precision.
 
 
-  - (* StCstr *)
-    inversion Hstep; subst.
+  + (* StCstr *)
     specialize (PrecFresh HM H) as [? [? ?]].
     eexists; eexists; split; try split;
     eauto using multistep1, step, Precision.
 
 
-  - (* Get *)
-    inversion Hstep; subst.
+  + (* StGet2 *)
+    specialize (CatchUp m2 HP1 H2) as [? [? ?]].
+    eexists; exists x0; split; try split;
+      eauto using multiTrans, CongGet1, CongGet2,
+                  Precision, PrecisionPreservationM.
 
-    + (* StGet1 *)
-      BreakIH.
-      eexists; eexists; split; try split; eauto using Precision, CongGet1.
+  + (* StGet *)
+    clear IHHP1 IHHP2.
 
-    + (* StGet2 *)
-      BreakIH.
-      specialize (ValueLR m2 HP1 H2) as [? [? ?]].
-      eexists; exists x0; split; try split;
-        eauto using multiTrans, CongGet1, CongGet2,
-                    Precision, PrecisionPreservationM.
+    specialize (CatchUp m2 HP1 (Vtbl a)) as [? [? ?]].
+    specialize (CatchUp m2 HP2 H4) as [? [? ?]].
 
-    + (* StGet *)
-      clear IHHP1 IHHP2.
+    assert (N1: x = IREAddr a). {
+      specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
+      inversion NH1; subst; trivial; NoValueUnbox.
+    } subst.
 
-      specialize (ValueLR m2 HP1 (Vtbl a)) as [? [? ?]].
-      specialize (ValueLR m2 HP2 H4) as [? [? ?]].
+    exists (query a x0 m2). exists m2. split; try split;
+      eauto 7 using multiTrans, CongGet1, CongGet2, multistep1, step,
+         Precision, PrecQuery, PrecisionPreservationM.
 
-      assert (N1: x = IREAddr a). {
-        specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
-        inversion NH1; subst; trivial; NoValueUnbox.
-      } subst.
+  + (* StSet2 *)
+    specialize (CatchUp m2 HP1 H5) as [? [? ?]].
+    eexists; exists x0; split; try split;
+      eauto using multiTrans, CongSet1, CongSet2,
+                  Precision, PrecisionPreservationM.
 
-      exists (query a x0 m2). exists m2. split; try split;
-        eauto 7 using multiTrans, CongGet1, CongGet2, multistep1, step,
-           Precision, PrecQuery, PrecisionPreservationM.
+  + (* StSet3 *)
+    specialize (CatchUp m2 HP1 H3) as [? [? ?]].
+    specialize (CatchUp m2 HP2 H6) as [? [? ?]].
+    eexists; exists x0; split; try split;
+      eauto 6 using multiTrans, CongSet1, CongSet2, CongSet3,
+                  Precision, PrecisionPreservationM.
 
-  - (* Set *)
-    inversion Hstep; subst.
+  + (* StSet *)
+    clear IHHP1 IHHP2 IHHP3.
 
-    + (* StSet1 *)
-      BreakIH.
-      eexists; eexists; split; try split; eauto using Precision, CongSet1.
+    specialize (CatchUp m2 HP1 (Vtbl a)) as [? [? ?]].
+    specialize (CatchUp m2 HP2 H5) as [? [? ?]].
+    specialize (CatchUp m2 HP3 H6) as [? [? ?]].
 
-    + (* StSet2 *)
-      BreakIH.
-      specialize (ValueLR m2 HP1 H5) as [? [? ?]].
-      eexists; exists x0; split; try split;
-        eauto using multiTrans, CongSet1, CongSet2,
-                    Precision, PrecisionPreservationM.
+    assert (N1: x = IREAddr a). {
+      specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
+      inversion NH1; subst; trivial; NoValueUnbox.
+    } subst.
 
-    + (* StSet3 *)
-      BreakIH.
-      specialize (ValueLR m2 HP1 H3) as [? [? ?]].
-      specialize (ValueLR m2 HP2 H6) as [? [? ?]].
-      eexists; exists x0; split; try split;
-        eauto 6 using multiTrans, CongSet1, CongSet2, CongSet3,
-                    Precision, PrecisionPreservationM.
+    exists x1. exists (Update a x0 x1 m2). split; try split;
+      eauto 10 using multiTrans, CongSet1, CongSet2, CongSet3,
+        multistep1, step, Precision, PrecQuery, PrecisionPreservationM,
+        PrecUpdate.
 
-    + (* StSet *)
-      clear IHHP1 IHHP2 IHHP3.
+  + (* StFunApp2 *)
+    specialize (CatchUp m2 HP2 H2) as [? [? ?]].
+    eexists; exists x0; split; try split;
+      eauto using multiTrans, CongFunApp1, CongFunApp2,
+                  Precision, PrecisionPreservationM.
 
-      specialize (ValueLR m2 HP1 (Vtbl a)) as [? [? ?]].
-      specialize (ValueLR m2 HP2 H5) as [? [? ?]].
-      specialize (ValueLR m2 HP3 H6) as [? [? ?]].
+  + (* StFunApp *)
+    clear IHHP1 IHHP2.
 
-      assert (N1: x = IREAddr a). {
-        specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
-        inversion NH1; subst; trivial; NoValueUnbox.
-      } subst.
+    replace t with t1 in * by
+      (apply PrecisionType1 in HP2; inversion HP2; subst; trivial).
 
-      exists x1. exists (Update a x0 x1 m2). split; try split;
-        eauto 10 using multiTrans, CongSet1, CongSet2, CongSet3,
-          multistep1, step, Precision, PrecQuery, PrecisionPreservationM,
-          PrecUpdate.
+    specialize (CatchUp m2 HP1 H4) as [? [? ?]].
+    specialize (CatchUp m2 HP2 (Vfun var t1 body)) as [? [? ?]].
 
+    assert (N1: exists body', x0 = IREFun var t2 body'). {
+      specialize (PrecisionPreservationM HP2 (Vfun var t1 body) H1) as NH1.
+      inversion NH1; subst; eauto; NoValueUnbox.
+    }
+    destruct N1 as [body' ?].
+    subst.
+    exists ([var := x] body'). exists m2. split; try split;
+      eauto 7 using multiTrans, CongFunApp1, CongFunApp2, multistep1, step,
+         Precision.
 
-  - (* StFunApp *)
-    inversion Hstep; subst.
+    eauto using PrecSubs', PrecisionPreservationM, Value.
 
-    + (* StFunApp1 *)
-      BreakIH.
-      eexists; eexists; split; try split; eauto using Precision, CongFunApp1.
+  + (* StUnbox *)
+    clear IHHP.
+    specialize (CatchUp m2 HP (Vbox g e1' H5)) as [? [? ?]].
 
-    + (* StFunApp2 *)
-      BreakIH.
-      specialize (ValueLR m2 HP2 H2) as [? [? ?]].
-      eexists; exists x0; split; try split;
-        eauto using multiTrans, CongFunApp1, CongFunApp2,
-                    Precision, PrecisionPreservationM.
-
-    + (* StFunApp *)
-      clear IHHP1 IHHP2.
-
-      replace t with t1 in * by
-        (apply PrecisionType1 in HP2; inversion HP2; subst; trivial).
-
-      specialize (ValueLR m2 HP1 H4) as [? [? ?]].
-      specialize (ValueLR m2 HP2 (Vfun var t1 body)) as [? [? ?]].
-
-      assert (N1: exists body', x0 = IREFun var t2 body'). {
-        specialize (PrecisionPreservationM HP2 (Vfun var t1 body) H1) as NH1.
-        inversion NH1; subst; eauto; NoValueUnbox.
-      }
-      destruct N1 as [body' ?].
+    inversion HP; subst; ContraTags.
+    * exfalso. apply PPT in H1. ContraTags.
+    * specialize (@ValueStarP _ _ _ _ _ _ H3 (TPrecisionRefl (Tag2Type g))
+        H5 H H0) as [? [? ?]].
       subst.
-      exists ([var := x] body'). exists m2. split; try split;
-        eauto 7 using multiTrans, CongFunApp1, CongFunApp2, multistep1, step,
-           Precision.
+      eexists; eexists; split; try split; eauto.
 
-      eauto using PrecSubs', PrecisionPreservationM, Value.
-
-  - (* BoxR *)
-      subst.
-      BreakIH.
-      eexists; eexists; split; try split; eauto using Precision, CongBox.
-
-  - (* BoxL *)
-      inversion Hstep; subst.
-      BreakIH.
-      eexists; eexists; split; try split; eauto using Precision, CongBox.
-
-  - (* UnboxL *)
-      inversion Hstep; subst.
-
-      + BreakIH.
-       eexists; eexists; split; try split; eauto using Precision, CongUnbox.
-
-      + clear IHHP.
-        specialize (ValueLR m2 HP (Vbox g e1' H5)) as [? [? ?]].
-
-        inversion HP; subst; ContraTags.
-        * exfalso. apply PPT in H1. ContraTags.
-        * specialize (@ValueStarP _ _ _ _ _ _ H3 (TPrecisionRefl (Tag2Type g))
-            H5 H H0) as [? [? ?]].
-          subst.
-          eexists; eexists; split; try split; eauto.
-
-  - (* UnboxR *)
-      subst.
-      BreakIH.
-      eexists; eexists; split; try split; eauto using Precision, CongUnbox.
 Qed.
+
+
+Theorem SymM : forall m1 e1 t1 e2 m2 t2 m1' e1',
+  m1 / e1 -->* m1' / e1'   ->
+  Value e1' ->
+  Precision PEmpty e1 t1 e2 t2 ->
+  m1 <M| m2 ->
+  exists e2' m2',
+    m2 / e2 -->* m2' / e2' /\
+    Precision PEmpty e1' t1 e2' t2 /\
+    m1' <M| m2' /\
+    Value e2'.
+Proof.
+  intros * HMSt.
+  generalize dependent m2.
+  generalize dependent t2.
+  generalize dependent e2.
+  induction HMSt; intros * HV HPE HMem.
+  - specialize (CatchUp m2 HPE HV) as [? [? ?]].
+    eexists. eexists; repeat split; eauto using PrecisionPreservationM.
+  - specialize (Sym HPE H HMem) as [? [? [? [? ?]]]].
+    specialize (IHHMSt _ _ _ HV H2 H1) as [? [? [? [? [? ?]]]]].
+    exists x1. exists x2. repeat split; eauto using multiTrans.
+Qed.
+
+
+Theorem SymDyn : forall m1 e1 t1 m1' e1',
+  m1 / e1 -->* m1' / e1'   ->
+  MEmpty |= e1 : t1 ->
+  mem_correct m1 ->
+  Value e1' ->
+  exists e2' m2',
+    m1 / dyn e1 -->* m2' / e2' /\
+    dyn e2' = dyn e1' /\
+    m1' <M| m2' /\
+    Value e2'.
+Proof.
+  intros * HSt Hty HM HV.
+  assert(Precision PEmpty e1 t1 (dyn e1) IRTStar) by
+    eauto using PrecisionIrrel, Env2DynEmpty, DynLessPrecise.
+(*  specialize (SymM Hst HV H *)
+Abort.
 
 

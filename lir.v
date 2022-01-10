@@ -226,20 +226,35 @@ Coercion ToIndex : IRE >-> Index.
 Axiom Index_dec : Index -> Index -> bool.
 
 
+Inductive ExpValue : Set :=
+| EV : forall e, Value e -> ExpValue.
+
+
+Definition EV2Val (me : ExpValue) :=
+  match me with
+  | EV v _ => v
+  end.
+
+
 Inductive Mem : Set :=
 | EmptyMem : Mem
-| Update : address -> Index -> IRE -> Mem -> Mem.
+| Update :
+    address -> Index -> ExpValue -> Mem -> Mem.
 
 
 Definition BoxedNil := IREBox TgNil IRENil.
 
+Lemma BoxedNilValue : Value BoxedNil.
+Proof. eauto using Value. Qed.
+
+
 Fixpoint query (a : address) (idx : IRE) (m : Mem) :=
   match m with
   | EmptyMem => BoxedNil
-  | Update a' idx' e m' => if Nat.eq_dec a a' then
-                           if Index_dec idx idx' then e
-                           else query  a idx m'
-                         else query  a idx m'
+  | Update a' idx' v m' => if Nat.eq_dec a a' then
+                                    if Index_dec idx idx' then (EV2Val v)
+                                    else query  a idx m'
+                                  else query  a idx m'
   end.
 
 
@@ -251,7 +266,8 @@ Fixpoint freshaux (m : Mem) : address :=
 
 
 Definition fresh (m : Mem) : (address * Mem) :=
-  let f := freshaux m in (f, Update f BoxedNil BoxedNil m).
+  let f := freshaux m in
+    (f, Update f BoxedNil (EV BoxedNil BoxedNilValue) m).
 
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
@@ -347,8 +363,8 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     m / IRESet e1 e2 e3 --> m' / IRESet e1 e2 e3'
 | StSet : forall m a idx v,
     Value idx ->
-    Value v ->
-    m / IRESet (IREAddr a) idx v --> Update a idx v m / v
+    forall Vv : Value v,
+    m / IRESet (IREAddr a) idx v --> Update a idx (EV v Vv) m / v
 | StFunapp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / IREFunApp e1 e2 --> m' / IREFunApp e1' e2
@@ -421,13 +437,28 @@ Inductive stepF : Mem -> IRE -> Prop :=
 .
 
 
+Ltac breakIndexDec :=
+  repeat match goal with
+  | [ |- context C [Nat.eq_dec ?V1 ?V2] ] =>
+    destruct (Nat.eq_dec V1 V2)
+  | [ |- context C [Index_dec ?V1 ?V2] ] =>
+    destruct (Index_dec V1 V2) eqn:? ;
+  try easy
+  end.
+
+
 
 Definition mem_correct (m : Mem) :=
-  forall a n, Value (query a n m) /\ MEmpty |= (query a n m) : IRTStar.
+  forall a n, MEmpty |= (query a n m) : IRTStar.
 
 
-Lemma MCValue : forall m a n, mem_correct m -> Value (query a n m).
-Proof. intros. apply H. Qed.
+Lemma MCValue : forall m a n, Value (query a n m).
+Proof.
+  intros.
+  induction m; eauto using Value.
+  destruct e. simpl.
+  breakIndexDec; trivial.
+Qed.
 
 
 Lemma MCTy : forall m a n Γ,
@@ -439,23 +470,14 @@ Lemma mem_correct_empty : mem_correct EmptyMem.
 Proof. unfold mem_correct; eauto using Value,IRTyping. Qed.
 
 
-Ltac breakIndexDec :=
-  repeat match goal with
-  | [ |- context C [Nat.eq_dec ?V1 ?V2] ] =>
-    destruct (Nat.eq_dec V1 V2)
-  | [ |- context C [Index_dec ?V1 ?V2] ] =>
-    destruct (Index_dec V1 V2)
-  end.
-
-
 Lemma mem_correct_update : forall m a idx e,
-  mem_correct m -> Value e -> MEmpty |= e : IRTStar ->
-      mem_correct (Update a idx e m).
+  mem_correct m -> forall Ve :Value e, MEmpty |= e : IRTStar ->
+      mem_correct (Update a idx (EV e Ve) m).
 Proof.
   intros m a idx e Hmc.
   unfold mem_correct; intros.
   simpl.
-  breakIndexDec; eauto using IRTyping,Value.
+  breakIndexDec; eauto using IRTyping.
 Qed.
 
 
@@ -463,7 +485,7 @@ Lemma mem_correct_fresh : forall m m' free,
   mem_correct m -> (free,m') = fresh m -> mem_correct m'.
 Proof.
   unfold fresh. intros m m' free Hmc Heq. inversion Heq.
-  eauto using mem_correct_update,IRTyping,Value.
+  eauto using mem_correct_update, IRTyping.
 Qed.
 
 
@@ -574,7 +596,10 @@ Proof.
           decompose [ex or and] Ht
   end; subst;
   (* try cases that became easy after breaking values *)
-  try (right; right; eauto using step, eq_refl; fail).
+  try (unshelve (right; right; eauto using step, eq_refl); trivial; fail).
+  - (* cannot find the correct sequence with StSet3 ? *)
+    right. right. eexists. eexists.
+    eapply StSet3; eauto.
   - (* unboxing has to handle success vs. failure *)
     match goal with | [t1:Tag, t2:Tag |- _] => destruct (dec_Tag t1 t2) end;
     right; subst; eauto using step, stepF.

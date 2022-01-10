@@ -77,26 +77,25 @@ Qed.
 Fixpoint dynMem (m : Mem) : Mem :=
   match m with
   | EmptyMem => EmptyMem
-  | Update a n e m => Update a n (dyn e) (dynMem m)
+  | Update a n (EV e ve) m =>
+      Update a n (EV (dyn e) (dynValue e ve)) (dynMem m)
   end.
 
 Lemma dynMemEmpty : MEmpty = dynGamma MEmpty.
 Proof. trivial. Qed.
 
 
-
 Lemma dynMemCorrect : forall m, mem_correct m -> mem_correct (dynMem m).
 Proof.
   unfold mem_correct.
-  intros m H a n. specialize (H a n) as [? ?].
-  induction m; split;
-  auto using Value;
-  simpl in *; breakIndexDec;
+  intros m H a n. specialize (H a n).
+  induction m.
+  - eauto using Value.
+  - destruct e.
+    simpl in *; breakIndexDec; trivial;
     try (apply IHm; easy).
-  - auto using dynValue.
-  - rewrite dynMemEmpty; eauto using dynTyping.
+    rewrite dynMemEmpty; eauto using dynTyping.
 Qed.
-
 
 
 Axiom DynIndex : forall e, ToIndex e = ToIndex (dyn e).
@@ -104,9 +103,10 @@ Axiom DynIndex : forall e, ToIndex e = ToIndex (dyn e).
 Lemma dynQuery : forall m a idx,
     dyn (query a idx m) = query a (dyn idx) (dynMem m).
 Proof.
-  intros. induction m; simpl; trivial.
+  intros. induction m; trivial.
+  destruct e.
+  simpl.
   rewrite <- DynIndex.
   breakIndexDec; trivial.
 Qed.
-
 

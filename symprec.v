@@ -17,9 +17,7 @@ Set Implicit Arguments.
 Inductive PrecMem : Mem -> Mem -> Prop :=
 | PrecMemE : PrecMem EmptyMem EmptyMem
 | PrecMemUD : forall addr idx v1 v2 m1 m2,
-    Value v1 ->
-    Value v2 ->
-    Precision PEmpty v1 IRTStar v2 IRTStar ->
+    Precision PEmpty (EV2Val v1) IRTStar (EV2Val v2) IRTStar ->
     PrecMem m1 m2 ->
     PrecMem (Update addr idx v1 m1) (Update addr idx v2 m2)
 .
@@ -33,7 +31,7 @@ Proof.
   unfold mem_correct.
   intros * H.
   induction H; intros *; simpl.
-  - eauto using Value, IRTyping.
+  - eauto using IRTyping.
   - breakIndexDec; subst; eauto using PrecisionType1Empty.
 Qed.
 
@@ -43,7 +41,7 @@ Proof.
   unfold mem_correct.
   intros * H.
   induction H; intros *; simpl.
-  - eauto using Value, IRTyping.
+  - eauto using IRTyping.
   - breakIndexDec; subst; eauto using PrecisionType2Empty.
 Qed.
 
@@ -66,7 +64,7 @@ Proof.
   injection HF; intros; subst; clear HF.
   replace (freshaux m2) with (freshaux m1) by auto using PrecFreshaux.
   eexists. split; only 2: trivial;
-  eauto 6 using PrecMem, Value, Precision.
+  eauto using PrecMem, Precision.
 Qed.
 
 
@@ -90,11 +88,11 @@ Qed.
 
 Lemma PrecUpdate : forall m1 m2 a i1 i2 v1 v2,
     m1 <M| m2 ->
-    Value v1 ->
-    Value v2 ->
+    forall (vv1 : Value v1) (vv2 : Value v2),
     Precision PEmpty i1 IRTStar i2 IRTStar ->
     Precision PEmpty v1 IRTStar v2 IRTStar ->
-    Update a (ToIndex i1) v1 m1 <M| Update a (ToIndex i2) v2 m2.
+    Update a (ToIndex i1) (EV v1 vv1) m1 <M|
+    Update a (ToIndex i2) (EV v2 vv2) m2.
 Proof.
   intros * HOM HV1 HV2 HP1 HP2.
   rewrite <- (PrecIndex HP1).
@@ -208,6 +206,14 @@ Proof.
 Qed.
 
 
+Lemma UpdateDiff : forall m a idx v, m <> Update a idx v m.
+Proof.
+  induction m; intros * contra.
+  - discriminate.
+  - eapply IHm. injection contra; eauto.
+Qed.
+
+
 Lemma stepValueMem : forall e1 e2 e2' t1 t2 m m',
     Precision PEmpty e1 t1 e2 t2 ->
     Value e1 ->
@@ -220,6 +226,8 @@ Proof.
   generalize dependent e2'.
   induction HP; intros * HStep; inversion HV;
   inversion HStep; subst; eauto using Precision.
+  specialize (IHHP eq_refl H0 e2' m _ HStep).
+  apply UpdateDiff in IHHP. destruct IHHP.
 Qed.
 
 
@@ -449,14 +457,14 @@ Proof.
 
     specialize (CatchUp m2 HP1 (Vtbl a)) as [? [? ?]].
     specialize (CatchUp m2 HP2 H5) as [? [? ?]].
-    specialize (CatchUp m2 HP3 H6) as [? [? ?]].
+    specialize (CatchUp m2 HP3 Vv0) as [? [? ?]].
 
     assert (N1: x = IREAddr a). {
       specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
-    exists x1. exists (Update a x0 x1 m2). split; try split;
+    exists x1. exists (Update a x0 (EV x1 H4) m2). split; try split;
       eauto 10 using multiTrans, CongSet1, CongSet2, CongSet3,
         multistep1, step, Precision, PrecQuery, PrecisionPreservationM,
         PrecUpdate.

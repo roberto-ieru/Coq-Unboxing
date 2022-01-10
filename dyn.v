@@ -81,20 +81,22 @@ Fixpoint dynMem (m : Mem) : Mem :=
       Update a n (EV (dyn e) (dynValue e ve)) (dynMem m)
   end.
 
-Lemma dynMemEmpty : MEmpty = dynGamma MEmpty.
-Proof. trivial. Qed.
+
+Lemma dynMemEmpty : forall e,
+    MEmpty |= e : IRTStar -> MEmpty |= dyn e : IRTStar.
+Proof.
+  intros e H.
+  replace MEmpty with (dynGamma MEmpty) by trivial.
+  eauto using dynTyping.
+Qed.
 
 
 Lemma dynMemCorrect : forall m, mem_correct m -> mem_correct (dynMem m).
 Proof.
-  unfold mem_correct.
-  intros m H a n. specialize (H a n).
-  induction m.
-  - eauto using Value.
-  - destruct e.
-    simpl in *; breakIndexDec; trivial;
-    try (apply IHm; easy).
-    rewrite dynMemEmpty; eauto using dynTyping.
+  intros * HM.
+  induction HM.
+  - auto using mem_correct.
+  - destruct v. eauto using mem_correct, dynMemEmpty.
 Qed.
 
 

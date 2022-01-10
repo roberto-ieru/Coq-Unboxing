@@ -448,8 +448,12 @@ Ltac breakIndexDec :=
 
 
 
-Definition mem_correct (m : Mem) :=
-  forall a n, MEmpty |= (query a n m) : IRTStar.
+Inductive mem_correct : Mem -> Prop :=
+| MCE : mem_correct EmptyMem
+| MCU : forall a idx v m,
+     MEmpty |= EV2Val v : IRTStar ->
+     mem_correct m ->
+     mem_correct (Update a idx v m).
 
 
 Lemma MCValue : forall m a n, Value (query a n m).
@@ -463,21 +467,11 @@ Qed.
 
 Lemma MCTy : forall m a n Γ,
     mem_correct m -> Γ |= (query a n m) : IRTStar.
-Proof. intros. apply typing_empty. apply H. Qed.
-
-
-Lemma mem_correct_empty : mem_correct EmptyMem.
-Proof. unfold mem_correct; eauto using Value,IRTyping. Qed.
-
-
-Lemma mem_correct_update : forall m a idx e,
-  mem_correct m -> forall Ve :Value e, MEmpty |= e : IRTStar ->
-      mem_correct (Update a idx (EV e Ve) m).
 Proof.
-  intros m a idx e Hmc.
-  unfold mem_correct; intros.
-  simpl.
-  breakIndexDec; eauto using IRTyping.
+  intros.
+  induction H.
+  - eauto using typing_empty, IRTyping.
+  - simpl. breakIndexDec; auto using typing_empty.
 Qed.
 
 
@@ -485,7 +479,7 @@ Lemma mem_correct_fresh : forall m m' free,
   mem_correct m -> (free,m') = fresh m -> mem_correct m'.
 Proof.
   unfold fresh. intros m m' free Hmc Heq. inversion Heq.
-  eauto using mem_correct_update, IRTyping.
+  eauto using mem_correct, IRTyping.
 Qed.
 
 
@@ -500,7 +494,7 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HTy; intros e' m' Hst; inversion Hst; subst;
-  eauto using mem_correct_fresh,mem_correct_update.
+  eauto using mem_correct_fresh, mem_correct.
 Qed.
 
 
@@ -722,11 +716,11 @@ Lemma CongFunApp2 : forall e1, Value e1 -> forall m e m' e',
     m / e -->* m' / e' ->  m / IREFunApp e1 e -->* m' / IREFunApp e1 e'.
 Proof. intros e1 HV; finishmExp. Qed.
 
-Lemma CongBox : forall m e m' e' g, 
+Lemma CongBox : forall m e m' e' g,
     m / e -->* m' / e' -> m / IREBox g e -->* m' / IREBox g e'.
 Proof. finishmExp. Qed.
 
-Lemma CongUnbox : forall m e m' e' g, 
+Lemma CongUnbox : forall m e m' e' g,
     m / e -->* m' / e' -> m / IREUnbox g e -->* m' / IREUnbox g e'.
 Proof. finishmExp. Qed.
 

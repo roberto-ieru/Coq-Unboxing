@@ -685,7 +685,7 @@ Qed.
 
 
 Theorem PrecDynEqual : forall Γ e1 t1 e2 t2,
-    Precision Γ e1 t1 e2 t2 -> dyn e1 = dyn e2.
+    Precision Γ e1 t1 e2 t2 -> dyn e2 = dyn e1.
 Proof.
   intros * HP. induction HP; simpl; congruence.
 Qed.

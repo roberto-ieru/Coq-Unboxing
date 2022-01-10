@@ -26,23 +26,28 @@ Inductive PrecMem : Mem -> Mem -> Prop :=
 Infix "<M|" := PrecMem (at level 80).
 
 
+Lemma PrecMemRefl : forall m,
+    mem_correct m -> m <M| m.
+Proof.
+  intros m Hm.
+  induction Hm; constructor; trivial.
+  apply PrecisionRefl. trivial.
+Qed.
+
+
 Lemma PrecCorrect1 : forall m1 m2, m1 <M| m2 -> mem_correct m1.
 Proof.
-  unfold mem_correct.
   intros * H.
-  induction H; intros *; simpl.
-  - eauto using IRTyping.
-  - breakIndexDec; subst; eauto using PrecisionType1Empty.
+  induction H; intros *; simpl;
+  eauto using mem_correct, PrecisionType1Empty.
 Qed.
 
 
 Lemma PrecCorrect2 : forall m1 m2, m1 <M| m2 -> mem_correct m2.
 Proof.
-  unfold mem_correct.
   intros * H.
-  induction H; intros *; simpl.
-  - eauto using IRTyping.
-  - breakIndexDec; subst; eauto using PrecisionType2Empty.
+  induction H; intros *; simpl;
+  eauto using mem_correct, PrecisionType2Empty.
 Qed.
 
 
@@ -548,7 +553,12 @@ Proof.
   intros * HSt Hty HM HV.
   assert(Precision PEmpty e1 t1 (dyn e1) IRTStar) by
     eauto using PrecisionIrrel, Env2DynEmpty, DynLessPrecise.
-(*  specialize (SymM Hst HV H *)
-Abort.
+  assert (m1 <M| m1) by auto using PrecMemRefl.
+  specialize (SymM HSt HV H H0) as [? [? [? [? [? ?]]]]].
+  eexists x. eexists. repeat split;
+  eauto using PrecDynEqual.
+Qed.
+
+
 
 

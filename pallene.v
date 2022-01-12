@@ -256,10 +256,8 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   | PEVar var => IREVar var
   | PEFun var T body => let Γ' := (var |=> T; Γ) in
         IREFun var IRTStar
-          (IREFunApp
-             (IREFun var (PT2IRT T)
+          (IRELet var (PT2IRT T) (<PT2Base T <= BStar> (IREVar var))
                      (<BStar <= tagOf Γ' body> (Pall2Lir Γ' body)))
-             (<PT2Base T <= BStar> (IREVar var)))
   | PEApp e1 e2 => <tagOf Γ e <= BStar>
          (IREFunApp (Pall2Lir Γ e1)
                   (<BStar <= (tagOf Γ e2)> Pall2Lir Γ e2))
@@ -364,9 +362,8 @@ Proof with eauto using IRTyping.
       eauto using IRTyping.
 
   - (* Fun *)
-    apply IRTyFun. eapply IRTyFunApp.
-    + eapply IRTyFun.
-      destruct (tagOf (var |=> Tvar; Γ)) eqn:?; subst.
+    apply IRTyFun. eapply IRTyLet.
+    + destruct (tagOf (var |=> Tvar; Γ)) eqn:?; subst.
       * apply IRTyBox.
         eapply envExt.
         ** eapply inclusion_shadow'.

@@ -326,6 +326,14 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
     Precision Γ v1 IRTStar v2 IRTStar ->
     Precision Γ (IRESet d1 i1 v1) IRTStar (IRESet d2 i2 v2) IRTStar
 
+(* Γ⊑, x : σ ⊑ τ ⊢ d₂ ⊑ e₂ : σ′ ⊑ τ′    Γ⊑ ⊢ d₁ ⊑ e₁ : σ ⊑ τ
+   -------------------------------------------------------
+   Γ⊑ ⊢ let x:σ = d₁ in d₂ ⊑ let x:τ = e₁ in e₂ : σ′ ⊑ τ′	*)
+| PLet : forall Γ var d1 t1 d2 t2 b1 t1' b2 t2' H12,
+    Precision (ExpandPEnv Γ var t1 t2 H12) b1 t1' b2 t2' ->
+    Precision Γ d1 t1 d2 t2 ->
+    Precision Γ (IRELet var t1 d1 b1) t1' (IRELet var t2 d2 b2) t2'
+
 (* Γ⊑, x : σ ⊑ τ ⊢ d ⊑ e : σ′ ⊑ τ′
    ------------------------------------------------
    Γ⊑ ⊢ (λx:σ.d) ⊑ (λx:τ.e) : fun[σ→σ′] ⊑ fun[τ→τ′]	*)
@@ -528,8 +536,11 @@ Lemma PrecisionType1: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv1 Γ) |= e1 : t1.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
-  induction HP; subst; eauto using IRTyping.
-  rewrite Expand1 in IHHP. eauto using IRTyping.
+  induction HP; subst;
+  try match goal with
+    [H: context [PEnv1 (ExpandPEnv _ _ _ _ _)] |- _] =>
+      rewrite Expand1 in H end;
+  eauto using IRTyping.
 Qed.
 
 
@@ -546,8 +557,11 @@ Lemma PrecisionType2: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv2 Γ) |= e2 : t2.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
-  induction HP; subst; eauto using IRTyping.
-  rewrite Expand2 in IHHP. eauto using IRTyping.
+  induction HP; subst;
+  try match goal with
+    [H: context [PEnv2 (ExpandPEnv _ _ _ _ _)] |- _] =>
+      rewrite Expand2 in H end;
+  eauto using IRTyping.
 Qed.
 
 
@@ -565,11 +579,7 @@ Lemma PrecisionType: forall Γ e t,
 Proof.
   intros Γ e t.
   split; intros H.
-  - induction H; eauto using Precision, TPrecisionRefl.
-    + assert (Γ |= IREFun var t body : IRTFun t t') by eauto using IRTyping.
-      auto using PrecisionRefl.
-    + assert (Γ |= IREUnbox tg e : t) by eauto using IRTyping.
-      auto using PrecisionRefl.
+  - induction H; eapply PrecisionRefl; eauto using IRTyping.
   - apply PrecisionType1 in H.
     rewrite Env2Env in H. trivial.
 Qed.
@@ -679,6 +689,8 @@ Proof.
   intros Γ e t H.
   induction H; simpl; eauto using Precision, TPrecision, InEnv2Dyn.
   - apply PVar; unfold PEnvDyn; simpl; eauto using InEnv2Dyn.
+  - apply PLet with (TPStar t);
+    eauto using PrecisionIrrel, EquivDyn.
   - apply PBoxR. apply PFun with (TPStar t).
     eauto using PrecisionIrrel, EquivDyn.
 Qed.

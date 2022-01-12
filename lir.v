@@ -70,6 +70,7 @@ Inductive IRE : Set :=
 | IREGet : IRE -> IRE -> IRE
 | IRESet : IRE -> IRE -> IRE -> IRE
 | IREVar : string -> IRE
+| IRELet : string -> IRType -> IRE -> IRE -> IRE
 | IREFun : string -> IRType -> IRE -> IRE
 | IREFunApp : IRE -> IRE -> IRE
 | IREBox : Tag -> IRE -> IRE
@@ -103,6 +104,10 @@ Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
     Γ |= e2 : IRTStar ->
     Γ |= e3 : IRTStar ->
     Γ |= (IRESet e1 e2 e3) : IRTStar
+| IRTyLet : forall Γ var t t' v body,
+    var |=> t; Γ |= body : t' ->
+    Γ |= v : t ->
+    Γ |= (IRELet var t v body) : t'
 | IRTyFun : forall Γ var t t' body,
     var |=> t; Γ |= body : t' ->
     Γ |= (IREFun var t body) : IRTFun t t'
@@ -282,6 +287,10 @@ Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
  | IREGet e1 e2 => IREGet ([var := y] e1) ([var := y] e2)
  | IRESet e1 e2 e3 => IRESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
  | IREVar var' => if string_dec var var' then y else e
+ | IRELet var' t v body => if string_dec var var' then
+                             IRELet var' t ([var := y] v) body
+                           else
+                             IRELet var' t ([var := y] v) ([var := y] body)
  | IREFun var' t body  => if string_dec var var' then e
                     else IREFun var' t ([var := y] body)
  | IREFunApp e1 e2 => IREFunApp ([var := y] e1) ([var := y] e2)
@@ -365,6 +374,12 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     Value idx ->
     forall Vv : Value v,
     m / IRESet (IREAddr a) idx v --> Update a idx (EV v Vv) m / v
+| StLet1 : forall var t body m e m' e',
+    m / e --> m' / e' ->
+    m / IRELet var t e body --> m' / IRELet var t e' body
+| StLet : forall var t e body m,
+    Value e ->
+    m / IRELet var t e body --> m / [var := e] body
 | StFunapp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / IREFunApp e1 e2 --> m' / IREFunApp e1' e2
@@ -374,8 +389,7 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     m / IREFunApp e1 e2 --> m' / IREFunApp e1 e2'
 | StFunapp : forall m var t body v2,
     Value v2 ->
-    m / IREFunApp (IREFun var t body) v2 -->
-    m / [var := v2] body
+    m / IREFunApp (IREFun var t body) v2 --> m / [var := v2] body
 | StBox1 : forall m t e m' e',
     m / e --> m' / e' ->
     m / IREBox t e --> m' / IREBox t e'
@@ -415,6 +429,9 @@ Inductive stepF : Mem -> IRE -> Prop :=
     Value e1 -> Value e2 ->
     m / e3 --> fail ->
     m / IRESet e1 e2 e3 --> fail
+| StLet1F : forall var t e body m,
+    m / e --> fail ->
+    m / IRELet var t e body --> fail
 | StFunapp1F : forall m e1 e2,
     m / e1 --> fail ->
     m / IREFunApp e1 e2 --> fail
@@ -707,6 +724,11 @@ Proof. intros e1 HV e3; finishmExp. Qed.
 Lemma CongSet3 : forall e1 e2, Value e1 -> Value e2 -> forall m e m' e',
     m / e -->* m' / e' ->  m / IRESet e1 e2 e -->* m' / IRESet e1 e2 e'.
 Proof. intros e1 e2 HV1 HV2; finishmExp. Qed.
+
+Lemma CongLet : forall var t body m e m' e',
+    m / e -->* m' / e' ->
+    m / IRELet var t e body -->* m' / IRELet var t e' body.
+Proof. finishmExp. Qed.
 
 Lemma CongFunApp1 : forall e2 m e m' e',
     m / e -->* m' / e' ->  m / IREFunApp e e2 -->* m' / IREFunApp e' e2.

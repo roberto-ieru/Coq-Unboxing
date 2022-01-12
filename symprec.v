@@ -105,22 +105,6 @@ Proof.
 Qed.
 
 
-(*
-Lemma subst_typing : forall e2 Γ var tv te e1,
-  var |=> tv; Γ |= e2 : te -> MEmpty |= e1 : tv ->
-       Γ |= ([var := e1] e2) : te.
-Proof.
-  induction e2; intros Γ var tv te e1 HT2 HT1;
-  simpl; inversion HT2; subst;
-  breakStrDec;
-  eauto 6 using inclusion_typing, inclusion_shadow, inclusion_permute,
-    IRTyping, typing_empty, InNotEq.
-  - assert (te = tv). { rewrite InEq in H1. congruence. }
-      subst. eauto using typing_empty.
-Qed.
-*)
-
-
 Lemma PrecSubs : forall body Γ Γ' var  body' v1 v2 t1 t2 t1' t2'
                         (H12: t1 <| t2),
     Precision PEmpty v1 t1 v2 t2 ->
@@ -130,9 +114,15 @@ Lemma PrecSubs : forall body Γ Γ' var  body' v1 v2 t1 t2 t1' t2'
 Proof.
   intros * HPV HPE HPB.
   generalize dependent Γ.
-  induction HPB; intros ? HPE; eauto using Precision.
+  induction HPB; intros ? HPE; eauto using Precision;
+  try ( simpl;
+    breakStrDec;
+      unshelve (econstructor;
+      eauto using PrecisionIrrel, PEquivTrans, PEquivShadow, PEquivPermute,
+                  ExpandEquiv, PEquivSym); trivial; fail).
 
-  - simpl.
+  - (* variable *)
+    simpl.
     destruct HPE.
     specialize (H1 var0).
     specialize (H2 var0).
@@ -150,17 +140,6 @@ Proof.
         congruence.
       * rewrite InNotEq' in H2;
         congruence.
-
-  - simpl.
-    breakStrDec.
-    + eapply PFun.
-      eauto using PrecisionIrrel, PEquivTrans, PEquivShadow, ExpandEquiv,
-                  PEquivSym.
-      Unshelve. trivial. trivial.
-    + apply PFun with (H12 := H0).
-      eauto using PrecisionIrrel, PEquivTrans, PEquivPermute, ExpandEquiv,
-                  PEquivSym.
-      Unshelve. trivial.
 Qed.
 
 
@@ -387,7 +366,8 @@ Proof.
   inversion Hstep; subst; repeat BreakIH;
   (* Handle all "first" cases *)
   try (eexists; eexists; split; try split;
-    eauto using Precision, CongPlus1, CongGet1, CongSet1, CongFunApp1;
+    eauto using Precision, CongPlus1, CongGet1, CongSet1, CongLet,
+                CongFunApp1;
     fail).
 
   + (* StPlus2 *)
@@ -474,6 +454,13 @@ Proof.
         multistep1, step, Precision, PrecQuery, PrecisionPreservationM,
         PrecUpdate.
 
+  + (* StLet *)
+    clear IHHP1 IHHP2.
+    specialize (CatchUp m2 HP2 H6) as [? [? ?]].
+    eexists ([var := x] b2); exists m2; split; try split;
+      eauto using multiTrans, CongLet, multistep1, step,
+                  PrecSubs, PrecisionPreservationM, PEquivRefl.
+
   + (* StFunApp2 *)
     specialize (CatchUp m2 HP2 H2) as [? [? ?]].
     eexists; exists x0; split; try split;
@@ -558,7 +545,4 @@ Proof.
   eexists x. eexists. repeat split;
   eauto using PrecDynEqual.
 Qed.
-
-
-
 

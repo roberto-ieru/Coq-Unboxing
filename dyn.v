@@ -22,6 +22,7 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1)) (dyn e2)
   | IRESet e1 e2 e3 => IRESet (IREUnbox TgTbl (dyn e1)) (dyn e2) (dyn e3)
   | IREVar var => IREVar var
+  | IRELet var t e body => IRELet var IRTStar (dyn e) (dyn body)
   | IREFun var t exp => IREBox TgFun (IREFun var IRTStar (dyn exp))
   | IREFunApp e1 e2 => IREFunApp (IREUnbox TgFun (dyn e1)) (dyn e2)
   | IREBox _ e => dyn e

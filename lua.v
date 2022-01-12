@@ -12,7 +12,6 @@ Require Import LIR.maps.
 Require Import LIR.pallene.
 Require Import LIR.lir.
 Require Import LIR.dyn.
-Require Import LIR.biglir.
 
 
 Inductive LE : Set :=
@@ -59,8 +58,7 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   | LEAddr a => IREBox TgTbl (IREAddr a)
   | LEVar var => IREVar var
   | LEFun var body =>
-      IREBox TgFun (IREFun var
-        (IRELet var IRTStar (IREVar var) (Lua2Lir body)))
+      IREBox TgFun (IREFun var IRTStar (Lua2Lir body))
   | LEApp e1 e2 => IREFunApp (IREUnbox TgFun (Lua2Lir e1)) (Lua2Lir e2)
   end.
 
@@ -80,7 +78,7 @@ Fixpoint Pall2Lua (e : PE) : LE :=
   end.
 
 
-Lemma dynCast : forall (t1 t2 : IRType) (e : IRE),
+Lemma dynCast : forall (t1 t2 : BaseType) (e : IRE),
     dyn (Cast t1 t2 e) = dyn e.
 Proof.
   intros t1 t2 e.
@@ -90,8 +88,37 @@ Proof.
 Qed.
 
 
+Fixpoint opt (e : IRE) : IRE :=
+  match e with
+  | IRENil => e
+  | IRENum _ => e
+  | IREPlus e1 e2 => IREPlus (opt e1) (opt e2)
+  | IRECnst => e
+  | IREAddr _ => e
+  | IREGet e1 e2 => IREGet (opt e1) (opt e2)
+  | IRESet e1 e2 e3 => IRESet (opt e1) (opt e2) (opt e3)
+  | IREVar _ => e
+  (* λx:t.(e x)  -->  e *)
+  | IREFun v t b =>
+    match (opt b) with
+    | IREFunApp e (IREVar v') => if string_dec v v' then e
+                                 else IREFun v t (IREFunApp e (IREVar v'))
+    | e' => e'
+    end
+  | IREFunApp e1 e2 => IREFunApp (opt e1) (opt e2)
+  | IREBox tg e => IREBox tg (opt e)
+  | IREUnbox tg e =>
+      (* optimize unbox[t](box[t](e)) --> e *)
+      match (opt e) with
+      | IREBox tg' e' => if dec_Tag tg tg' then e'
+                         else IREUnbox tg (IREBox tg' e')
+      | e' => e'
+      end
+  end.
+
+
 Theorem PallLua : forall Γ e t,
-    PTyping Γ e t -> Lua2Lir (Pall2Lua e) = dyn (Pall2Lir Γ e).
+    PTyping Γ e t -> opt (Lua2Lir (Pall2Lua e)) = opt (dyn (Pall2Lir Γ e)).
 Proof.
   intros Γ e.
   generalize dependent Γ.
@@ -106,9 +133,23 @@ Proof.
   (* eliminate casts *)
   simpl;
   repeat rewrite dynCast;
+  (* break if's from casts *)
+  simpl;
   repeat match goal with [ |- context [tagOf ?G ?E] ] =>
     destruct (tagOf G E) end;
-  simpl; congruence.
+  simpl;
+  (* break if's from 'opt' *)
+  repeat match goal with [ |- context [dec_Tag ?T1 ?T2] ] =>
+    destruct (dec_Tag T1 T2) end;
+  simpl;
+  repeat match goal with [ |- context [string_dec ?T1 ?T2] ] =>
+    destruct (string_dec T1 T2) end;
+  try easy;
+  (* propagate equalities *)
+  try (repeat match goal with
+    [ H: _ = _ |- _ ] => rewrite H
+    end; easy);
+  try congruence.
 Qed.
 
 

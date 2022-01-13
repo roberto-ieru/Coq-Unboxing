@@ -342,6 +342,23 @@ Ltac NoValueUnbox :=
   end.
 
 
+(* Try to instantiate CatchUp. First, find a precision relation HP.
+   If its E' already progresses, there is nothing to be done. (Probably
+   the tactic already handled that case.) Otherwise, try to prove
+   that E is a value. If so, instantiate CatchUp. *)
+Ltac doCatchUp :=
+  match goal with
+  [ HP: Precision _ ?E _ ?E' _ |- context [?M / _ -->* _ / _] ] =>
+      match goal with
+      | [ H: _ / E' -->* _ / _  |- _ ] => fail 1  (* already done *)
+      | [ |- _ ] =>  (* otherwise *)
+        assert (HXX: Value E) by eauto using Value;
+        specialize (CatchUp M HP HXX) as [? [? ?]];
+        clear HXX
+      end
+  end.
+
+
 Theorem Sym : forall m1 e1 t1 e2 m2 t2 m1' e1',
   Precision PEmpty e1 t1 e2 t2 ->
   m1 / e1 --> m1' / e1'   ->
@@ -368,18 +385,18 @@ Proof.
   try (eexists; eexists; split; try split;
     eauto using Precision, CongPlus1, CongGet1, CongSet1, CongLet,
                 CongFunApp1;
-    fail).
+    fail);
+
+    repeat doCatchUp.
 
   + (* StPlus2 *)
-    specialize (CatchUp m2 HP1 H2) as [? [? ?]].
+    clear IHHP1.
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongPlus1, CongPlus2,
                   Precision, PrecisionPreservationM.
 
   + (* StPlus *)
     clear IHHP1 IHHP2.
-    specialize (CatchUp m2 HP1 (Vnum n1)) as [? [? ?]].
-    specialize (CatchUp m2 HP2 (Vnum n2)) as [? [? ?]].
 
     assert (N1: x = IRENum n1). {
       specialize (PrecisionPreservationM HP1 (Vnum n1) H) as NH1.
@@ -404,16 +421,12 @@ Proof.
 
 
   + (* StGet2 *)
-    specialize (CatchUp m2 HP1 H2) as [? [? ?]].
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongGet1, CongGet2,
                   Precision, PrecisionPreservationM.
 
   + (* StGet *)
     clear IHHP1 IHHP2.
-
-    specialize (CatchUp m2 HP1 (Vtbl a)) as [? [? ?]].
-    specialize (CatchUp m2 HP2 H4) as [? [? ?]].
 
     assert (N1: x = IREAddr a). {
       specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
@@ -425,14 +438,12 @@ Proof.
          Precision, PrecQuery, PrecisionPreservationM.
 
   + (* StSet2 *)
-    specialize (CatchUp m2 HP1 H5) as [? [? ?]].
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongSet1, CongSet2,
                   Precision, PrecisionPreservationM.
 
   + (* StSet3 *)
-    specialize (CatchUp m2 HP1 H3) as [? [? ?]].
-    specialize (CatchUp m2 HP2 H6) as [? [? ?]].
+   clear IHHP1 IHHP2.
     eexists; exists x0; split; try split;
       eauto 6 using multiTrans, CongSet1, CongSet2, CongSet3,
                   Precision, PrecisionPreservationM.
@@ -440,29 +451,25 @@ Proof.
   + (* StSet *)
     clear IHHP1 IHHP2 IHHP3.
 
-    specialize (CatchUp m2 HP1 (Vtbl a)) as [? [? ?]].
-    specialize (CatchUp m2 HP2 H5) as [? [? ?]].
-    specialize (CatchUp m2 HP3 Vv0) as [? [? ?]].
-
     assert (N1: x = IREAddr a). {
       specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
-    exists x1. exists (Update a x0 (EV x1 H4) m2). split; try split;
-      eauto 10 using multiTrans, CongSet1, CongSet2, CongSet3,
+    exists x1. eexists.
+    split; try split;
+      eauto 9 using multiTrans, CongSet1, CongSet2, CongSet3,
         multistep1, step, Precision, PrecQuery, PrecisionPreservationM,
         PrecUpdate.
+    Unshelve. trivial.
 
   + (* StLet *)
     clear IHHP1 IHHP2.
-    specialize (CatchUp m2 HP2 H6) as [? [? ?]].
     eexists ([var := x] b2); exists m2; split; try split;
       eauto using multiTrans, CongLet, multistep1, step,
                   PrecSubs, PrecisionPreservationM, PEquivRefl.
 
   + (* StFunApp2 *)
-    specialize (CatchUp m2 HP2 H2) as [? [? ?]].
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongFunApp1, CongFunApp2,
                   Precision, PrecisionPreservationM.
@@ -472,9 +479,6 @@ Proof.
 
     replace t with t1 in * by
       (apply PrecisionType1 in HP2; inversion HP2; subst; trivial).
-
-    specialize (CatchUp m2 HP1 H4) as [? [? ?]].
-    specialize (CatchUp m2 HP2 (Vfun var t1 body)) as [? [? ?]].
 
     assert (N1: exists body', x0 = IREFun var t2 body'). {
       specialize (PrecisionPreservationM HP2 (Vfun var t1 body) H1) as NH1.
@@ -490,11 +494,9 @@ Proof.
 
   + (* StUnbox *)
     clear IHHP.
-    specialize (CatchUp m2 HP (Vbox g e1' H5)) as [? [? ?]].
-
     inversion HP; subst; ContraTags.
     * exfalso. apply PPT in H1. ContraTags.
-    * specialize (@ValueStarP _ _ _ _ _ _ H3 (TPrecisionRefl (Tag2Type g))
+    * specialize (ValueStarP _ H3 (TPrecisionRefl (Tag2Type g))
         H5 H H0) as [? [? ?]].
       subst.
       eexists; eexists; split; try split; eauto.

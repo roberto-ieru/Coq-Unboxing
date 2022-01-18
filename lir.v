@@ -164,6 +164,24 @@ Inductive Value : IRE -> Prop :=
 .
 
 
+Fixpoint isValue (e : IRE) : bool :=
+  match e with
+  | IRENil => true
+  | IRENum _ => true
+  | IREAddr _ => true
+  | IREFun _ _ _ => true
+  | IREBox _ e => isValue e
+  | _ => false
+  end.
+
+
+Lemma isValueCorrect : forall e, Value e <-> isValue e = true.
+Proof.
+  split; induction e; intros H; trivial;
+  inversion H; subst; eauto using Value.
+Qed.
+
+
 Lemma valBoxVal : forall gt e, Value (IREBox gt e) -> Value e.
 Proof.
   intros * HV.
@@ -462,7 +480,6 @@ Ltac breakIndexDec :=
     destruct (Index_dec V1 V2) eqn:? ;
   try easy
   end.
-
 
 
 Inductive mem_correct : Mem -> Prop :=

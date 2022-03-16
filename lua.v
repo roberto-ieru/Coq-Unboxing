@@ -58,7 +58,7 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   | LEAddr a => IREBox TgTbl (IREAddr a)
   | LEVar var => IREVar var
   | LEFun var body =>
-      IREBox TgFun (IREFun var IRTStar
+      IREBox TgFun (IREFun var
          (IRELet var IRTStar (IREVar var) (Lua2Lir body)))
   | LEApp e1 e2 => IREFunApp (IREUnbox TgFun (Lua2Lir e1)) (Lua2Lir e2)
   end.

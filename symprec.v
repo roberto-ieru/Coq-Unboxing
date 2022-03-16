@@ -119,7 +119,8 @@ Proof.
     breakStrDec;
       unshelve (econstructor;
       eauto using PrecisionIrrel, PEquivTrans, PEquivShadow, PEquivPermute,
-                  ExpandEquiv, PEquivSym); trivial; fail).
+                  ExpandEquiv, PEquivSym);
+      auto using TPrecisionRefl; fail).
 
   - (* variable *)
     simpl.
@@ -143,11 +144,11 @@ Proof.
 Qed.
 
 
-Lemma PrecSubs' : forall var t1 t2 t1' t2' body body' v1 v2,
-    Precision PEmpty (IREFun var t1 body) (IRTFun t1 t1')
-                     (IREFun var t2 body') (IRTFun t2 t2') ->
-    Precision PEmpty v1 t1 v2 t2 ->
-    Precision PEmpty ([var := v1] body) t1' ([var := v2] body') t2'.
+Lemma PrecSubs' : forall var body body' v1 v2,
+    Precision PEmpty (IREFun var body) IRTFun
+                     (IREFun var body') IRTFun ->
+    Precision PEmpty v1 IRTStar v2 IRTStar ->
+    Precision PEmpty ([var := v1] body) IRTStar ([var := v2] body') IRTStar.
 Proof.
   intros * HPF HPV.
   inversion HPF; subst.
@@ -184,9 +185,6 @@ Proof.
     replace t with (Tag2Type g') in HT by (subst; trivial);
     symmetry;
     eauto using GroundFlat).
-  injection Heq; intros; subst.
-  assert (IRTFun i1 i2 <| Tag2Type TgFun) by (simpl; auto using TPrecision).
-  eauto using GroundTop.
 Qed.
 
 
@@ -477,11 +475,8 @@ Proof.
   + (* StFunApp *)
     clear IHHP1 IHHP2.
 
-    replace t with t1 in * by
-      (apply PrecisionType1 in HP2; inversion HP2; subst; trivial).
-
-    assert (N1: exists body', x0 = IREFun var t2 body'). {
-      specialize (PrecisionPreservationM HP2 (Vfun var t1 body) H1) as NH1.
+    assert (N1: exists body', x0 = IREFun var body'). {
+      specialize (PrecisionPreservationM HP2 (Vfun var body) H1) as NH1.
       inversion NH1; subst; eauto; NoValueUnbox.
     }
     destruct N1 as [body' ?].

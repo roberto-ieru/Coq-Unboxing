@@ -23,7 +23,7 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IRESet e1 e2 e3 => IRESet (IREUnbox TgTbl (dyn e1)) (dyn e2) (dyn e3)
   | IREVar var => IREVar var
   | IRELet var t e body => IRELet var IRTStar (dyn e) (dyn body)
-  | IREFun var t exp => IREBox TgFun (IREFun var IRTStar (dyn exp))
+  | IREFun var exp => IREBox TgFun (IREFun var (dyn exp))
   | IREFunApp e1 e2 => IREFunApp (IREUnbox TgFun (dyn e1)) (dyn e2)
   | IREBox _ e => dyn e
   | IREUnbox _ e => dyn e
@@ -55,7 +55,6 @@ Theorem dynTyping : forall Γ e T,
 Proof with apply IRTyUnbox; trivial.
   intros Γ e T Hty.
   induction Hty; simpl; eauto using IRTyping, TP2TGammaIn.
-  - eapply IRTyFunApp; eauto...
 Qed.
 
 

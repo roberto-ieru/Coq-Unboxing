@@ -184,7 +184,7 @@ Definition PT2IRT (t : PType) : IRType := Base2Type (PT2Base t).
 
 
 Lemma PT2IRTFun : forall T1 T2,
-    PT2IRT (PTfun T1 T2) = IRTFun IRTStar IRTStar.
+    PT2IRT (PTfun T1 T2) = IRTFun.
 Proof. intros T1 T2. unfold PT2IRT. trivial. Qed.
 
 
@@ -255,7 +255,7 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
                  (<BStar <= tagOf Γ e3> Pall2Lir Γ e3))
   | PEVar var => IREVar var
   | PEFun var T body => let Γ' := (var |=> T; Γ) in
-        IREFun var IRTStar
+        IREFun var
           (IRELet var (PT2IRT T) (<PT2Base T <= BStar> (IREVar var))
                      (<BStar <= tagOf Γ' body> (Pall2Lir Γ' body)))
   | PEApp e1 e2 => <tagOf Γ e <= BStar>

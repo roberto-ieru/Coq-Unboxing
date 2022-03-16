@@ -19,23 +19,21 @@ Inductive TPrecision : IRType -> IRType -> Prop :=
 | PRNil : IRTNil <| IRTNil
 | PRInt : IRTInt <| IRTInt
 | PRTbl : IRTTbl <| IRTTbl
-| PRFun : forall t1 t2 t1' t2',
-    t1 <| t2 -> t1' <| t2' -> IRTFun t1 t1' <| IRTFun t2 t2'
+| PRFun : IRTFun <| IRTFun
 | TPStar : forall t, t <| IRTStar
 
   where "x '<|' y" := (TPrecision x y).
 
 
 Lemma TPrecisionRefl: forall t, t <| t.
-Proof. intros t. induction t; auto using TPrecision. Qed.
+Proof. intros t. destruct t; auto using TPrecision. Qed.
 
 
 Lemma TPrecisionTrans: forall t1 t2 t3,
   t1 <| t2 -> t2 <| t3 -> t1 <| t3.
 Proof.
-  intros t1 t2 t3 H12.
-  generalize dependent t3.
-  induction H12; intros ? H23; auto using TPrecision;
+  intros * H12 H23.
+  destruct H12; auto using TPrecision.
   inversion H23; subst; auto using TPrecision.
 Qed.
 
@@ -44,15 +42,7 @@ Lemma TPrecisionAsym : forall t1 t2,
   t1 <| t2 -> t2 <| t1 -> t1 = t2.
 Proof.
   intros t1 t2 H12.
-  induction H12; intros H21; trivial; inversion H21; subst;
-  f_equal; auto.
-Qed.
-
-
-Lemma TPFun : forall t1 t2, IRTFun t1 t2 <| Tag2Type TgFun.
-Proof.
-  intros t1 t2.
-  simpl. auto using TPrecision.
+  destruct H12; intros H21; trivial; inversion H21; subst; auto.
 Qed.
 
 
@@ -334,21 +324,22 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
     Precision Γ d1 t1 d2 t2 ->
     Precision Γ (IRELet var t1 d1 b1) t1' (IRELet var t2 d2 b2) t2'
 
-(* Γ⊑, x : σ ⊑ τ ⊢ d ⊑ e : σ′ ⊑ τ′
-   ------------------------------------------------
-   Γ⊑ ⊢ (λx:σ.d) ⊑ (λx:τ.e) : fun[σ→σ′] ⊑ fun[τ→τ′]	*)
-| PFun : forall Γ var t1 t2 d1 t1' d2 t2' (H12 : t1 <| t2),
-    Precision (ExpandPEnv Γ var t1 t2 H12) d1 t1' d2 t2' ->
-    Precision Γ (IREFun var t1 d1) (IRTFun t1 t1')
-                (IREFun var t2 d2) (IRTFun t2 t2')
+(* Γ⊑, x : * ⊑ * ⊢ d ⊑ e : * ⊑ *
+   --------------------------------
+   Γ⊑ ⊢ (λx.d) ⊑ (λx.e) : fun ⊑ fun	*)
+| PFun : forall Γ var d1 d2,
+    Precision (ExpandPEnv Γ var IRTStar IRTStar (TPrecisionRefl IRTStar))
+                 d1 IRTStar d2 IRTStar ->
+    Precision Γ (IREFun var d1) IRTFun
+                (IREFun var d2) IRTFun
 
-(* Γ⊑ ⊢ d₁ ⊑ e₁ : fun[σ→σ′] ⊑ fun[τ→τ′]    Γ⊑ ⊢ d₂ ⊑ e₂ : σ ⊑ τ
-  -------------------------------------------------------------
-  Γ⊑ ⊢ d₁(d₂) ⊑ e₁(e₂) : σ′ ⊑ τ′	*)
-| PFunApp : forall Γ f1 t1 t1' v1 f2 t2 t2' v2,
-    Precision Γ v1 t1 v2 t2 ->
-    Precision Γ f1 (IRTFun t1 t1') f2 (IRTFun t2 t2') ->
-    Precision Γ (IREFunApp f1 v1) t1' (IREFunApp f2 v2) t2'
+(* Γ⊑ ⊢ d₁ ⊑ e₁ : fun ⊑ fun    Γ⊑ ⊢ d₂ ⊑ e₂ : * ⊑ *
+  -------------------------------------------------
+  Γ⊑ ⊢ d₁(d₂) ⊑ e₁(e₂) : * ⊑ *	*)
+| PFunApp : forall Γ f1 v1 f2 v2,
+    Precision Γ v1 IRTStar v2 IRTStar ->
+    Precision Γ f1 IRTFun f2 IRTFun ->
+    Precision Γ (IREFunApp f1 v1) IRTStar (IREFunApp f2 v2) IRTStar
 
 (* Γ⊑ ⊢ d ⊑ e : t ⊑ g
    ----------------------------------
@@ -402,7 +393,7 @@ Lemma UnboxCongruent: forall Γ d e g,
 Proof. eauto using Precision, TPrecisionRefl. Qed.
 
 
-Section Examples.
+Module Examples.
 
 Definition B10 := (IREBox TgInt (IRENum 10)).
 
@@ -528,7 +519,6 @@ Proof.
   intros Γ e1 t1 e2 t2 HP.
   induction HP; subst; eauto using TPrecision, TPrecisionRefl,
     PEnvIn.
-  - inversion IHHP2; subst; trivial.
 Qed.
 
 
@@ -536,7 +526,7 @@ Lemma PrecisionType1: forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> (PEnv1 Γ) |= e1 : t1.
 Proof.
   intros Γ e1 t1 e2 t2 HP.
-  induction HP; subst;
+  induction HP; subst; eauto using IRTyping;
   try match goal with
     [H: context [PEnv1 (ExpandPEnv _ _ _ _ _)] |- _] =>
       rewrite Expand1 in H end;
@@ -611,13 +601,10 @@ Lemma TagInt : forall g,
 Proof. intros g. destruct g; try easy. Qed.
 
 
-Lemma TagFun : forall g t t',
-   Tag2Type g = IRTFun t t' -> g = TgFun /\ t = IRTStar /\ t' = IRTStar.
+Lemma TagFun : forall g,
+   Tag2Type g = IRTFun -> g = TgFun.
 Proof.
-  intros g t t'.
-  destruct g; try easy.
-  intros H. simpl in H. injection H; intros; subst; intuition.
-Qed.
+  intros g. destruct g; try easy. Qed.
 
 
 Ltac EnvUnique :=
@@ -691,7 +678,7 @@ Proof.
   - apply PVar; unfold PEnvDyn; simpl; eauto using InEnv2Dyn.
   - apply PLet with (TPStar t);
     eauto using PrecisionIrrel, EquivDyn.
-  - apply PBoxR. apply PFun with (TPStar t).
+  - apply PBoxR. apply PFun.
     eauto using PrecisionIrrel, EquivDyn.
 Qed.
 

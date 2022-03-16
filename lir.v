@@ -22,7 +22,7 @@ Inductive IRType : Set :=
 | IRTNil
 | IRTInt
 | IRTTbl
-| IRTFun: IRType -> IRType -> IRType
+| IRTFun
 | IRTStar
 .
 
@@ -38,7 +38,7 @@ Definition Tag2Type (tg : Tag) : IRType :=
   | TgNil => IRTNil
   | TgInt => IRTInt
   | TgTbl => IRTTbl
-  | TgFun => IRTFun IRTStar IRTStar
+  | TgFun => IRTFun
   end.
 
 
@@ -47,7 +47,7 @@ Definition Type2Tag (t : IRType) : option Tag :=
   | IRTNil => Some TgNil
   | IRTInt => Some TgInt
   | IRTTbl => Some TgTbl
-  | IRTFun _ _ => Some TgFun
+  | IRTFun => Some TgFun
   | IRTStar => None
   end.
 
@@ -71,7 +71,7 @@ Inductive IRE : Set :=
 | IRESet : IRE -> IRE -> IRE -> IRE
 | IREVar : string -> IRE
 | IRELet : string -> IRType -> IRE -> IRE -> IRE
-| IREFun : string -> IRType -> IRE -> IRE
+| IREFun : string -> IRE -> IRE
 | IREFunApp : IRE -> IRE -> IRE
 | IREBox : Tag -> IRE -> IRE
 | IREUnbox : Tag -> IRE -> IRE
@@ -153,13 +153,13 @@ Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
     var |=> t; Γ |= body : t' ->
     Γ |= v : t ->
     Γ |= (IRELet var t v body) : t'
-| IRTyFun : forall Γ var t t' body,
-    var |=> t; Γ |= body : t' ->
-    Γ |= (IREFun var t body) : IRTFun t t'
-| IRTyFunApp : forall Γ t t' e1 e2,
-    Γ |= e1 : IRTFun t t' ->
-    Γ |= e2 : t ->
-    Γ |= (IREFunApp e1 e2) : t'
+| IRTyFun : forall Γ var body,
+    var |=> IRTStar; Γ |= body : IRTStar ->
+    Γ |= (IREFun var body) : IRTFun
+| IRTyFunApp : forall Γ e1 e2,
+    Γ |= e1 : IRTFun ->
+    Γ |= e2 : IRTStar ->
+    Γ |= (IREFunApp e1 e2) : IRTStar
 | IRTyBox : forall Γ e (tg : Tag),
     Γ |= e : (Tag2Type tg) ->
     Γ |= (IREBox tg e) : IRTStar
@@ -179,8 +179,6 @@ Proof.
   generalize dependent t'.
   induction H1; intros ? H2; inversion H2; subst; f_equal;
   auto ; try congruence.
-  assert (H: IRTFun t t' = IRTFun t0 t'0) by auto.
-  inversion H; subst; trivial.
 Qed.
 
 
@@ -195,16 +193,11 @@ Qed.
 
 
 
-Example TypeFunId : forall Γ t var,
-  Γ |= IREFun var t (IREVar var) : IRTFun t t.
-Proof. eauto using IRTyping,  InEq. Qed.
-
-
 Inductive Value : IRE -> Prop :=
 | Vnil : Value IRENil
 | Vnum : forall n, Value (IRENum n)
 | Vtbl : forall a, Value (IREAddr a)
-| Vfun : forall var t e, Value (IREFun var t e)
+| Vfun : forall var e, Value (IREFun var e)
 | Vbox : forall gt v, Value v -> Value (IREBox gt v)
 .
 
@@ -214,7 +207,7 @@ Fixpoint isValue (e : IRE) : bool :=
   | IRENil => true
   | IRENum _ => true
   | IREAddr _ => true
-  | IREFun _ _ _ => true
+  | IREFun _ _ => true
   | IREBox _ e => isValue e
   | _ => false
   end.
@@ -263,10 +256,10 @@ Proof.
 Qed.
 
 
-Lemma valfun : forall Γ e t t',
-    Γ |= e : IRTFun t t' -> Value e -> exists var b, e = IREFun var t b.
+Lemma valfun : forall Γ e,
+    Γ |= e : IRTFun -> Value e -> exists var b, e = IREFun var b.
 Proof.
-  intros Γ e t t' HT HV.
+  intros * HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
   inversion H2; subst.
@@ -353,8 +346,8 @@ Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
                              IRELet var' t ([var := y] v) body
                            else
                              IRELet var' t ([var := y] v) ([var := y] body)
- | IREFun var' t body  => if string_dec var var' then e
-                    else IREFun var' t ([var := y] body)
+ | IREFun var' body  => if string_dec var var' then e
+                    else IREFun var' ([var := y] body)
  | IREFunApp e1 e2 => IREFunApp ([var := y] e1) ([var := y] e2)
  | IREBox tg e  => IREBox tg ([var := y] e)
  | IREUnbox tg e  => IREUnbox tg ([var := y] e)
@@ -449,9 +442,9 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     Value e1 ->
     m / e2 --> m' / e2' ->
     m / IREFunApp e1 e2 --> m' / IREFunApp e1 e2'
-| StFunapp : forall m var t body v2,
+| StFunapp : forall m var body v2,
     Value v2 ->
-    m / IREFunApp (IREFun var t body) v2 --> m / [var := v2] body
+    m / IREFunApp (IREFun var body) v2 --> m / [var := v2] body
 | StBox1 : forall m t e m' e',
     m / e --> m' / e' ->
     m / IREBox t e --> m' / IREBox t e'
@@ -576,12 +569,12 @@ Proof.
 Qed.
 
 
-Lemma funcTyping :  forall var t1 t2 body e t',
-    MEmpty |= IREFun var t1 body : IRTFun t2 t' ->
-    MEmpty |= e : t2 ->
-    MEmpty |= [var := e] body : t'.
+Lemma funcTyping :  forall var body e,
+    MEmpty |= IREFun var body : IRTFun ->
+    MEmpty |= e : IRTStar ->
+    MEmpty |= [var := e] body : IRTStar.
 Proof.
-  intros var t1 t2 body e t' HT1 HT2.
+  intros * HT1 HT2.
   inversion HT1; subst; eauto using subst_typing.
 Qed.
 
@@ -600,7 +593,7 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HT; intros e' m' Hst; inversion Hst; subst;
-  eauto using IRTyping, MCTy, boxTyping, funcTyping.
+  eauto using IRTyping, MCTy, boxTyping, funcTyping, subst_typing.
 Qed.
 
 

@@ -77,6 +77,51 @@ Inductive IRE : Set :=
 | IREUnbox : Tag -> IRE -> IRE
 .
 
+
+(*
+Coercion IRENum : nat >-> IRE.
+Coercion IREVar : string >-> IRE.
+
+Declare Custom Entry IRE.
+
+Declare Scope IRE_scope.
+
+Notation "'<{' e '}>'" := e
+    (at level 0, e custom IRE at level 99) : IRE_scope.
+Notation "( x )" := x (in custom IRE, x at level 99) : IRE_scope.
+Notation "x" := x (in custom IRE at level 0, x constr at level 0) : IRE_scope.
+Notation "f x" := (IREFunApp f x)
+                  (in custom IRE at level 0,
+                  f constr at level 0, x constr at level 9) : IRE_scope.
+Notation "x + y" := (IREPlus x y)
+   (in custom IRE at level 50, left associativity).
+Notation "x '[' y ']'" := (IREGet x y)
+    (in custom IRE at level 80).
+Notation "x '[' y ']' '=' z" := (IRESet x y z)
+    (in custom IRE at level 80, z at level 90).
+Notation "{}" := (IRECnst) (in custom IRE at level 100).
+Notation "'λ' x ':' t '.' e" := (IREFun x t e)
+    (in custom IRE at level 100, e at level 110).
+Notation "'box[' t '](' x ')'" := (IREBox t x)
+    (in custom IRE at level 100).
+Notation "'unbox[' t '](' x ')'" := (IREUnbox t x)
+    (in custom IRE at level 100).
+
+(* just for examples *)
+Definition X := "X"%string.
+Definition F := "F"%string.
+
+Open Scope IRE_scope.
+
+Unset Printing Notations.
+Set Printing Coercions.
+Check <{ X[0] = X[0] + 1 }>.
+Unset Printing Coercions.
+Set Printing Notations.
+Check <{ X[0] = X[0] + 1 }>.
+
+*)
+
 Definition IREnvironment := Map IRType.
 
 

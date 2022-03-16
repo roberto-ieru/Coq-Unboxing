@@ -15,7 +15,7 @@ Inductive Tag : Set := | TgNil | TgInt | TgTbl | TgFun.
 
 
 Lemma dec_Tag : forall (t1 t2 : Tag), {t1 = t2} + {t1 <> t2}.
-Proof. decide equality. Qed.
+Proof. decide equality. Defined.
 
 
 Inductive IRType : Set :=
@@ -312,8 +312,7 @@ Inductive Mem : Set :=
 
 Definition BoxedNil := IREBox TgNil IRENil.
 
-Lemma BoxedNilValue : Value BoxedNil.
-Proof. eauto using Value. Qed.
+Definition BoxedNilValue : Value BoxedNil := Vbox TgNil IRENil Vnil.
 
 
 Fixpoint query (a : address) (idx : IRE) (m : Mem) :=

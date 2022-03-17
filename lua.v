@@ -12,6 +12,7 @@ Require Import LIR.maps.
 Require Import LIR.pallene.
 Require Import LIR.lir.
 Require Import LIR.dyn.
+Require Import LIR.biglir.
 
 
 Inductive LE : Set :=
@@ -434,6 +435,7 @@ Proof.
         by trivial.
       eauto.
   - simpl. rewrite LuaIndex.
+    destruct v.
     eapply BStSet; eauto.
     eapply BStUnbox.
     replace (IREBox TgTbl (IREAddr a)) with (Lua2Lir (LEAddr a))

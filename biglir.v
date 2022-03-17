@@ -30,11 +30,12 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
     m'/ e2 ==> m'' / idx ->
     v = query a idx m'' ->
     m / IREGet e1 e2 ==> m'' / v
-| BStSet : forall m e1 m' a e2 m'' idx m''' e3 val,
+| BStSet : forall m e1 m' a e2 m'' idx m''' e3 val vval,
     m / e1 ==> m' / IREAddr a ->
     m'/ e2 ==> m'' / idx ->
+    val = EV2Val vval ->
     m''/ e3 ==> m''' / val ->
-    m / IRESet e1 e2 e3 ==> Update a (ToIndex idx) val m''' / val
+    m / IRESet e1 e2 e3 ==> Update a (ToIndex idx) vval m''' / val
 | BStLet : forall m exp m' v1 var t body m'' res,
      m / exp ==> m' / v1 ->
      m' / ([var := v1] body) ==> m'' / res ->
@@ -154,7 +155,7 @@ Proof.
       IH : mem_correct ?M -> _ -> _ |= ?E : _ -> _ |- _] =>
         specialize (IH HM _ HT) as [? [? ?]]
   end;
-  eauto using IRTyping,Value,mem_correct_fresh,mem_correct_update;
+  eauto using IRTyping,Value,mem_correct,mem_correct_fresh;
   (* handle substitutions inside FUN (not pretty yet) *)
   try (assert (MEmpty |= [var := v2] body : IRTStar) by (
       inversion H0; inversion H9; subst; eauto using subst_typing);
@@ -210,12 +211,10 @@ Lemma stepBigstep : forall m e m' e' m'' e'',
     mem_correct m ->
     m / e --> m' / e' -> m' / e' ==> m'' / e'' -> m / e ==> m'' / e''.
 Proof.
-  intros m e m' e' m'' e'' HM HSt HB.
-  remember (Some e') as E eqn:HEq.
-  generalize dependent e'.
+  intros * HM HSt HB.
   generalize dependent m''.
   generalize dependent e''.
-  induction HSt; intros ? ? ? HEq HB; inversion HEq; clear HEq; subst;
+  induction HSt; intros * HB; subst;
   inversion HB; subst;
   (* ~half cases values are not values *)
   try match goal with
@@ -231,24 +230,23 @@ Proof.
     eapply valueNormal in HB; only 2: (eauto using Value; fail);
     intuition; subst
   end;
-  (* extract equalities from injections *)
-  repeat match goal with
-  | [H: Some _ = Some _ |- _] => idtac H; injection H as H; subst
-  end;
   (* clear useless equalities *)
   repeat match goal with | [H: ?E = ?E |- _] => clear H end;
+  (* extract equalities from injections *)
+  repeat match goal with
+  | [H: IREBox _ _ = IREBox _ _ |- _] => injection H as H; subst
+  end;
   eauto using bigStep,Value;
   (* contradictions about query not being a value *)
   try match goal with
     |[H: ?E = query _ _ _ |- _] =>
-        assert (HC: Value E) by (rewrite H; apply HM); inversion HC
+        assert (HC: Value E) by (rewrite H; eauto using MCValue); inversion HC
     end; subst.
+
   - (* queries being complex values (fun and lambdas which must be
      broken to extract some equalities *)
     eapply valueNormal in HB as [? ?]; subst; trivial;
     eapply BStGet; eauto using bigStep, Value; congruence.
-  - inversion H3; subst.
-    eapply BStSet; eauto using bigStep, Value; congruence.
 Qed.
 
 
@@ -259,75 +257,53 @@ Theorem smallBig : forall m e t m' e',
     Value e' ->
     m / e ==> m' / e'.
 Proof.
-  intros m e t m' e' MC MTy MSt.
-  remember (Some e') as E'.
-  generalize dependent e'.
-  induction MSt; intros ? HEq HV; inversion HEq; subst; clear HEq;
+  intros * MC MTy MSt.
+  induction MSt; intros HV;
   eauto using bigStep, stepBigstep, PresMC, PresTy.
 Qed.
 
 
-Ltac finishmExp :=
-  intros m e m' e' Hmt;
-  remember (Some e') as E' eqn:Heq;
-  generalize dependent e';
-  induction Hmt; intros ? Heq; inversion Heq; subst;
-  eauto using step,multistep.
-
-
-Lemma mPlus1 : forall e2 m e m' e',
-    m / e -->* m' / e' ->  m / IREPlus e e2 -->* m' / IREPlus e' e2.
-Proof. intros e2; finishmExp. Qed.
-
-Lemma mPlus2 : forall e1, Value e1 -> forall m e m' e',
-    m / e -->* m' / e' ->  m / IREPlus e1 e -->* m' / IREPlus e1 e'.
-Proof. intros e1 HV; finishmExp. Qed.
-
-Lemma mGet1 : forall e2 m e m' e',
-    m / e -->* m' / e' ->  m / IREGet e e2 -->* m' / IREGet e' e2.
-Proof. intros e2; finishmExp. Qed.
-
-Lemma mGet2 : forall e1, Value e1 -> forall m e m' e',
-    m / e -->* m' / e' ->  m / IREGet e1 e -->* m' / IREGet e1 e'.
-Proof. intros e1 HV; finishmExp. Qed.
-
-Lemma mSet1 : forall e2 e3 m e m' e',
-    m / e -->* m' / e' ->  m / IRESet e e2 e3 -->* m' / IRESet e' e2 e3.
-Proof. intros e2 e3; finishmExp. Qed.
-
-Lemma mSet2 : forall e1, Value e1 -> forall e3 m e m' e',
-    m / e -->* m' / e' ->  m / IRESet e1 e e3 -->* m' / IRESet e1 e' e3.
-Proof. intros e1 HV e3; finishmExp. Qed.
-
-Lemma mSet3 : forall e1 e2, Value e1 -> Value e2 -> forall m e m' e',
-    m / e -->* m' / e' ->  m / IRESet e1 e2 e -->* m' / IRESet e1 e2 e'.
-Proof. intros e1 e2 HV1 HV2; finishmExp. Qed.
-
-Lemma mLet1 : forall var t body m e m' e',
-    m / e -->* m' / e' ->
-    m / IRELet var t e body -->* m' / IRELet var t e' body.
-Proof. intros var t body; finishmExp. Qed.
-
-Lemma mFunapp1 : forall e2 m e m' e',
-    m / e -->* m' / e' ->  m / IREFunApp e e2 -->* m' / IREFunApp e' e2.
-Proof. intros e2; finishmExp. Qed.
-
-Lemma mFunapp2 : forall e1, Value e1 -> forall m e m' e',
-    m / e -->* m' / e' ->  m / IREFunApp e1 e -->* m' / IREFunApp e1 e'.
-Proof. intros e1 HV; finishmExp. Qed.
-
-Lemma mBox1 : forall t m e m' e',
-    m / e -->* m' / e' ->  m / IREBox t e -->* m' / IREBox t e'.
-Proof.
-  intros t; finishmExp. Qed.
-
-Lemma mUnbox1 : forall t m e m' e',
-    m / e -->* m' / e' ->  m / IREUnbox t e -->* m' / IREUnbox t e'.
-Proof. intros t; finishmExp. Qed.
-
-
 Lemma invertTyBox : forall t e, Value (IREBox t e) -> Value e.
 Proof. intros t e H. inversion H. trivial. Qed.
+
+
+Lemma auxTySubst : forall m m' var t t' exp v body,
+    MEmpty |= exp : t ->
+    m / exp ==> m' / v ->
+    mem_correct m ->
+    (var |=> t; MEmpty) |= body : t' ->
+    MEmpty |= [var := v] body : t'.
+Proof.
+  intros. eauto using BstepTy, subst_typing.
+Qed.
+
+
+Lemma auxTyFun : forall m m' m'' var body e1 e2 v2,
+    m / e1 ==> m' / IREFun var body ->
+    MEmpty |= e1 : IRTFun ->
+    MEmpty |= e2 : IRTStar ->
+    m' / e2 ==> m'' / v2 ->
+    mem_correct m ->
+    mem_correct m' ->
+    MEmpty |= [var := v2] body : IRTStar.
+Proof.
+  intros.
+  eapply auxTySubst; eauto.
+  assert (HTF: MEmpty |= IREFun var body : IRTFun) by
+    (eapply BPreservation; eauto).
+  inversion HTF; trivial.
+Qed.
+
+
+Lemma StSet' : forall m a idx val,
+    Value idx ->
+    m / IRESet (IREAddr a) idx (EV2Val val) -->
+    Update a idx val m / EV2Val val.
+Proof.
+  intros *.
+  destruct val.
+  eauto using StSet.
+Qed.
 
 
 Theorem bigSmall : forall m e t m' e',
@@ -340,42 +316,38 @@ Proof.
   generalize dependent t.
   induction HSt; intros ? HTy;
   inversion HTy; subst;
+
+  (* Propagate 'mem_correct' to all memories *)
   repeat memC;
+
+  (* instantiate inductive hypothesis *)
   repeat match goal with
     [ IH: mem_correct ?M  -> _ -> IRTyping _ ?E _ -> _,
       HM: mem_correct ?M,
       HT: IRTyping _ ?E _ |- _] =>
         specialize (IH HM _ HT)
     end;
-    eauto using multistep.
-  - eauto 6 using mPlus1, mPlus2, Value, multistep1, step, multiRefl.
-  - eauto using multistep1, step.
-  - eauto 8 using mGet1, mGet2, Value, multistep1, step, multiRefl,
-                  BstepValue.
-  - eauto 12 using mSet1, mSet2, mSet3,  Value, multistep1, step, multiRefl,
-                  BstepValue.
-  - eapply multiRefl.
-    * eauto using mLet1.
-    * eapply multiRefl.
-      ** eauto using multistep1, StLet, BstepValue.
-      ** eauto using subst_typing, BstepValue, BstepTy.
-  - eapply multiRefl.
-    + eauto using mFunapp1.
-    + eapply multiRefl.
-      ** eauto using mFunapp2, Value.
-      ** eapply multiRefl.
-         *** eauto using multistep1, StFunapp, Value, BstepValue.
-         *** eapply IHHSt3; eauto.
-             assert (HTyF : MEmpty |= IREFun var body : TgFun)
-                by (eapply BPreservation; eauto).
-             inversion HTyF; subst.
-             eapply subst_typing; eauto.
-             eapply BPreservation; eauto.
-  - auto using mBox1.
-  - eauto 8 using multiRefl, mUnbox1, multistep1,
-      StUnbox, invertTyBox, BstepValue.
-Qed.
 
+    (* handle the trivial cases *)
+    eauto using MStRefl;
+
+    (* this eauto cannot include MStRefl, as it will solve several
+       cases the wrong way *)
+    unshelve (eauto 11 using
+      CongPlus1, CongPlus2, CongGet1, CongGet2,
+      CongSet1, CongSet2, CongSet3,
+      CongFunApp1, CongFunApp2, CongLet,
+      CongBox, CongUnbox,
+      Value, multistep1, step, multiTrans,
+      BstepValue, BstepTy,  StSet', auxTyFun, invertTyBox);
+    try apply TgNil.
+
+   (* Let is still going the wrong way... *)
+   eapply multiTrans. 
+   2: { eauto using auxTySubst. }
+   eauto 6 using multiTrans, CongLet, multistep1, step, BstepValue.
+
+Qed.
 
 (* }================================================================== *)
 

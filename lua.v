@@ -447,7 +447,7 @@ Ltac LmemC :=
 ** its translation to Lir results in the
 ** Lir translation of the final value.
 *)
-Theorem SymLua : forall e m v m',
+Theorem SimLua : forall e m v m',
     Lmem_correct m ->
     LEWT MEmpty e ->
     m /e ==> m' / v  ->

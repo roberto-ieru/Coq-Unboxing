@@ -405,7 +405,7 @@ Ltac doCatchUp :=
 (*
 ** Main simulation theorem
 *)
-Theorem Sym : forall m1 e1 t1 e2 m2 t2 m1' e1',
+Theorem Sim : forall m1 e1 t1 e2 m2 t2 m1' e1',
   Precision PEmpty e1 t1 e2 t2 ->
   m1 / e1 --> m1' / e1'   ->
   m1 <M| m2 ->
@@ -547,8 +547,7 @@ Proof.
 Qed.
 
 
-(* Rename "M" to "Mult" *)
-Corollary SymM : forall m1 e1 t1 e2 m2 t2 m1' e1',
+Corollary SimMult : forall m1 e1 t1 e2 m2 t2 m1' e1',
   m1 / e1 -->* m1' / e1'   ->
   Value e1' ->
   Precision PEmpty e1 t1 e2 t2 ->
@@ -566,7 +565,7 @@ Proof.
   induction HMSt; intros * HV HPE HMem.
   - specialize (CatchUp m2 HPE HV) as [? [? ?]].
     eexists. eexists; repeat split; eauto using PrecisionPreservationM.
-  - specialize (Sym HPE H HMem) as [? [? [? [? ?]]]].
+  - specialize (Sim HPE H HMem) as [? [? [? [? ?]]]].
     specialize (IHHMSt _ _ _ HV H2 H1) as [? [? [? [? [? ?]]]]].
     exists x1. exists x2. repeat split; eauto using multiTrans.
 Qed.
@@ -576,7 +575,7 @@ Qed.
 ** Simulation theorem for programmers: no mentions to precision,
 ** concept expressed only in terms of 'dyn'
 *)
-Corollary SymDyn : forall m1 e1 t1 m1' e1',
+Corollary SimDyn : forall m1 e1 t1 m1' e1',
   m1 / e1 -->* m1' / e1'   ->
   MEmpty |= e1 : t1 ->
   mem_correct m1 ->
@@ -591,7 +590,7 @@ Proof.
   assert(Precision PEmpty e1 t1 (dyn e1) IRTStar) by
     eauto using PrecisionIrrel, Env2DynEmpty, DynLessPrecise.
   assert (m1 <M| m1) by auto using PrecMemRefl.
-  specialize (SymM HSt HV H H0) as [? [? [? [? [? ?]]]]].
+  specialize (SimMult HSt HV H H0) as [? [? [? [? [? ?]]]]].
   eexists x. eexists. repeat split;
   eauto using PrecDynEqual.
 Qed.

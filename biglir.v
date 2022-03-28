@@ -11,6 +11,9 @@ Require Import LIR.maps.
 Require Import LIR.lir.
 
 
+(*
+** Bigstep semantics for Lir; regular case
+*)
 Reserved Notation "m '/' e ==> m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
 Reserved Notation "m '/' e ==> 'fail'"
@@ -55,6 +58,9 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
 where "m / e ==> m1 / e1" := (bigStep m e m1 e1)
 .
 
+(*
+** Bigstep semantics for Lir; error case
+*)
 Inductive bigStepF : Mem -> IRE -> Prop :=
 | BStPlus1F : forall m e1 e2,
     m / e1 ==> fail ->
@@ -126,6 +132,9 @@ Ltac splitAnd :=
   [ H: _ -> _ /\ _ |- _ ] => apply splitAnd in H; destruct H end.
 
 
+(*
+** Big step of a value means zero steps
+*)
 Lemma valueNormal : forall m e m' res,
     bigStep m e m' res -> Value e -> m = m' /\ res = e.
 Proof.
@@ -136,6 +145,9 @@ Proof.
 Qed.
 
 
+(*
+** Big steps preserve typing and result in values
+*)
 Lemma BPreservation : forall (m m' : Mem) e e' t,
   m / e ==> m' / e' ->
   mem_correct m ->
@@ -174,6 +186,9 @@ Proof.
 Qed.
 
 
+(*
+** Big steps produce values
+*)
 Lemma BstepValue : forall (m m' : Mem) e e' t,
   m / e ==> m' / e' ->
   mem_correct m ->
@@ -182,6 +197,9 @@ Lemma BstepValue : forall (m m' : Mem) e e' t,
 Proof. apply BPreservation. Qed.
 
 
+(*
+** Big steps preserve types
+*)
 Lemma BstepTy : forall (m m' : Mem) e e' t,
   m / e ==> m' / e' ->
   mem_correct m ->
@@ -259,7 +277,7 @@ Theorem smallBig : forall m e t m' e',
 Proof.
   intros * MC MTy MSt.
   induction MSt; intros HV;
-  eauto using bigStep, stepBigstep, PresMC, PresTy.
+  eauto using bigStep, stepBigstep, memPreservation, expPreservation.
 Qed.
 
 
@@ -343,7 +361,7 @@ Proof.
     try apply TgNil.
 
    (* Let is still going the wrong way... *)
-   eapply multiTrans. 
+   eapply multiTrans.
    2: { eauto using auxTySubst. }
    eauto 6 using multiTrans, CongLet, multistep1, step, BstepValue.
 

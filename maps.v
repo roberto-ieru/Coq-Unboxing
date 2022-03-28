@@ -110,7 +110,7 @@ Proof.
 Qed.
 
 
-Lemma InInclusionEq : forall A (M M' : Map A) var t, 
+Lemma InInclusionEq : forall A (M M' : Map A) var t,
     inclusion (var |=> t; M) M' ->
     In M' var = Some t.
 Proof.
@@ -121,7 +121,7 @@ Proof.
 Qed.
 
 
-Lemma InInclusion : forall A (M M' : Map A) var t, 
+Lemma InInclusion : forall A (M M' : Map A) var t,
     inclusion (var |=> t; M) M' ->
     In M' var = Some t.
 Proof.

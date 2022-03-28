@@ -15,6 +15,9 @@ Require Import LIR.dyn.
 Require Import LIR.biglir.
 
 
+(*
+** Sintax of λ-Lua
+*)
 Inductive LE : Set :=
 | LENil : LE
 | LENum : nat -> LE
@@ -29,6 +32,9 @@ Inductive LE : Set :=
 .
 
 
+(*
+** A well-formed Lua expression cannot have free variables
+*)
 Inductive LEWT : IREnvironment -> LE -> Prop :=
 | WTNil : forall Γ, LEWT Γ LENil
 | WTNum : forall Γ n, LEWT Γ (LENum n)
@@ -45,6 +51,9 @@ Inductive LEWT : IREnvironment -> LE -> Prop :=
 .
 
 
+(*
+** Compilation of Lua programs to Lir
+*)
 Fixpoint Lua2Lir (e : LE) : IRE :=
   match e with
   | LENil => IREBox TgNil IRENil
@@ -65,6 +74,9 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   end.
 
 
+(*
+** Tanslation of Pallene programs to Lua (erasure)
+*)
 Fixpoint Pall2Lua (e : PE) : LE :=
   match e with
   | PENil => LENil
@@ -80,6 +92,9 @@ Fixpoint Pall2Lua (e : PE) : LE :=
   end.
 
 
+(*
+** Casts disapear under 'dyn'
+*)
 Lemma dynCast : forall (t1 t2 : BaseType) (e : IRE),
     dyn (Cast t1 t2 e) = dyn e.
 Proof.
@@ -90,6 +105,9 @@ Proof.
 Qed.
 
 
+(*
+** Main syntactic theorem: compiling and erasuring commute
+*)
 Theorem PallLua : forall Γ e t,
     PTyping Γ e t -> Lua2Lir (Pall2Lua e) = dyn (Pall2Lir Γ e).
 Proof.
@@ -114,11 +132,19 @@ Proof.
 Qed.
 
 
+(*
+** Lua programs are as dynamic as possible
+*)
 Theorem LuaIsDyn : forall e, Lua2Lir e = dyn (Lua2Lir e).
 Proof.
   induction e; simpl; congruence.
 Qed.
 
+
+(*
+** Direct semantics of Lua programs, without
+** translation to Lir
+*)
 
 Inductive LValue : LE -> Prop :=
 | LVnil : LValue LENil
@@ -191,6 +217,9 @@ where "'[' x ':=' s ']' t" := (substitution x s t)
 .
 
 
+(*
+** Bigstep semantics for Lua expressions
+*)
 Reserved Notation "m '/' e ==> m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
 
@@ -413,6 +442,11 @@ Ltac LmemC :=
     end.
 
 
+(*
+** If a Lua program results in a value,
+** its translation to Lir results in the
+** Lir translation of the final value.
+*)
 Theorem SymLua : forall e m v m',
     Lmem_correct m ->
     LEWT MEmpty e ->
@@ -456,5 +490,4 @@ Proof.
         apply subst_WT. auto.
         eapply (luaPreservation e2 m'); eauto.
 Qed.
-
 

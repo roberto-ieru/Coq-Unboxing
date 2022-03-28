@@ -11,6 +11,9 @@ Require Import LIR.maps.
 Require Import LIR.lir.
 
 
+(*
+** 'dyn' transformation
+*)
 Fixpoint dyn (e : IRE) : IRE :=
   match e with
   | IRENil => IREBox TgNil IRENil
@@ -37,7 +40,7 @@ Proof. induction e; simpl; congruence. Qed.
 Fixpoint dynGamma (Γ : IREnvironment) : IREnvironment :=
   match Γ with
   | MEmpty => MEmpty
-  | MCons var T Γ' => MCons var IRTStar (dynGamma Γ')
+  | MCons var t Γ' => MCons var IRTStar (dynGamma Γ')
   end.
 
 
@@ -50,6 +53,9 @@ Proof.
 Qed.
 
 
+(*
+** 'dyn' produces well-typed terms
+*)
 Theorem dynTyping : forall Γ e T,
     Γ |= e : T -> dynGamma Γ |= (dyn e) : IRTStar.
 Proof with apply IRTyUnbox; trivial.
@@ -58,12 +64,31 @@ Proof with apply IRTyUnbox; trivial.
 Qed.
 
 
+(*
+** 'dyn' produces well-typed terms in the empty
+** environment
+*)
+Lemma dynTypingE : forall e,
+    MEmpty |= e : IRTStar -> MEmpty |= dyn e : IRTStar.
+Proof.
+  intros e H.
+  replace MEmpty with (dynGamma MEmpty) by trivial.
+  eauto using dynTyping.
+Qed.
+
+
+(*
+** 'dyn' preserves "valueness"
+*)
 Lemma dynValue : forall e, Value e -> Value (dyn e).
 Proof.
   intros e HV. induction HV; simpl; auto using Value.
 Qed.
 
 
+(*
+** 'dyn' commutes with substitution
+*)
 Lemma dynSubst : forall var e1 e2,
     ([var := dyn e1](dyn e2)) = dyn ([var := e1]e2).
 Proof.
@@ -82,33 +107,17 @@ Fixpoint dynMem (m : Mem) : Mem :=
   end.
 
 
-Lemma dynMemEmpty : forall e,
-    MEmpty |= e : IRTStar -> MEmpty |= dyn e : IRTStar.
-Proof.
-  intros e H.
-  replace MEmpty with (dynGamma MEmpty) by trivial.
-  eauto using dynTyping.
-Qed.
-
-
+(*
+** 'dyn' preserves memory correctness
+*)
 Lemma dynMemCorrect : forall m, mem_correct m -> mem_correct (dynMem m).
 Proof.
   intros * HM.
   induction HM.
   - auto using mem_correct.
-  - destruct v. eauto using mem_correct, dynMemEmpty.
+  - destruct v. eauto using mem_correct, dynTypingE.
 Qed.
 
 
 Axiom DynIndex : forall e, ToIndex e = ToIndex (dyn e).
-
-Lemma dynQuery : forall m a idx,
-    dyn (query a idx m) = query a (dyn idx) (dynMem m).
-Proof.
-  intros. induction m; trivial.
-  destruct e.
-  simpl.
-  rewrite <- DynIndex.
-  breakIndexDec; trivial.
-Qed.
 

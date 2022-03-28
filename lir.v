@@ -10,7 +10,9 @@ Require Import Lia.
 Require Import LIR.maps.
 
 
-
+(*
+** Tags for Lir
+*)
 Inductive Tag : Set := | TgNil | TgInt | TgTbl | TgFun.
 
 
@@ -18,6 +20,9 @@ Lemma dec_Tag : forall (t1 t2 : Tag), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. Defined.
 
 
+(*
+** Types for Lir
+*)
 Inductive IRType : Set :=
 | IRTNil
 | IRTInt
@@ -27,6 +32,10 @@ Inductive IRType : Set :=
 .
 
 
+(*
+** Without detailed function types, this type became
+** isomorphic to IRType. One of them should be removed.
+*)
 Inductive BaseType : Set :=
 | BGround : Tag  -> BaseType
 | BStar : BaseType
@@ -59,14 +68,21 @@ Definition Base2Type (bt : BaseType) : IRType :=
   end.
 
 
+(*
+** Addresses represent tables in memory
+*)
 Definition address := nat.
 
+
+(*
+** Syntax for Lir expressions
+*)
 Inductive IRE : Set :=
 | IRENil : IRE
 | IRENum : nat -> IRE
 | IREPlus : IRE -> IRE -> IRE
 | IRECnst : IRE
-| IREAddr : address -> IRE
+| IREAddr : address -> IRE  (* only at runtime *)
 | IREGet : IRE -> IRE -> IRE
 | IRESet : IRE -> IRE -> IRE -> IRE
 | IREVar : string -> IRE
@@ -125,6 +141,9 @@ Check <{ X[0] = X[0] + 1 }>.
 Definition IREnvironment := Map IRType.
 
 
+(*
+** Typing rules for Lir expressions
+*)
 Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
@@ -172,6 +191,9 @@ where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 .
 
 
+(*
+** Types for Lir expressions are unique
+*)
 Lemma typeUnique : forall Γ e t t',
    (Γ  |= e : t) -> (Γ |= e : t') -> t = t'.
 Proof.
@@ -182,17 +204,9 @@ Proof.
 Qed.
 
 
-Lemma envExt : forall Γ Γ' e t,
-    inclusion Γ Γ' -> Γ |= e : t  -> Γ' |= e : t.
-Proof.
-  intros Γ Γ' e t Hinc Hty.
-  generalize dependent Γ'.
-  induction Hty; intros Γ' Hinc; subst;
-  eauto using IRTyping, inclusion_update.
-Qed.
-
-
-
+(*
+** Value predicate for Lir expressions
+*)
 Inductive Value : IRE -> Prop :=
 | Vnil : Value IRENil
 | Vnum : forall n, Value (IRENum n)
@@ -202,6 +216,9 @@ Inductive Value : IRE -> Prop :=
 .
 
 
+(*
+** Equivalent to 'Value', but computable
+*)
 Fixpoint isValue (e : IRE) : bool :=
   match e with
   | IRENil => true
@@ -226,6 +243,10 @@ Proof.
   inversion HV; trivial.
 Qed.
 
+
+(*
+** Canonical forms
+*)
 
 Lemma valnil : forall Γ e,
   Γ |= e : IRTNil -> Value e -> e = IRENil.
@@ -287,6 +308,9 @@ Coercion ToIndex : IRE >-> Index.
 Axiom Index_dec : Index -> Index -> bool.
 
 
+(*
+** Type representing expressions that are values
+*)
 Inductive ExpValue : Set :=
 | EV : forall e, Value e -> ExpValue.
 
@@ -318,6 +342,9 @@ Fixpoint query (a : address) (idx : IRE) (m : Mem) :=
   end.
 
 
+(*
+** Create a fresh address for a memory
+*)
 Fixpoint freshaux (m : Mem) : address :=
   match m with
   | EmptyMem => 1
@@ -325,11 +352,18 @@ Fixpoint freshaux (m : Mem) : address :=
   end.
 
 
+(*
+** Create a fresh address for a memory and initializes
+** it with Nil
+*)
 Definition fresh (m : Mem) : (address * Mem) :=
   let f := freshaux m in
     (f, Update f BoxedNil (EV BoxedNil BoxedNilValue) m).
 
 
+(*
+** Substitution by closed Lir expressions
+*)
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
 
 Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
@@ -356,6 +390,9 @@ where "'[' x ':=' s ']' t" := (substitution x s t)
 .
 
 
+(*
+** Extending an environment preserves typing
+*)
 Lemma inclusion_typing : forall Γ Γ' e te,
   inclusion Γ Γ' -> Γ |= e : te -> Γ' |= e : te.
 Proof.
@@ -365,14 +402,21 @@ Proof.
 Qed.
 
 
+(*
+** Particular case when extending the empty environment
+*)
 Lemma typing_empty : forall Γ e te, MEmpty |= e : te -> Γ |= e : te.
 Proof.
   eauto using inclusion_typing, inclusion_empty.
 Qed.
 
 
+(*
+** Substitution preserves typing
+*)
 Lemma subst_typing : forall e2 Γ var tv te e1,
-  var |=> tv; Γ |= e2 : te -> MEmpty |= e1 : tv ->
+  (var |=> tv; Γ) |= e2 : te ->
+  MEmpty |= e1 : tv ->
        Γ |= ([var := e1] e2) : te.
 Proof.
   induction e2; intros Γ var tv te e1 HT2 HT1;
@@ -385,6 +429,9 @@ Proof.
 Qed.
 
 
+(*
+** Evaluation steps for Lir expressions
+*)
 Reserved Notation "m '/' e --> m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
 Reserved Notation "m '/' e --> 'fail'"
@@ -458,6 +505,10 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
 where "m / e --> m1 / e1" := (step m e m1 e1).
 
 
+
+(*
+** Fail evaluation for Lir expressions
+*)
 Inductive stepF : Mem -> IRE -> Prop :=
 | StPlus1F : forall m e1 e2,
     m / e1 --> fail ->
@@ -519,6 +570,9 @@ Ltac breakIndexDec :=
   end.
 
 
+(*
+** Ensures that all elements in a memory have type '*'
+*)
 Inductive mem_correct : Mem -> Prop :=
 | MCE : mem_correct EmptyMem
 | MCU : forall a idx v m,
@@ -526,7 +580,9 @@ Inductive mem_correct : Mem -> Prop :=
      mem_correct m ->
      mem_correct (Update a idx v m).
 
-
+(*
+** All expressions stored in a memory are values
+*)
 Lemma MCValue : forall m a n, Value (query a n m).
 Proof.
   intros.
@@ -536,6 +592,10 @@ Proof.
 Qed.
 
 
+(*
+** All expressions stored in a correct memory have
+** type '*'
+*)
 Lemma MCTy : forall m a n Γ,
     mem_correct m -> Γ |= (query a n m) : IRTStar.
 Proof.
@@ -546,6 +606,9 @@ Proof.
 Qed.
 
 
+(*
+** Memory allocation preserves memory correctness
+*)
 Lemma mem_correct_fresh : forall m m' free,
   mem_correct m -> (free,m') = fresh m -> mem_correct m'.
 Proof.
@@ -554,6 +617,10 @@ Proof.
 Qed.
 
 
+(*
+** Executing an evaluation step preserves memory
+** correctness
+*)
 Lemma memPreservation : forall (m m' : Mem) e e' t,
   mem_correct m ->
   MEmpty |= e : t ->
@@ -584,6 +651,9 @@ Lemma boxTyping : forall e t,
 Proof. intros e t H. inversion H; trivial. Qed.
 
 
+(*
+** Preservation of types for Lir expressions
+*)
 Lemma expPreservation : forall m e t m' e',
   mem_correct m ->
   MEmpty |= e : t -> m / e --> m' / e' -> MEmpty |= e' : t.
@@ -597,21 +667,19 @@ Proof.
 Qed.
 
 
+(*
+** Main preservation theorem for Lir
+** (type preservation of memory and expression)
+*)
 Theorem Preservation : forall m e t m' e',
   mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' ->
     mem_correct m' /\ MEmpty |= e' : t.
 Proof. intuition; eauto using memPreservation,expPreservation. Qed.
 
 
-Lemma PresMC : forall m e t m' e',
-  mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' -> mem_correct m'.
-Proof. apply Preservation. Qed.
-
-Lemma PresTy : forall m e t m' e',
-  mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' -> MEmpty |= e' : t.
-Proof. apply Preservation. Qed.
-
-
+(*
+** Values cannot be reduced
+*)
 Lemma value_normal : forall m e,
     Value e -> ~exists m' v, step m e m' v.
 Proof.
@@ -629,6 +697,9 @@ Ltac open_value rule :=
     end.
 
 
+(*
+** Progress for Lir terms
+*)
 Theorem Progress : forall m e t,
     MEmpty |= e : t  ->
         Value e \/ (m / e --> fail \/ exists m' e', m / e --> m' / e').
@@ -671,6 +742,9 @@ Proof.
 Qed.
 
 
+(*
+** Multistep
+*)
 Reserved Notation "m '/' e -->* m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
 Reserved Notation "m '/' e -->* 'fail'"
@@ -699,6 +773,10 @@ Inductive multistepF : Mem -> IRE -> Prop :=
 where "m / e -->* 'fail'" := (multistepF m e)
 .
 
+
+(*
+** Multistep is transitive
+*)
 Lemma multiTrans : forall m0 e0 m1 e1 m2 e2,
     m0 / e0 -->* m1 / e1 ->
     m1 / e1 -->* m2 / e2 ->
@@ -712,6 +790,9 @@ Proof.
 Qed.
 
 
+(*
+** Multistep subsumes step
+*)
 Lemma multistep1 : forall m0 e0 m1 e1,
     m0 / e0 --> m1 / e1 ->
     m0 / e0 -->* m1 / e1.
@@ -729,10 +810,13 @@ Proof.
   remember (Some e') as E eqn:Heq.
   induction HMulti; inversion Heq; subst.
   - eauto using Progress.
-  - eauto using PresTy, PresMC.
+  - eauto using expPreservation, memPreservation.
 Qed.
 
 
+(*
+** Preservation for multistep
+*)
 Lemma multipreservation : forall m1 e1 m2 e2 t,
     MEmpty |= e1 : t ->
     mem_correct m1 ->
@@ -749,6 +833,7 @@ Qed.
 Ltac finishmExp :=
   intros * Hmt;
   induction Hmt; eauto using step,multistep.
+
 
 
 Lemma CongPlus1 : forall e2 m e m' e',

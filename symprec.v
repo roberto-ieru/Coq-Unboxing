@@ -13,7 +13,11 @@ Require Import LIR.dyn.
 
 Set Implicit Arguments.
 
-
+(*
+** Precision relation for memories: implies that memory is correct,
+** because the precision relation needs the types of the expressions
+** being compared.
+*)
 Inductive PrecMem : Mem -> Mem -> Prop :=
 | PrecMemE : PrecMem EmptyMem EmptyMem
 | PrecMemUD : forall addr idx v1 v2 m1 m2,
@@ -26,15 +30,21 @@ Inductive PrecMem : Mem -> Mem -> Prop :=
 Infix "<M|" := PrecMem (at level 80).
 
 
+(*
+** Memory precision is reflexive
+*)
 Lemma PrecMemRefl : forall m,
     mem_correct m -> m <M| m.
 Proof.
   intros m Hm.
   induction Hm; constructor; trivial.
-  apply PrecisionRefl. trivial.
+  eapply PrecisionRefl. eauto. 
 Qed.
 
 
+(*
+** Memory precision implies that memory is correct.
+*)
 Lemma PrecCorrect1 : forall m1 m2, m1 <M| m2 -> mem_correct m1.
 Proof.
   intros * H.
@@ -43,6 +53,9 @@ Proof.
 Qed.
 
 
+(*
+** Memory precision implies that memory is correct.
+*)
 Lemma PrecCorrect2 : forall m1 m2, m1 <M| m2 -> mem_correct m2.
 Proof.
   intros * H.
@@ -73,6 +86,9 @@ Proof.
 Qed.
 
 
+(*
+** Terms "similar up to precision" generate the same indices
+*)
 Axiom PrecIndex : forall e1 e2,
     Precision PEmpty e1 IRTStar e2 IRTStar ->
     ToIndex e1 = ToIndex e2.
@@ -105,6 +121,9 @@ Proof.
 Qed.
 
 
+(*
+** Substitution preserves precision
+*)
 Lemma PrecSubs : forall body Γ Γ' var  body' v1 v2 t1 t2 t1' t2'
                         (H12: t1 <| t2),
     Precision PEmpty v1 t1 v2 t2 ->
@@ -144,6 +163,9 @@ Proof.
 Qed.
 
 
+(*
+** Substitution applied to function bodies
+*)
 Lemma PrecSubs' : forall var body body' v1 v2,
     Precision PEmpty (IREFun var body) IRTFun
                      (IREFun var body') IRTFun ->
@@ -196,6 +218,17 @@ Proof.
 Qed.
 
 
+(*
+** About "catch-up": when e1 ⊑ e2 and e1 is a value, e2 may not be
+** a value (e.g., (unbox (box 10))). But we can guarantee that e2
+** reduces to a value (nor errors or infinite loops) in a somewhat
+** restricted way. This property is called "catch-up", and several
+** of the following lemmas help its proof.
+*)
+
+(*
+** Catch-up steps do not change the memory
+*)
 Lemma stepValueMem : forall e1 e2 e2' t1 t2 m m',
     Precision PEmpty e1 t1 e2 t2 ->
     Value e1 ->
@@ -235,6 +268,7 @@ Proof.
 Qed.
 
 
+(* Rename "M" to "Mult" *)
 Lemma PrecisionPreservationM : forall e1 e2 e2' t1 t2 m m',
     Precision PEmpty e1 t1 e2 t2 ->
     Value e1 ->
@@ -246,6 +280,10 @@ Proof.
 Qed.
 
 
+(*
+** Catch-up applied to boxes: if the term "catching-up" is a box,
+** it remains a box.
+*)
 Lemma BoxPreservePrecision : forall e m m' b tg v t,
   m / IREBox tg e -->* m' / b ->
   Precision PEmpty v t (IREBox tg e) IRTStar ->
@@ -264,6 +302,10 @@ Proof.
 Qed.
 
 
+(*
+** If the term "catching-up" has type '*' and it converges, it converges
+** to a box.
+*)
 Lemma ValueStarP : forall tg t v e m e',
     Precision PEmpty v t e IRTStar ->
     t <| Tag2Type tg ->
@@ -284,6 +326,9 @@ Proof.
 Qed.
 
 
+(*
+** Obs: reduction uses only unbox(box x); does not change memory
+*)
 Lemma CatchUp : forall e1 t1 e2 t2 m,
   Precision PEmpty e1 t1 e2 t2 ->
   Value e1 ->
@@ -357,6 +402,9 @@ Ltac doCatchUp :=
   end.
 
 
+(*
+** Main simulation theorem
+*)
 Theorem Sym : forall m1 e1 t1 e2 m2 t2 m1' e1',
   Precision PEmpty e1 t1 e2 t2 ->
   m1 / e1 --> m1' / e1'   ->
@@ -499,7 +547,8 @@ Proof.
 Qed.
 
 
-Theorem SymM : forall m1 e1 t1 e2 m2 t2 m1' e1',
+(* Rename "M" to "Mult" *)
+Corollary SymM : forall m1 e1 t1 e2 m2 t2 m1' e1',
   m1 / e1 -->* m1' / e1'   ->
   Value e1' ->
   Precision PEmpty e1 t1 e2 t2 ->
@@ -523,7 +572,11 @@ Proof.
 Qed.
 
 
-Theorem SymDyn : forall m1 e1 t1 m1' e1',
+(*
+** Simulation theorem for programmers: no mentions to precision,
+** concept expressed only in terms of 'dyn'
+*)
+Corollary SymDyn : forall m1 e1 t1 m1' e1',
   m1 / e1 -->* m1' / e1'   ->
   MEmpty |= e1 : t1 ->
   mem_correct m1 ->
@@ -531,7 +584,7 @@ Theorem SymDyn : forall m1 e1 t1 m1' e1',
   exists e2' m2',
     m1 / dyn e1 -->* m2' / e2' /\
     dyn e2' = dyn e1' /\
-    m1' <M| m2' /\
+    (* m1' <M| m2' /\ *)
     Value e2'.
 Proof.
   intros * HSt Hty HM HV.

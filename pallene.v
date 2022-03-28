@@ -23,6 +23,9 @@ Proof. decide equality. Qed.
 
 Definition PEnvironment := Map PType.
 
+(*
+** Syntax of λ-Pallene
+*)
 Inductive PE : Set :=
 | PENil : PE
 | PENum : nat -> PE
@@ -37,6 +40,9 @@ Inductive PE : Set :=
 .
 
 
+(*
+** Typing rules for λ-Pallene
+*)
 Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
@@ -75,6 +81,9 @@ where "Γ '|=' e ':' t" := (PTyping Γ e t)
 .
 
 
+(*
+** Typing algorithm for λ-Pallene
+*)
 Fixpoint typeOf Γ e : option PType :=
   match e with
   | PENil => Some PTNil
@@ -116,7 +125,6 @@ Fixpoint typeOf Γ e : option PType :=
   end.
 
 
-
 Lemma typeOfCorrect' : forall Γ e T, Γ |= e : T -> typeOf Γ e = Some T.
 Proof.
   intros Γ e T Hty.
@@ -156,10 +164,17 @@ Proof.
     inversion Heq; subst. eauto using PTyping.
 Qed.
 
+
+(*
+** Rules and algorithm agree
+*)
 Lemma typeOfCorrect : forall Γ e T, typeOf Γ e = Some T <-> Γ |= e : T.
 Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 
 
+(*
+** Pallene types are unique
+*)
 Lemma PTypeUnique : forall Γ e t1 t2,
     Γ |= e : t1 -> Γ |= e : t2 -> t1 = t2.
 Proof.
@@ -240,6 +255,9 @@ Proof.
 Qed.
 
 
+(*
+** Translation (compilation) of Pallene programs to Lir
+*)
 Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   match e with
   | PENil => IRENil
@@ -336,6 +354,9 @@ Proof.
 Qed.
 
 
+(*
+** Compilation of well-typed programs result in well-typed code
+*)
 Theorem Pall2LirWellTyped : forall Γ (e : PE) T,
     Γ |= e : T -> IRTyping (TP2TGamma Γ) (Pall2Lir Γ e) (PT2IRT T).
 Proof with eauto using IRTyping.
@@ -365,14 +386,14 @@ Proof with eauto using IRTyping.
     apply IRTyFun. eapply IRTyLet.
     + destruct (tagOf (var |=> Tvar; Γ)) eqn:?; subst.
       * apply IRTyBox.
-        eapply envExt.
+        eapply inclusion_typing.
         ** eapply inclusion_shadow'.
         ** unfold tagOf in Heqb. rewrite H in Heqb.
            apply PTTagB in Heqb. rewrite <- Heqb. trivial.
       *  unfold tagOf in Heqb. rewrite H in Heqb.
         apply PTStarB in Heqb. rewrite Heqb in IHPTyping.
         simpl in IHPTyping.
-        eapply envExt; eauto.
+        eapply inclusion_typing; eauto.
         apply inclusion_shadow'.
     + unfold Cast.
       destruct (PT2Base Tvar) eqn:?.

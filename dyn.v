@@ -27,7 +27,7 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IREVar var => IREVar var
   | IRELet var t e body => IRELet var IRTStar (dyn e) (dyn body)
   | IREFun var exp => IREBox TgFun (IREFun var (dyn exp))
-  | IREFunApp e1 e2 => IREFunApp (IREUnbox TgFun (dyn e1)) (dyn e2)
+  | IREApp e1 e2 => IREApp (IREUnbox TgFun (dyn e1)) (dyn e2)
   | IREBox _ e => dyn e
   | IREUnbox _ e => dyn e
   end.

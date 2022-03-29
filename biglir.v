@@ -47,7 +47,7 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
     m / e1 ==> m' / IREFun var body ->
     m' / e2 ==> m'' / v2 ->
     m'' / ([var := v2] body) ==> m''' / res ->
-    m / IREFunApp e1 e2 ==> m''' / res
+    m / IREApp e1 e2 ==> m''' / res
 | BStBox : forall m e m' e' t,
     m / e ==> m' / e' ->
     m / IREBox t e ==> m' / IREBox t e'
@@ -97,16 +97,16 @@ Inductive bigStepF : Mem -> IRE -> Prop :=
      m / IRELet var t exp body ==> fail
 | BStFunapp1F : forall m e1 e2,
     m / e1 ==> fail ->
-    m / IREFunApp e1 e2 ==> fail
+    m / IREApp e1 e2 ==> fail
 | BStFunapp2F : forall m e1 m' v1 e2,
     m / e1 ==> m' / v1 ->
     m' / e2 ==> fail ->
-    m / IREFunApp e1 e2 ==> fail
+    m / IREApp e1 e2 ==> fail
 | BStFunapp3F : forall m e1 m' var body e2 m'' v2,
     m / e1 ==> m' / IREFun var body ->
     m' / e2 ==> m'' / v2 ->
     m'' / ([var := v2] body) ==> fail ->
-    m / IREFunApp e1 e2 ==> fail
+    m / IREApp e1 e2 ==> fail
 | BStBox1F : forall m e t,
     m / e ==> fail ->
     m / IREBox t e ==> fail

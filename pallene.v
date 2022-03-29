@@ -13,7 +13,7 @@ Require Import LIR.lir.
 
 Inductive PType : Set :=
 | PTStar : PType | PTNil : PType | PTInt : PType
-| PTarr : PType -> PType | PTfun : PType -> PType -> PType
+| PTArr : PType -> PType | PTFun : PType -> PType -> PType
 .
 
 
@@ -56,21 +56,21 @@ Inductive PTyping : PEnvironment -> PE -> PType -> Prop :=
     Γ |= e1 : PTInt ->
     Γ |= e2 : PTInt ->
     Γ |= PEPlus e1 e2 : PTInt
-| PTyNew : forall Γ T, Γ |= PENew T : PTarr T
+| PTyNew : forall Γ T, Γ |= PENew T : PTArr T
 | PTyGet : forall Γ e1 T e2,
-    Γ |= e1 : PTarr T ->
+    Γ |= e1 : PTArr T ->
     Γ |= e2 : PTInt ->
     Γ |= PEGet e1 e2 : T
 | PTySet : forall Γ e1 T e2 e3,
-    Γ |= e1 : PTarr T ->
+    Γ |= e1 : PTArr T ->
     Γ |= e2 : PTInt ->
     Γ |= e3 : T ->
     Γ |= PESet e1 e2 e3 : PTStar
 | PTyFun : forall Γ var Tvar body Tbody,
     var |=> Tvar; Γ |= body : Tbody ->
-    Γ |= PEFun var Tvar body : PTfun Tvar Tbody
+    Γ |= PEFun var Tvar body : PTFun Tvar Tbody
 | PTyApp : forall Γ e1 e2 T1 T2,
-    Γ |= e1 : PTfun T1 T2 ->
+    Γ |= e1 : PTFun T1 T2 ->
     Γ |= e2 : T1 ->
     Γ |= PEApp e1 e2 : T2
 | PTyCast : forall Γ e T1 T2,
@@ -93,28 +93,28 @@ Fixpoint typeOf Γ e : option PType :=
     | Some PTInt, Some PTInt => Some PTInt
     | _, _ => None
     end
-  | PENew T => Some (PTarr T)
+  | PENew T => Some (PTArr T)
   | PEGet e1 e2 =>
     match (typeOf Γ e1), (typeOf Γ e2) with
-    | Some (PTarr T), Some PTInt => Some T
+    | Some (PTArr T), Some PTInt => Some T
     | _, _ => None
     end
   | PESet e1 e2 e3 =>
     match (typeOf Γ e1), (typeOf Γ e2), (typeOf Γ e3) with
-    | Some (PTarr T), Some PTInt, Some T' =>
+    | Some (PTArr T), Some PTInt, Some T' =>
         if dec_TP T T' then Some PTStar else None
     | _, _, _ => None
     end
   | PEVar var => In Γ var
   | PEApp e1 e2 =>
     match typeOf Γ e1, typeOf Γ e2 with
-    | Some (PTfun T1 T2), Some T1' =>
+    | Some (PTFun T1 T2), Some T1' =>
         if dec_TP T1 T1' then Some T2 else None
     | _, _ => None
     end
   | PEFun var Tv e =>
     match typeOf (var |=> Tv; Γ) e with
-    | Some Tb => Some (PTfun Tv Tb)
+    | Some Tb => Some (PTFun Tv Tb)
     | None => None
     end
   | PECast e T =>
@@ -190,8 +190,8 @@ Definition PT2Base (t : PType) : BaseType :=
   | PTStar => BStar
   | PTNil => BGround TgNil
   | PTInt => BGround TgInt
-  | PTarr _ => BGround TgTbl
-  | PTfun _ _ =>  BGround TgFun
+  | PTArr _ => BGround TgTbl
+  | PTFun _ _ =>  BGround TgFun
   end.
 
 
@@ -199,7 +199,7 @@ Definition PT2IRT (t : PType) : IRType := Base2Type (PT2Base t).
 
 
 Lemma PT2IRTFun : forall T1 T2,
-    PT2IRT (PTfun T1 T2) = IRTFun.
+    PT2IRT (PTFun T1 T2) = IRTFun.
 Proof. intros T1 T2. unfold PT2IRT. trivial. Qed.
 
 
@@ -277,14 +277,14 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
           (IRELet var (PT2IRT T) (<PT2Base T <= BStar> (IREVar var))
                      (<BStar <= tagOf Γ' body> (Pall2Lir Γ' body)))
   | PEApp e1 e2 => <tagOf Γ e <= BStar>
-         (IREFunApp (Pall2Lir Γ e1)
+         (IREApp (Pall2Lir Γ e1)
                   (<BStar <= (tagOf Γ e2)> Pall2Lir Γ e2))
   | PECast e1 t => <PT2Base t <= tagOf Γ e1> (Pall2Lir Γ e1)
   end.
 
 
 Lemma invertCall : forall Γ e1 e2 T1 T2,
-  typeOf Γ e1 = Some (PTfun T1 T2) -> typeOf Γ e2 = Some T1 ->
+  typeOf Γ e1 = Some (PTFun T1 T2) -> typeOf Γ e2 = Some T1 ->
     typeOf Γ (PEApp e1 e2) = Some T2.
 Proof.
   intros Γ e1 r2 T1 T2 H1 H2.
@@ -294,7 +294,7 @@ Qed.
 
 
 Lemma invertFun : forall Γ e1 e2 T1 T2,
-    typeOf Γ e1 = Some (PTfun T1 T2) ->
+    typeOf Γ e1 = Some (PTFun T1 T2) ->
     tagOf Γ (PEApp e1 e2) = BStar ->
     T2 = PTStar.
 Proof.

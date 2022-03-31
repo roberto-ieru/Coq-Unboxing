@@ -61,11 +61,11 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   | LEPlus e1 e2 => IREBox TgInt (IREPlus (IREUnbox TgInt (Lua2Lir e1))
                                           (IREUnbox TgInt (Lua2Lir e2)))
   | LECnst => IREBox TgTbl IRECnst
-  | LEGet e1 e2 => IREGet (IREUnbox TgTbl (Lua2Lir e1)) (Lua2Lir e2)
-  | LESet e1 e2 e3 => IRESet (IREUnbox TgTbl (Lua2Lir e1))
-                             (Lua2Lir e2)
-                             (Lua2Lir e3)
   | LEAddr a => IREBox TgTbl (IREAddr a)
+  | LEGet e1 e2 => IREGet (IREUnbox TgTbl (Lua2Lir e1)) (Lua2Lir e2)
+  | LESet e1 e2 e3 => IREBox TgNil (IRESet (IREUnbox TgTbl (Lua2Lir e1))
+                                           (Lua2Lir e2)
+                                           (Lua2Lir e3))
   | LEVar var => IREVar var
   | LEFun var body =>
       IREBox TgFun (IREFun var
@@ -240,7 +240,7 @@ Inductive Lstep : LMem -> LE -> LMem -> LE -> Prop :=
     m / e1 ==> m' / LEAddr a ->
     m' / e2 ==> m'' / idx ->
     m'' / e3 ==> m''' / LEV2Val v ->
-    m / LESet e1 e2 e3 ==> LUpdate a idx v m''' / LEV2Val v
+    m / LESet e1 e2 e3 ==> LUpdate a idx v m''' / LENil
 | LStApp : forall m e1 var body e2 m' m'' v m''' res,
      m / e1 ==> m' / LEFun var body ->
      m' / e2 ==> m'' / v ->
@@ -470,6 +470,7 @@ Proof.
       eauto.
   - simpl. rewrite LuaIndex.
     destruct v.
+    eapply BStBox.
     eapply BStSet; eauto.
     eapply BStUnbox.
     replace (IREBox TgTbl (IREAddr a)) with (Lua2Lir (LEAddr a))

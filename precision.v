@@ -386,7 +386,7 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
     Precision Γ d1 IRTTbl d2 IRTTbl ->
     Precision Γ i1 IRTStar i2 IRTStar ->
     Precision Γ v1 IRTStar v2 IRTStar ->
-    Precision Γ (IRESet d1 i1 v1) IRTStar (IRESet d2 i2 v2) IRTStar
+    Precision Γ (IRESet d1 i1 v1) IRTNil (IRESet d2 i2 v2) IRTNil
 
 (* Γ⊑, x : σ ⊑ τ ⊢ d₂ ⊑ e₂ : σ′ ⊑ τ′    Γ⊑ ⊢ d₁ ⊑ e₁ : σ ⊑ τ
    -------------------------------------------------------
@@ -502,6 +502,19 @@ Example example5 : exists e1 t1 e2 t2,
   - intros Hcontra. inversion Hcontra.
 Qed.
 
+(*
+** Next two examples show that Precision is not a proper order,
+** but a preorder.
+*)
+Definition BUB10 := IREBox TgInt UB10.
+
+Example e6 : Precision PEmpty BUB10 IRTStar B10 IRTStar.
+  eauto using Precision.
+Qed.
+
+Example e7 : Precision PEmpty B10 IRTStar BUB10 IRTStar.
+  eauto using Precision, TPrecisionRefl.
+Qed.
 
 End Examples.
 

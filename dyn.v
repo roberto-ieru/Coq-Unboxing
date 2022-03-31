@@ -23,7 +23,9 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IRECnst => IREBox TgTbl IRECnst
   | IREAddr a => IREBox TgTbl (IREAddr a)
   | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1)) (dyn e2)
-  | IRESet e1 e2 e3 => IRESet (IREUnbox TgTbl (dyn e1)) (dyn e2) (dyn e3)
+  | IRESet e1 e2 e3 => IREBox TgNil (IRESet (IREUnbox TgTbl (dyn e1))
+                                            (dyn e2)
+                                            (dyn e3))
   | IREVar var => IREVar var
   | IRELet var t e body => IRELet var IRTStar (dyn e) (dyn body)
   | IREFun var exp => IREBox TgFun (IREFun var (dyn exp))

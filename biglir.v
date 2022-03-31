@@ -38,7 +38,7 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
     m'/ e2 ==> m'' / idx ->
     val = EV2Val vval ->
     m''/ e3 ==> m''' / val ->
-    m / IRESet e1 e2 e3 ==> Update a (ToIndex idx) vval m''' / val
+    m / IRESet e1 e2 e3 ==> Update a (ToIndex idx) vval m''' / IRENil
 | BStLet : forall m exp m' v1 var t body m'' res,
      m / exp ==> m' / v1 ->
      m' / ([var := v1] body) ==> m'' / res ->
@@ -316,7 +316,7 @@ Qed.
 Lemma StSet' : forall m a idx val,
     Value idx ->
     m / IRESet (IREAddr a) idx (EV2Val val) -->
-    Update a idx val m / EV2Val val.
+    Update a idx val m / IRENil.
 Proof.
   intros *.
   destruct val.

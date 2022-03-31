@@ -34,7 +34,7 @@ Inductive IRType : Set :=
 
 (*
 ** Without detailed function types, this type became
-** isomorphic to IRType. One of them should be removed.
+** isomorphic to IRType. One of them should be removed.  ????
 *)
 Inductive BaseType : Set :=
 | BGround : Tag  -> BaseType
@@ -167,7 +167,7 @@ Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
     Γ |= e1 : IRTTbl ->
     Γ |= e2 : IRTStar ->
     Γ |= e3 : IRTStar ->
-    Γ |= (IRESet e1 e2 e3) : IRTStar
+    Γ |= (IRESet e1 e2 e3) : IRTNil
 | IRTyLet : forall Γ var t t' v body,
     var |=> t; Γ |= body : t' ->
     Γ |= v : t ->
@@ -475,7 +475,7 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
 | StSet : forall m a idx v,
     Value idx ->
     forall Vv : Value v,
-    m / IRESet (IREAddr a) idx v --> Update a idx (EV v Vv) m / v
+    m / IRESet (IREAddr a) idx v --> Update a idx (EV v Vv) m / IRENil
 | StLet1 : forall var t body m e m' e',
     m / e --> m' / e' ->
     m / IRELet var t e body --> m' / IRELet var t e' body

@@ -12,8 +12,11 @@ Require Import LIR.lir.
 
 
 Inductive PType : Set :=
-| PTStar : PType | PTNil : PType | PTInt : PType
-| PTArr : PType -> PType | PTFun : PType -> PType -> PType
+| PTStar : PType
+| PTNil : PType
+| PTInt : PType
+| PTArr : PType -> PType
+| PTFun : PType -> PType -> PType
 .
 
 
@@ -30,6 +33,7 @@ Inductive PE : Set :=
 | PENil : PE
 | PENum : nat -> PE
 | PEPlus : PE -> PE -> PE
+(* ??? New vs. Cnst : usar o mesmo nome em todas as linguagens *)
 | PENew : PType -> PE
 | PEGet : PE -> PE -> PE
 | PESet : PE -> PE -> PE -> PE
@@ -65,7 +69,7 @@ Inductive PTyping : PEnvironment -> PE -> PType -> Prop :=
     Γ |= e1 : PTArr T ->
     Γ |= e2 : PTInt ->
     Γ |= e3 : T ->
-    Γ |= PESet e1 e2 e3 : PTStar
+    Γ |= PESet e1 e2 e3 : PTNil
 | PTyFun : forall Γ var Tvar body Tbody,
     var |=> Tvar; Γ |= body : Tbody ->
     Γ |= PEFun var Tvar body : PTFun Tvar Tbody
@@ -102,7 +106,7 @@ Fixpoint typeOf Γ e : option PType :=
   | PESet e1 e2 e3 =>
     match (typeOf Γ e1), (typeOf Γ e2), (typeOf Γ e3) with
     | Some (PTArr T), Some PTInt, Some T' =>
-        if dec_TP T T' then Some PTStar else None
+        if dec_TP T T' then Some PTNil else None
     | _, _, _ => None
     end
   | PEVar var => In Γ var

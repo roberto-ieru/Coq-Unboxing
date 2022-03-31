@@ -241,8 +241,6 @@ Proof.
   generalize dependent e2'.
   induction HP; intros * HStep; inversion HV;
   inversion HStep; subst; eauto using Precision.
-  specialize (IHHP eq_refl H0 e2' m _ HStep).
-  apply UpdateDiff in IHHP. destruct IHHP.
 Qed.
 
 
@@ -502,12 +500,11 @@ Proof.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
-    exists x1. eexists.
+    exists IRENil. eexists (Update _ _ (EV x1 H4) _).
     split; try split;
       eauto 9 using multiTrans, CongSet1, CongSet2, CongSet3,
         multistep1, step, Precision, PrecQuery, PrecisionPreservationM,
         PrecUpdate.
-    Unshelve. trivial.
 
   + (* StLet *)
     clear IHHP1 IHHP2.

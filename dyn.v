@@ -21,7 +21,8 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IREPlus e1 e2 => IREBox TgInt (IREPlus (IREUnbox TgInt (dyn e1))
                                            (IREUnbox TgInt (dyn e2)))
   | IRECnst => IREBox TgTbl IRECnst
-  | IREAddr a => IREBox TgTbl (IREAddr a)
+  | IRETAddr a => IREBox TgTbl (IRETAddr a)
+  | IREFAddr a => IREBox TgFun (IREFAddr a)
   | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1)) (dyn e2)
   | IRESet e1 e2 e3 => IREBox TgNil (IRESet (IREUnbox TgTbl (dyn e1))
                                             (dyn e2)
@@ -104,8 +105,9 @@ Qed.
 Fixpoint dynMem (m : Mem) : Mem :=
   match m with
   | EmptyMem => EmptyMem
-  | Update a n (EV e ve) m =>
-      Update a n (EV (dyn e) (dynValue e ve)) (dynMem m)
+  | UpdateT a n (EV e ve) m =>
+      UpdateT a n (EV (dyn e) (dynValue e ve)) (dynMem m)
+  | UpdateF a v b m => UpdateF a v (dyn b) (dynMem m)
   end.
 
 
@@ -118,8 +120,46 @@ Proof.
   induction HM.
   - auto using mem_correct.
   - destruct v. eauto using mem_correct, dynTypingE.
+  - constructor; eauto.
+    replace (var |=> IRTStar; MEmpty) with
+            (dynGamma (var |=> IRTStar; MEmpty)) by trivial.
+    eauto using dynTyping.
 Qed.
 
 
-Axiom DynIndex : forall e, ToIndex e = ToIndex (dyn e).
+Lemma DynIndex : forall e, ToIndex e = ToIndex (dyn e).
+Proof.
+  induction e; eauto.
+Qed.
+
+
+Lemma DynIndexEq : forall e1 e2,
+    Value e1 ->
+    Value e2 ->
+    (ToIndex e1 = ToIndex e2 <-> dyn e1 = dyn e2).
+Proof.
+  intros * HV1 HV2. split.
+  - generalize dependent e2.
+    induction e1; intros; induction e2; try easy; eauto using valBoxVal;
+    simpl in *; congruence.
+  - rewrite DynIndex. rewrite (DynIndex e2). congruence.
+Qed.
+ 
+
+Lemma ValueTag : forall e tg,
+    Value e -> MEmpty |= e : Tag2Type tg -> dyn e = IREBox tg e.
+Proof.
+  destruct tg; intros HV Hty;
+  inversion HV; subst; inversion Hty; trivial.
+Qed.
+
+
+Lemma ValueStar : forall e,
+    Value e -> MEmpty |= e : IRTStar -> e = dyn e.
+Proof.
+  intros * HV HTy.
+  induction HV; inversion HTy; subst.
+  simpl. rewrite (ValueTag v gt); trivial.
+Qed.
+
 

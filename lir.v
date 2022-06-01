@@ -20,56 +20,32 @@ Lemma dec_Tag : forall (t1 t2 : Tag), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. Defined.
 
 
-(*
-** Types for Lir
-*)
 Inductive IRType : Set :=
-| IRTNil
-| IRTInt
-| IRTTbl
-| IRTFun
-| IRTStar
+| Tag2Type : Tag  -> IRType
+| IRTStar : IRType
 .
 
 
-(*
-** Without detailed function types, this type became
-** isomorphic to IRType. One of them should be removed.  ????
-*)
-Inductive BaseType : Set :=
-| BGround : Tag  -> BaseType
-| BStar : BaseType
-.
-
-
-Definition Tag2Type (tg : Tag) : IRType :=
-  match tg with
-  | TgNil => IRTNil
-  | TgInt => IRTInt
-  | TgTbl => IRTTbl
-  | TgFun => IRTFun
-  end.
+Lemma dec_IRType : forall (t1 t2 : IRType), {t1 = t2} + {t1 <> t2}.
+Proof. decide equality. auto using dec_Tag. Defined.
 
 
 Definition Type2Tag (t : IRType) : option Tag :=
   match t with
-  | IRTNil => Some TgNil
-  | IRTInt => Some TgInt
-  | IRTTbl => Some TgTbl
-  | IRTFun => Some TgFun
+  | Tag2Type tg => Some tg
   | IRTStar => None
   end.
 
 
-Definition Base2Type (bt : BaseType) : IRType :=
-  match bt with
-  | BGround tg => Tag2Type tg
-  | BStar => IRTStar
-  end.
+Definition IRTNil := Tag2Type TgNil.
+Definition IRTInt := Tag2Type TgInt.
+Definition IRTTbl := Tag2Type TgTbl.
+Definition IRTFun := Tag2Type TgFun.
+
 
 
 (*
-** Addresses represent tables in memory
+** Addresses represent tables and functions in memory
 *)
 Definition address := nat.
 
@@ -82,7 +58,8 @@ Inductive IRE : Set :=
 | IRENum : nat -> IRE
 | IREPlus : IRE -> IRE -> IRE
 | IRECnst : IRE
-| IREAddr : address -> IRE  (* only at runtime *)
+| IRETAddr : address -> IRE  (* only at runtime *)
+| IREFAddr : address -> IRE  (* only at runtime *)
 | IREGet : IRE -> IRE -> IRE
 | IRESet : IRE -> IRE -> IRE -> IRE
 | IREVar : string -> IRE
@@ -158,7 +135,8 @@ Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
     Γ |= e2 : IRTInt ->
     Γ |= (IREPlus e1 e2) : IRTInt
 | IRTyCnst : forall Γ, Γ |= IRECnst : IRTTbl
-| IRTyAddr : forall Γ addr, Γ |= IREAddr addr : IRTTbl
+| IRTyTAddr : forall Γ addr, Γ |= IRETAddr addr : IRTTbl
+| IRTyFAddr : forall Γ addr, Γ |= IREFAddr addr : IRTFun
 | IRTyGet : forall Γ e1 e2,
     Γ |= e1 : IRTTbl ->
     Γ |= e2 : IRTStar ->
@@ -210,8 +188,8 @@ Qed.
 Inductive Value : IRE -> Prop :=
 | Vnil : Value IRENil
 | Vnum : forall n, Value (IRENum n)
-| Vtbl : forall a, Value (IREAddr a)
-| Vfun : forall var e, Value (IREFun var e)
+| Vtbl : forall a, Value (IRETAddr a)
+| Vfun : forall a, Value (IREFAddr a)
 | Vbox : forall gt v, Value v -> Value (IREBox gt v)
 .
 
@@ -223,8 +201,8 @@ Fixpoint isValue (e : IRE) : bool :=
   match e with
   | IRENil => true
   | IRENum _ => true
-  | IREAddr _ => true
-  | IREFun _ _ => true
+  | IRETAddr _ => true
+  | IREFAddr _ => true
   | IREBox _ e => isValue e
   | _ => false
   end.
@@ -268,23 +246,22 @@ Qed.
 
 
 Lemma valtbl : forall Γ e,
-    Γ |= e : IRTTbl -> Value e -> exists a, e = IREAddr a.
+    Γ |= e : IRTTbl -> Value e -> exists a, e = IRETAddr a.
 Proof.
   intros Γ e HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
-  eexists; auto 1.
+  eauto.
 Qed.
 
 
 Lemma valfun : forall Γ e,
-    Γ |= e : IRTFun -> Value e -> exists var b, e = IREFun var b.
+    Γ |= e : IRTFun -> Value e -> exists a, e = IREFAddr a.
 Proof.
   intros * HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
-  inversion H2; subst.
-  eexists; eexists; auto using Value.
+  eauto.
 Qed.
 
 
@@ -300,12 +277,37 @@ Proof.
 Qed.
 
 
-Axiom Index : Set.
-Axiom ToIndex : IRE -> Index.
+(*
+  Table indices. Only values are used as table indices, but we will
+  allow any expression for now.
+*)
+Inductive Index : Set :=
+| I : nat -> Tag -> Index
+| NI : Index   (* indices for non-values *)
+.
 
-Coercion ToIndex : IRE >-> Index.
 
-Axiom Index_dec : Index -> Index -> bool.
+(*
+  Normalize values used as indices, so that boxed and unboxed values
+  give the same index.
+*)
+Fixpoint ToIndex (e : IRE) : Index :=
+  match e with
+  | IRENil => I 0 TgNil
+  | IRENum n => I n TgInt
+  | IRETAddr a => I a TgTbl
+  | IREFAddr a => I a TgFun
+  | IREBox t e' => ToIndex e'
+  | IREUnbox t e' => ToIndex e'
+  | _ => NI
+  end.
+
+
+
+Lemma Index_dec : forall (i1 i2 : Index), {i1 = i2} + {i1 <> i2}.
+Proof. 
+  decide equality; auto using Nat.eq_dec, dec_Tag.
+Defined.
 
 
 (*
@@ -315,7 +317,7 @@ Inductive ExpValue : Set :=
 | EV : forall e, Value e -> ExpValue.
 
 
-Definition EV2Val (me : ExpValue) :=
+Definition EV2Val (me : ExpValue) : IRE :=
   match me with
   | EV v _ => v
   end.
@@ -323,22 +325,35 @@ Definition EV2Val (me : ExpValue) :=
 
 Inductive Mem : Set :=
 | EmptyMem : Mem
-| Update :
-    address -> Index -> ExpValue -> Mem -> Mem.
+| UpdateT :
+    address -> Index -> ExpValue -> Mem -> Mem
+| UpdateF :
+    address -> string -> IRE -> Mem -> Mem.
 
 
-Definition BoxedNil := IREBox TgNil IRENil.
+Definition BoxedNil : IRE := IREBox TgNil IRENil.
 
 Definition BoxedNilValue : Value BoxedNil := Vbox TgNil IRENil Vnil.
 
 
-Fixpoint query (a : address) (idx : IRE) (m : Mem) :=
+Fixpoint queryT (a : address) (idx : IRE) (m : Mem) : IRE :=
   match m with
   | EmptyMem => BoxedNil
-  | Update a' idx' v m' => if Nat.eq_dec a a' then
-                                    if Index_dec idx idx' then (EV2Val v)
-                                    else query  a idx m'
-                                  else query  a idx m'
+  | UpdateT a' idx' v m' => if Nat.eq_dec a a' then
+                                    if Index_dec (ToIndex idx) idx'
+                                      then (EV2Val v)
+                                      else queryT  a idx m'
+                                  else queryT a idx m'
+  | UpdateF _ _ _ m' => queryT a idx m'
+  end.
+
+
+Fixpoint queryF (a : address) (m : Mem) : (string * IRE) :=
+  match m with
+  | EmptyMem => (""%string, IRELet "" IRTStar (IREVar "") BoxedNil)
+  | UpdateT a' _ _ m' => queryF a m'
+  | UpdateF a' var body m' => if Nat.eq_dec a a' then (var, body)
+                              else queryF a m'
   end.
 
 
@@ -348,17 +363,27 @@ Fixpoint query (a : address) (idx : IRE) (m : Mem) :=
 Fixpoint freshaux (m : Mem) : address :=
   match m with
   | EmptyMem => 1
-  | Update _ _ _ m' => S (freshaux m')
+  | UpdateT _ _ _ m' => S (freshaux m')
+  | UpdateF _ _ _ m' => S (freshaux m')
   end.
 
 
 (*
-** Create a fresh address for a memory and initializes
-** it with Nil
+** Create a fresh address for a table and initializes
+** it with {Nil = Nil}.
 *)
-Definition fresh (m : Mem) : (address * Mem) :=
+Definition freshT (m : Mem) : (address * Mem) :=
   let f := freshaux m in
-    (f, Update f BoxedNil (EV BoxedNil BoxedNilValue) m).
+    (f, UpdateT f (I 0 TgNil) (EV BoxedNil BoxedNilValue) m).
+
+
+(*
+** Create a fresh address for a function and initializes
+** it with the given values.
+*)
+Definition freshF (m : Mem) (v : string) (b : IRE) : (address * Mem) :=
+  let f := freshaux m in
+    (f, UpdateF f v b m).
 
 
 (*
@@ -372,7 +397,8 @@ Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
  | IRENum n => e
  | IREPlus e1 e2 => IREPlus ([var := y] e1) ([var := y] e2)
  | IRECnst => e
- | IREAddr a => e
+ | IRETAddr a => e
+ | IREFAddr a => e
  | IREGet e1 e2 => IREGet ([var := y] e1) ([var := y] e2)
  | IRESet e1 e2 e3 => IRESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
  | IREVar var' => if string_dec var var' then y else e
@@ -449,8 +475,8 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
 | StPlus : forall m n1 n2,
     m /  IREPlus (IRENum n1) (IRENum n2) --> m /  IRENum (n1 + n2)
 | StCstr : forall m m' free,
-    (free, m') = fresh m ->
-    m / IRECnst --> m' / IREAddr free
+    (free, m') = freshT m ->
+    m / IRECnst --> m' / IRETAddr free
 | StGet1 : forall m e1 e2 m' e1',
     m /e1 --> m' /e1' ->
     m / IREGet e1 e2 --> m' / IREGet e1' e2
@@ -460,7 +486,7 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     m / IREGet e1 e2 --> m' / IREGet e1 e2'
 | StGet : forall m a idx,
     Value idx ->
-    m / IREGet (IREAddr a) idx --> m / query a idx m
+    m / IREGet (IRETAddr a) idx --> m / queryT a idx m
 | StSet1 : forall m e1 e2 e3 m' e1',
     m / e1 --> m' / e1' ->
     m / IRESet e1 e2 e3 --> m' / IRESet e1' e2 e3
@@ -475,13 +501,17 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
 | StSet : forall m a idx v,
     Value idx ->
     forall Vv : Value v,
-    m / IRESet (IREAddr a) idx v --> Update a idx (EV v Vv) m / IRENil
+    m / IRESet (IRETAddr a) idx v -->
+            UpdateT a (ToIndex idx) (EV v Vv) m / IRENil
 | StLet1 : forall var t body m e m' e',
     m / e --> m' / e' ->
     m / IRELet var t e body --> m' / IRELet var t e' body
 | StLet : forall var t e body m,
     Value e ->
     m / IRELet var t e body --> m / [var := e] body
+| StFun : forall m m' v b free,
+    (free, m') = freshF m v b ->
+    m / IREFun v b --> m' / IREFAddr free
 | StFunapp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / IREApp e1 e2 --> m' / IREApp e1' e2
@@ -489,9 +519,10 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     Value e1 ->
     m / e2 --> m' / e2' ->
     m / IREApp e1 e2 --> m' / IREApp e1 e2'
-| StFunapp : forall m var body v2,
-    Value v2 ->
-    m / IREApp (IREFun var body) v2 --> m / [var := v2] body
+| StFunapp : forall m a var body v,
+    Value v ->
+    (var, body) = queryF a m ->
+    m / IREApp (IREFAddr a) v --> m / [var := v] body
 | StBox1 : forall m t e m' e',
     m / e --> m' / e' ->
     m / IREBox t e --> m' / IREBox t e'
@@ -567,23 +598,31 @@ Ltac breakIndexDec :=
   | [ |- context C [Index_dec ?V1 ?V2] ] =>
     destruct (Index_dec V1 V2) eqn:? ;
   try easy
+  | [ H : context C [Nat.eq_dec ?V1 ?V2] |- _] =>
+    destruct (Nat.eq_dec V1 V2); subst
   end.
 
 
 (*
-** Ensures that all elements in a memory have type '*'
+** Ensures that all elements of tables in a memory have type '*'
 *)
 Inductive mem_correct : Mem -> Prop :=
 | MCE : mem_correct EmptyMem
-| MCU : forall a idx v m,
+| MCT : forall a idx v m,
      MEmpty |= EV2Val v : IRTStar ->
      mem_correct m ->
-     mem_correct (Update a idx v m).
+     mem_correct (UpdateT a idx v m)
+| MCF : forall a var body m,
+     var |=> IRTStar; MEmpty |= body : IRTStar ->
+     mem_correct m ->
+     mem_correct (UpdateF a var body m)
+.
+
 
 (*
-** All expressions stored in a memory are values
+** All expressions stored in memory tables are values
 *)
-Lemma MCValue : forall m a n, Value (query a n m).
+Lemma MCValue : forall m a n, Value (queryT a n m).
 Proof.
   intros.
   induction m; eauto using Value.
@@ -593,27 +632,62 @@ Qed.
 
 
 (*
-** All expressions stored in a correct memory have
+** All expressions stored in a table of a correct memory have
 ** type '*'
 *)
 Lemma MCTy : forall m a n Γ,
-    mem_correct m -> Γ |= (query a n m) : IRTStar.
+    mem_correct m -> Γ |= (queryT a n m) : IRTStar.
 Proof.
   intros.
-  induction H.
+  induction H; trivial.
   - eauto using typing_empty, IRTyping.
   - simpl. breakIndexDec; auto using typing_empty.
 Qed.
 
 
 (*
-** Memory allocation preserves memory correctness
+** All functions stored in a correct memory have correct types.
 *)
-Lemma mem_correct_fresh : forall m m' free,
-  mem_correct m -> (free,m') = fresh m -> mem_correct m'.
+Lemma MCTyF : forall m a var body Γ,
+    (var, body) = queryF a m ->
+    mem_correct m ->
+    var |=> IRTStar; Γ |= body : IRTStar.
 Proof.
-  unfold fresh. intros m m' free Hmc Heq. inversion Heq.
+  intros * HEq HMC.
+  induction HMC.
+  - simpl in HEq. injection HEq; intros; subst.
+    unfold BoxedNil. auto using IRTyping.
+  -  eauto.
+  - simpl in HEq. breakIndexDec; eauto.
+    injection HEq; intros; subst.
+    eauto using inclusion_typing, inclusion_update, inclusion_empty.
+Qed.
+
+
+
+(*
+** Table allocation preserves memory correctness
+*)
+Lemma mem_correct_freshT : forall m m' free,
+  mem_correct m -> (free,m') = freshT m -> mem_correct m'.
+Proof.
+  unfold freshT. intros m m' free Hmc Heq. inversion Heq.
   eauto using mem_correct, IRTyping.
+Qed.
+
+
+(*
+** Function allocation preserves memory correctness
+*)
+Lemma mem_correct_freshF : forall m m' var body free,
+  var |=> IRTStar; MEmpty |= body : IRTStar ->
+  mem_correct m ->
+  (free,m') = freshF m var body ->
+  mem_correct m'.
+Proof.
+  unfold freshF. intros * HTy Hmc Heq.
+  inversion Heq; subst.
+  eauto using mem_correct.
 Qed.
 
 
@@ -632,17 +706,7 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HTy; intros e' m' Hst; inversion Hst; subst;
-  eauto using mem_correct_fresh, mem_correct.
-Qed.
-
-
-Lemma funcTyping :  forall var body e,
-    MEmpty |= IREFun var body : IRTFun ->
-    MEmpty |= e : IRTStar ->
-    MEmpty |= [var := e] body : IRTStar.
-Proof.
-  intros * HT1 HT2.
-  inversion HT1; subst; eauto using subst_typing.
+  eauto using mem_correct_freshT, mem_correct_freshF, mem_correct.
 Qed.
 
 
@@ -663,7 +727,7 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HT; intros e' m' Hst; inversion Hst; subst;
-  eauto using IRTyping, MCTy, boxTyping, funcTyping, subst_typing.
+  eauto using IRTyping, MCTy, boxTyping, MCTyF, subst_typing.
 Qed.
 
 
@@ -736,6 +800,9 @@ Proof.
   - (* cannot find the correct sequence with StSet3 ? *)
     right. right. eexists. eexists.
     eapply StSet3; eauto.
+  - right. right.
+    destruct (queryF x m) eqn:?.
+    eauto using step, Value.
   - (* unboxing has to handle success vs. failure *)
     match goal with | [t1:Tag, t2:Tag |- _] => destruct (dec_Tag t1 t2) end;
     right; subst; eauto using step, stepF.

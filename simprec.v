@@ -23,7 +23,11 @@ Inductive PrecMem : Mem -> Mem -> Prop :=
 | PrecMemUD : forall addr idx v1 v2 m1 m2,
     Precision PEmpty (EV2Val v1) IRTStar (EV2Val v2) IRTStar ->
     PrecMem m1 m2 ->
-    PrecMem (Update addr idx v1 m1) (Update addr idx v2 m2)
+    PrecMem (UpdateT addr idx v1 m1) (UpdateT addr idx v2 m2)
+| PrecMemUDF : forall addr var b1 b2 m1 m2,
+    Precision (Env2P  (var |=> IRTStar; MEmpty)) b1 IRTStar b2 IRTStar ->
+    PrecMem m1 m2 ->
+    PrecMem (UpdateF addr var b1 m1) (UpdateF addr var b2 m2)
 .
 
 
@@ -37,8 +41,8 @@ Lemma PrecMemRefl : forall m,
     mem_correct m -> m <M| m.
 Proof.
   intros m Hm.
-  induction Hm; constructor; trivial.
-  eapply PrecisionRefl. eauto. 
+  induction Hm; constructor; trivial;
+  eapply PrecisionRefl; eauto. 
 Qed.
 
 
@@ -49,6 +53,8 @@ Lemma PrecCorrect1 : forall m1 m2, m1 <M| m2 -> mem_correct m1.
 Proof.
   intros * H.
   induction H; intros *; simpl;
+  eauto using mem_correct, PrecisionType1Empty.
+  eapply PrecisionType1 in H. simpl in H.
   eauto using mem_correct, PrecisionType1Empty.
 Qed.
 
@@ -61,7 +67,18 @@ Proof.
   intros * H.
   induction H; intros *; simpl;
   eauto using mem_correct, PrecisionType2Empty.
+  eapply PrecisionType2 in H. simpl in H.
+  eauto using mem_correct, PrecisionType2Empty.
 Qed.
+
+
+(*
+** Terms "similar up to precision" generate the same indices
+*)
+Lemma PrecIndex : forall e1 e2,
+    Precision PEmpty e1 IRTStar e2 IRTStar ->
+    ToIndex e1 = ToIndex e2.
+Proof. intros * HP. induction HP; eauto. Qed.
 
 
 Lemma PrecFreshaux : forall m1 m2,
@@ -72,12 +89,12 @@ Proof.
 Qed.
 
 
-Lemma PrecFresh : forall m1 m2 free m1',
+Lemma PrecFreshT : forall m1 m2 free m1',
     m1 <M| m2 ->
-    (free, m1') = fresh m1 ->
-    exists m2', m1' <M| m2' /\ (free, m2') = fresh m2.
+    (free, m1') = freshT m1 ->
+    exists m2', m1' <M| m2' /\ (free, m2') = freshT m2.
 Proof.
-  unfold fresh.
+  unfold freshT.
   intros * HOM HF.
   injection HF; intros; subst; clear HF.
   replace (freshaux m2) with (freshaux m1) by auto using PrecFreshaux.
@@ -86,24 +103,56 @@ Proof.
 Qed.
 
 
-(*
-** Terms "similar up to precision" generate the same indices
-*)
-Axiom PrecIndex : forall e1 e2,
-    Precision PEmpty e1 IRTStar e2 IRTStar ->
-    ToIndex e1 = ToIndex e2.
+Lemma PrecFreshF : forall m1 m2 var d1 d2 free m1',
+    m1 <M| m2 ->
+    Precision
+       (ExpandPEnv PEmpty var IRTStar IRTStar (TPrecisionRefl IRTStar)) d1
+       IRTStar d2 IRTStar ->
+    (free, m1') = freshF m1 var d1 ->
+    exists m2', m1' <M| m2' /\ (free, m2') = freshF m2 var d2.
+Proof.
+  unfold freshF.
+  intros * HOM HP HF.
+  injection HF; intros; subst; clear HF.
+  replace (freshaux m2) with (freshaux m1) by auto using PrecFreshaux.
+  replace PEmpty with (Env2P MEmpty) in HP by trivial.
+  eexists;
+  eauto using PrecMemUDF, PrecisionIrrel, PEquivSym, Expand2P.
+Qed.
 
 
-Lemma PrecQuery : forall m1 m2 a i1 i2,
+Lemma PrecQueryT : forall m1 m2 a i1 i2,
     m1 <M| m2 ->
     Precision PEmpty i1 IRTStar i2 IRTStar ->
-    Precision PEmpty (query a i1 m1) IRTStar (query a i2 m2) IRTStar.
+    Precision PEmpty (queryT a i1 m1) IRTStar (queryT a i2 m2) IRTStar.
 Proof.
   intros * HOM HP.
-  induction HOM; simpl.
-  - eauto using Precision.
-  - rewrite <- (PrecIndex HP).
-    breakIndexDec; trivial.
+  induction HOM; simpl; eauto using Precision.
+  rewrite <- (PrecIndex HP).
+  breakIndexDec; trivial.
+Qed.
+
+
+Lemma PrecQueryF : forall m1 m2 a var var' body body',
+    m1 <M| m2 ->
+    (var, body) = queryF a m1 ->
+    (var', body') = queryF a m2 ->
+    var = var' /\
+      Precision 
+         (ExpandPEnv PEmpty var IRTStar IRTStar (TPrecisionRefl IRTStar))
+          body IRTStar body' IRTStar.
+Proof.
+  intros * HM HEq1 HEq2.
+  induction HM; simpl; eauto.
+  - inversion HEq1; inversion HEq2; subst.
+    unshelve (split; eauto using Precision, PrecisionIrrel);
+      eauto using TPrecision.
+  - simpl in *.
+    breakIndexDec; eauto.
+    injection HEq1; injection HEq2; intros; subst.
+    clear HEq1 HEq2. split; trivial.
+    eapply PrecisionIrrel; eauto.
+    eapply Expand2P.
 Qed.
 
 
@@ -112,8 +161,8 @@ Lemma PrecUpdate : forall m1 m2 a i1 i2 v1 v2,
     forall (vv1 : Value v1) (vv2 : Value v2),
     Precision PEmpty i1 IRTStar i2 IRTStar ->
     Precision PEmpty v1 IRTStar v2 IRTStar ->
-    Update a (ToIndex i1) (EV v1 vv1) m1 <M|
-    Update a (ToIndex i2) (EV v2 vv2) m2.
+    UpdateT a (ToIndex i1) (EV v1 vv1) m1 <M|
+    UpdateT a (ToIndex i2) (EV v2 vv2) m2.
 Proof.
   intros * HOM HV1 HV2 HP1 HP2.
   rewrite <- (PrecIndex HP1).
@@ -207,14 +256,6 @@ Proof.
     replace t with (Tag2Type g') in HT by (subst; trivial);
     symmetry;
     eauto using GroundFlat).
-Qed.
-
-
-Lemma UpdateDiff : forall m a idx v, m <> Update a idx v m.
-Proof.
-  induction m; intros * contra.
-  - discriminate.
-  - eapply IHm. injection contra; eauto.
 Qed.
 
 
@@ -349,7 +390,7 @@ Proof.
   inversion HP'; subst; clear HP';
   ContraTags;
 
-  specialize (ValueStarP _ HP H HV H0 H1) as [? [? _]];
+  specialize (ValueStarP HP H HV H0 H1) as [? [? _]];
       subst;
 
   try (eapply GroundType in H; only 2: (simpl; trivial);
@@ -433,13 +474,13 @@ Proof.
 
     repeat doCatchUp.
 
-  + (* StPlus2 *)
+  - (* StPlus2 *)
     clear IHHP1.
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongPlus1, CongPlus2,
                   Precision, PrecisionPreservationM.
 
-  + (* StPlus *)
+  - (* StPlus *)
     clear IHHP1 IHHP2.
 
     assert (N1: x = IRENum n1). {
@@ -458,85 +499,91 @@ Proof.
          Precision.
 
 
-  + (* StCstr *)
-    specialize (PrecFresh HM H) as [? [? ?]].
+  - (* StCstr *)
+    specialize (PrecFreshT HM H) as [? [? ?]].
     eexists; eexists; split; try split;
     eauto using multistep1, step, Precision.
 
 
-  + (* StGet2 *)
+  - (* StGet2 *)
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongGet1, CongGet2,
                   Precision, PrecisionPreservationM.
 
-  + (* StGet *)
+  - (* StGet *)
     clear IHHP1 IHHP2.
 
-    assert (N1: x = IREAddr a). {
+    assert (N1: x = IRETAddr a). {
       specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
-    exists (query a x0 m2). exists m2. split; try split;
+    exists (queryT a x0 m2). exists m2. split; try split;
       eauto 7 using multiTrans, CongGet1, CongGet2, multistep1, step,
-         Precision, PrecQuery, PrecisionPreservationM.
+         Precision, PrecQueryT, PrecisionPreservationM.
 
-  + (* StSet2 *)
+  - (* StSet2 *)
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongSet1, CongSet2,
                   Precision, PrecisionPreservationM.
 
-  + (* StSet3 *)
+  - (* StSet3 *)
    clear IHHP1 IHHP2.
     eexists; exists x0; split; try split;
       eauto 6 using multiTrans, CongSet1, CongSet2, CongSet3,
                   Precision, PrecisionPreservationM.
 
-  + (* StSet *)
+  - (* StSet *)
     clear IHHP1 IHHP2 IHHP3.
 
-    assert (N1: x = IREAddr a). {
+    assert (N1: x = IRETAddr a). {
       specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
-    exists IRENil. eexists (Update _ _ (EV x1 H4) _).
+    exists IRENil. eexists (UpdateT _ _ (EV x1 H4) _).
     split; try split;
       eauto 9 using multiTrans, CongSet1, CongSet2, CongSet3,
-        multistep1, step, Precision, PrecQuery, PrecisionPreservationM,
+        multistep1, step, Precision, PrecQueryT, PrecisionPreservationM,
         PrecUpdate.
 
-  + (* StLet *)
+  - (* StLet *)
     clear IHHP1 IHHP2.
     eexists ([var := x] b2); exists m2; split; try split;
       eauto using multiTrans, CongLet, multistep1, step,
                   PrecSubs, PrecisionPreservationM, PEquivRefl.
 
-  + (* StFunApp2 *)
+  - (* StFun *)
+    clear IHHP. 
+    specialize (PrecFreshF HM HP H4) as [? [? ?]].
+    eexists. eexists. repeat split;
+    eauto using multistep1, step, Precision.
+
+  - (* StFunApp2 *)
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongFunApp1, CongFunApp2,
                   Precision, PrecisionPreservationM.
 
-  + (* StFunApp *)
+  - (* StFunApp *)
     clear IHHP1 IHHP2.
 
-    assert (N1: exists body', x0 = IREFun var body'). {
-      specialize (PrecisionPreservationM HP2 (Vfun var body) H1) as NH1.
-      inversion NH1; subst; eauto; NoValueUnbox.
+    assert (N1: x0 = IREFAddr a). {
+      specialize (PrecisionPreservationM HP2 (Vfun a) H1) as NH1.
+      inversion NH1; subst. eauto. NoValueUnbox.
     }
-    destruct N1 as [body' ?].
     subst.
-    exists ([var := x] body'). exists m2. split; try split;
-      eauto 7 using multiTrans, CongFunApp1, CongFunApp2, multistep1, step,
-         Precision.
 
-    eauto using PrecSubs', PrecisionPreservationM, Value.
+    destruct (queryF a m2) as [var' body'] eqn:HEq2. symmetry in HEq2.
+    specialize (PrecQueryF _ HM H5 HEq2) as [? ?]; subst.
+    exists ([var' := x] body'). exists m2. repeat split;
+    eauto 7 using multiTrans, CongFunApp1, CongFunApp2, multistep1, step,
+         Precision, PrecSubs',  PrecisionPreservationM. 
 
-  + (* StUnbox *)
+  - (* StUnbox *)
     clear IHHP.
     inversion HP; subst; ContraTags.
     * exfalso. apply PPT in H1. ContraTags.
-    * specialize (ValueStarP _ H3 (TPrecisionRefl (Tag2Type g))
+    * specialize (ValueStarP H3 (TPrecisionRefl (Tag2Type g))
         H5 H H0) as [? [? ?]].
       subst.
       eexists; eexists; split; try split; eauto.
@@ -579,7 +626,7 @@ Corollary SimDyn : forall m1 e1 t1 m1' e1',
   Value e1' ->
   exists e2' m2',
     m1 / dyn e1 -->* m2' / e2' /\
-    dyn e2' = dyn e1' /\
+    e2' = dyn e1' /\
     (* m1' <M| m2' /\ *)
     Value e2'.
 Proof.
@@ -589,6 +636,6 @@ Proof.
   assert (m1 <M| m1) by auto using PrecMemRefl.
   specialize (SimMult HSt HV H H0) as [? [? [? [? [? ?]]]]].
   eexists x. eexists. repeat split;
-  eauto using PrecDynEqual.
+  eauto using PrecDynEqualVal.
 Qed.
 

@@ -189,17 +189,14 @@ Proof.
 Qed.
 
 
-Definition PT2Base (t : PType) : BaseType :=
+Definition PT2IRT (t : PType) : IRType := 
   match t with
-  | PTStar => BStar
-  | PTNil => BGround TgNil
-  | PTInt => BGround TgInt
-  | PTArr _ => BGround TgTbl
-  | PTFun _ _ =>  BGround TgFun
+  | PTStar => IRTStar
+  | PTNil => Tag2Type TgNil
+  | PTInt => Tag2Type TgInt
+  | PTArr _ => Tag2Type TgTbl
+  | PTFun _ _ =>  Tag2Type TgFun
   end.
-
-
-Definition PT2IRT (t : PType) : IRType := Base2Type (PT2Base t).
 
 
 Lemma PT2IRTFun : forall T1 T2,
@@ -223,13 +220,13 @@ Proof.
 Qed.
 
 
-Definition Cast (t1 t2 : BaseType) (e : IRE) : IRE :=
+Definition Cast (t1 t2 : IRType) (e : IRE) : IRE :=
   match t1, t2 with
-  | BStar, BStar => e
-  | BStar, BGround t => IREBox t e
-  | BGround t, BStar => IREUnbox t e
-  | BGround t1', BGround t2' => if dec_Tag t1' t2' then e
-                            else IREUnbox t1' (IREBox t2' e)
+  | IRTStar, IRTStar => e
+  | IRTStar, Tag2Type t => IREBox t e
+  | Tag2Type t, IRTStar => IREUnbox t e
+  | Tag2Type t1', Tag2Type t2' => if dec_Tag t1' t2' then e
+                                  else IREUnbox t1' (IREBox t2' e)
   end.
 
 
@@ -238,19 +235,19 @@ Notation "'<' t1 '<=' t2 '>' e" := (Cast t1 t2 e)
 
 
 
-Definition tagOf Γ e : BaseType :=
+Definition tagOf Γ e : IRType :=
   match typeOf Γ e with
-  | Some T => PT2Base T
-  | None => BGround TgNil
+  | Some T => PT2IRT T
+  | None => Tag2Type TgNil
   end.
 
 
-Lemma tagOfT : forall Γ e T, typeOf Γ e = Some T -> tagOf Γ e = PT2Base T.
+Lemma tagOfT : forall Γ e T, typeOf Γ e = Some T -> tagOf Γ e = PT2IRT T.
 Proof. intros. unfold tagOf. rewrite H. trivial. Qed.
 
 
 Lemma tagStar2type : forall Γ e,
-    tagOf Γ e = BStar -> typeOf Γ e = Some PTStar.
+    tagOf Γ e = IRTStar -> typeOf Γ e = Some PTStar.
 Proof.
   unfold tagOf.
   intros Γ e H.
@@ -269,21 +266,21 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   | PEPlus e1 e2 => IREPlus (Pall2Lir Γ e1) (Pall2Lir Γ e2)
   | PENew _ => IRECnst
   | PEGet e1 e2 =>
-         <tagOf Γ e <= BStar>
-           (IREGet (Pall2Lir Γ e1) (<BStar <= (BGround TgInt)> (Pall2Lir Γ e2)))
+         <tagOf Γ e <= IRTStar>
+           (IREGet (Pall2Lir Γ e1) (<IRTStar <= (Tag2Type TgInt)> (Pall2Lir Γ e2)))
   | PESet e1 e2 e3 =>
          (IRESet (Pall2Lir Γ e1)
-                 (<BStar <= BGround TgInt> (Pall2Lir Γ e2))
-                 (<BStar <= tagOf Γ e3> Pall2Lir Γ e3))
+                 (<IRTStar <= Tag2Type TgInt> (Pall2Lir Γ e2))
+                 (<IRTStar <= tagOf Γ e3> Pall2Lir Γ e3))
   | PEVar var => IREVar var
   | PEFun var T body => let Γ' := (var |=> T; Γ) in
         IREFun var
-          (IRELet var (PT2IRT T) (<PT2Base T <= BStar> (IREVar var))
-                     (<BStar <= tagOf Γ' body> (Pall2Lir Γ' body)))
-  | PEApp e1 e2 => <tagOf Γ e <= BStar>
+          (IRELet var (PT2IRT T) (<PT2IRT T <= IRTStar> (IREVar var))
+                     (<IRTStar <= tagOf Γ' body> (Pall2Lir Γ' body)))
+  | PEApp e1 e2 => <tagOf Γ e <= IRTStar>
          (IREApp (Pall2Lir Γ e1)
-                  (<BStar <= (tagOf Γ e2)> Pall2Lir Γ e2))
-  | PECast e1 t => <PT2Base t <= tagOf Γ e1> (Pall2Lir Γ e1)
+                  (<IRTStar <= (tagOf Γ e2)> Pall2Lir Γ e2))
+  | PECast e1 t => <PT2IRT t <= tagOf Γ e1> (Pall2Lir Γ e1)
   end.
 
 
@@ -299,7 +296,7 @@ Qed.
 
 Lemma invertFun : forall Γ e1 e2 T1 T2,
     typeOf Γ e1 = Some (PTFun T1 T2) ->
-    tagOf Γ (PEApp e1 e2) = BStar ->
+    tagOf Γ (PEApp e1 e2) = IRTStar ->
     T2 = PTStar.
 Proof.
   intros Γ e1 e2 T1 T2 H1 H2.
@@ -322,16 +319,8 @@ Ltac breakTagOf :=
   end.
 
 
-Lemma PTTagB : forall (T : PType) (tg : Tag),
-    PT2Base T = BGround tg -> PT2IRT T = Tag2Type tg.
-Proof.
-  intros T tg H.
-  destruct T; inversion H; easy.
-Qed.
-
-
 Lemma PTStarB : forall (T : PType),
-    PT2Base T = BStar -> T = PTStar.
+    PT2IRT T = IRTStar -> T = PTStar.
 Proof.
   intros T H.
   destruct T; inversion H; easy.
@@ -339,7 +328,7 @@ Qed.
 
 
 Lemma typeStar : forall Γ e T,
-    typeOf Γ e = Some T -> tagOf Γ e = BStar -> T = PTStar.
+    typeOf Γ e = Some T -> tagOf Γ e = IRTStar -> T = PTStar.
 Proof.
   intros Γ e T HT Htg.
   unfold tagOf in Htg.
@@ -349,12 +338,12 @@ Qed.
 
 
 Lemma typeTag : forall Γ e T tg,
-    typeOf Γ e = Some T -> tagOf Γ e = BGround tg -> PT2IRT T = Tag2Type tg.
+    typeOf Γ e = Some T -> tagOf Γ e = Tag2Type tg -> PT2IRT T = Tag2Type tg.
 Proof.
   intros Γ e T tg HT Htg.
   unfold tagOf in Htg.
   rewrite HT in Htg.
-  auto using PTTagB.
+  auto.
 Qed.
 
 
@@ -374,17 +363,11 @@ Proof with eauto using IRTyping.
 
   - (* Get *)
     unfold tagOf. simpl. rewrite H. rewrite H0.
-    destruct (PT2Base T) eqn:?; simpl; eauto using IRTyping, PTTagB.
-    apply PTStarB in Heqb; subst.
-    eauto using IRTyping.
+    destruct (PT2IRT T) eqn:?; simpl; eauto using IRTyping.
 
   - (* Set *)
     unfold tagOf. rewrite H1.
-    destruct (PT2Base T) eqn:?; simpl.
-    + apply PTTagB in Heqb. rewrite Heqb in IHPTyping3.
-      eauto using IRTyping.
-    + apply PTStarB in Heqb; subst.
-      eauto using IRTyping.
+    destruct (PT2IRT T) eqn:?; simpl; eauto using IRTyping.
 
   - (* Fun *)
     apply IRTyFun. eapply IRTyLet.
@@ -392,73 +375,58 @@ Proof with eauto using IRTyping.
       * apply IRTyBox.
         eapply inclusion_typing.
         ** eapply inclusion_shadow'.
-        ** unfold tagOf in Heqb. rewrite H in Heqb.
-           apply PTTagB in Heqb. rewrite <- Heqb. trivial.
-      *  unfold tagOf in Heqb. rewrite H in Heqb.
-        apply PTStarB in Heqb. rewrite Heqb in IHPTyping.
+        ** unfold tagOf in Heqi. rewrite H in Heqi.
+           rewrite <- Heqi. trivial.
+      *  unfold tagOf in Heqi. rewrite H in Heqi.
+        rewrite Heqi in IHPTyping.
         simpl in IHPTyping.
         eapply inclusion_typing; eauto.
         apply inclusion_shadow'.
     + unfold Cast.
-      destruct (PT2Base Tvar) eqn:?.
+      destruct (PT2IRT Tvar) eqn:?.
       * apply IRTyUnbox.
-        ** apply PTTagB in Heqb. trivial.
+        ** trivial.
         ** apply IRTyVar. apply InEq.
-      * apply PTStarB in Heqb. subst. simpl.
+      * subst. simpl.
         apply IRTyVar. apply InEq.
 
   - (* FunApp *)
-    rewrite PT2IRTFun in IHPTyping1.
     destruct (tagOf Γ (PEApp e1 e2)) eqn:?.
     + specialize (invertCall _ _ _ _ _ H H0) as H2.
-      unfold tagOf in Heqb. rewrite H2 in Heqb.
+      unfold tagOf in Heqi. rewrite H2 in Heqi.
       simpl.
-      apply PTTagB in Heqb.
       apply IRTyUnbox; trivial.
       eapply IRTyFunApp; eauto.
       destruct (tagOf Γ e2) eqn:?.
       * apply IRTyBox.
-        specialize (typeTag _ _ _ _ H0 Heqb0) as HTt.
+        specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
         rewrite <- HTt. trivial.
-      * specialize (typeStar _ _ _ H0 Heqb0) as HTS.
+      * specialize (typeStar _ _ _ H0 Heqi0) as HTS.
         subst. trivial.
     + unfold Cast.
-      specialize (invertFun _ _ _ _ _ H Heqb); intros; subst; simpl.
+      specialize (invertFun _ _ _ _ _ H Heqi); intros; subst; simpl.
       destruct (tagOf Γ e2) eqn:?.
       * eapply IRTyFunApp; eauto using IRTyping.
         eapply IRTyBox.
-        specialize (typeTag _ _ _ _ H0 Heqb0) as HTt.
+        specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
         rewrite <- HTt. trivial.
       * eapply IRTyFunApp; eauto using IRTyping.
-        specialize (typeStar _ _ _ H0 Heqb0) as HTS.
+        specialize (typeStar _ _ _ H0 Heqi0) as HTS.
         subst. trivial.
 
   - (* Cast *)
     unfold Cast.
-    destruct (PT2Base T2) eqn:?;
+    destruct (PT2IRT T2) eqn:?;
     unfold tagOf;
     rewrite H;
-    destruct (PT2Base T1) eqn:?.
-    + destruct (dec_Tag t t0); subst.
-      * unfold PT2IRT in *.
-        rewrite Heqb.
-        rewrite <- Heqb0.
-        trivial.
-      * eapply IRTyUnbox.
-        auto using PTTagB.
-        eapply IRTyBox.
-        apply PTTagB in Heqb0.
-        rewrite <- Heqb0. trivial.
-    + apply IRTyUnbox.
-      * auto using PTTagB.
-      * apply PTStarB in Heqb0.
-        subst. eauto.
-  + apply PTStarB in Heqb. subst.
-    apply IRTyBox.
-    apply PTTagB in Heqb0. rewrite <- Heqb0. trivial.
+    destruct (PT2IRT T1) eqn:?.
+    + destruct (dec_Tag t t0); subst; trivial.
+      eapply IRTyUnbox; trivial.
+      eapply IRTyBox.
+      trivial.
+    + apply IRTyUnbox; trivial.
+  + apply IRTyBox. trivial.
   + unfold PT2IRT in *.
-    rewrite Heqb.
-    rewrite Heqb0 in IHPTyping.
     trivial.
 Qed.
 

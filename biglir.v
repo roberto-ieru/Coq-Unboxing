@@ -26,26 +26,30 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
     m'/ e2 ==> m'' / IRENum n2 ->
     m / IREPlus e1 e2 ==> m'' / IRENum (n1 + n2)
 | BStCstr : forall m m' free,
-    (free, m') = fresh m ->
-    m / IRECnst ==> m' / IREAddr free
+    (free, m') = freshT m ->
+    m / IRECnst ==> m' / IRETAddr free
 | BStGet : forall m e1 m' a e2 m'' v idx,
-    m / e1 ==> m' / IREAddr a ->
+    m / e1 ==> m' / IRETAddr a ->
     m'/ e2 ==> m'' / idx ->
-    v = query a idx m'' ->
+    v = queryT a idx m'' ->
     m / IREGet e1 e2 ==> m'' / v
 | BStSet : forall m e1 m' a e2 m'' idx m''' e3 val vval,
-    m / e1 ==> m' / IREAddr a ->
+    m / e1 ==> m' / IRETAddr a ->
     m'/ e2 ==> m'' / idx ->
     val = EV2Val vval ->
     m''/ e3 ==> m''' / val ->
-    m / IRESet e1 e2 e3 ==> Update a (ToIndex idx) vval m''' / IRENil
+    m / IRESet e1 e2 e3 ==> UpdateT a (ToIndex idx) vval m''' / IRENil
 | BStLet : forall m exp m' v1 var t body m'' res,
      m / exp ==> m' / v1 ->
      m' / ([var := v1] body) ==> m'' / res ->
      m / IRELet var t exp body ==> m'' / res
-| BStFunapp : forall m e1 m' var body e2 m'' v2 m''' res,
-    m / e1 ==> m' / IREFun var body ->
+| BStFun : forall m m' v b free,
+    (free, m') = freshF m v b ->
+    m / IREFun v b ==> m' / IREFAddr free
+| BStFunapp : forall m e1 m' a var body e2 m'' v2 m''' res,
+    m / e1 ==> m' / IREFAddr a ->
     m' / e2 ==> m'' / v2 ->
+    (var, body) = queryF a m'' ->
     m'' / ([var := v2] body) ==> m''' / res ->
     m / IREApp e1 e2 ==> m''' / res
 | BStBox : forall m e m' e' t,
@@ -73,18 +77,18 @@ Inductive bigStepF : Mem -> IRE -> Prop :=
     m / e1 ==> fail ->
     m / IREGet e1 e2 ==> fail
 | BStGet2F : forall m e1 m' a e2,
-    m / e1 ==> m' / IREAddr a ->
+    m / e1 ==> m' / IRETAddr a ->
     m' / e2 ==> fail ->
     m / IREGet e1 e2 ==> fail
 | BStSet1F : forall m e1 e2 e3,
     m / e1 ==> fail ->
     m / IRESet e1 e2 e3 ==> fail
 | BStSet2F : forall m e1 m' a e2 e3,
-    m / e1 ==> m' / IREAddr a ->
+    m / e1 ==> m' / IRETAddr a ->
     m'/ e2 ==> fail ->
     m / IRESet e1 e2 e3 ==> fail
 | BStSet3F : forall m e1 m' a e2 m'' idx e3,
-    m / e1 ==> m' / IREAddr a ->
+    m / e1 ==> m' / IRETAddr a ->
     m'/ e2 ==> m'' / IRENum idx ->
     m''/ e3 ==> fail ->
     m / IRESet e1 e2 e3 ==> fail
@@ -167,7 +171,8 @@ Proof.
       IH : mem_correct ?M -> _ -> _ |= ?E : _ -> _ |- _] =>
         specialize (IH HM _ HT) as [? [? ?]]
   end;
-  eauto using IRTyping,Value,mem_correct,mem_correct_fresh;
+  eauto using IRTyping,Value,mem_correct,mem_correct_freshT,
+              mem_correct_freshF;
   (* handle substitutions inside FUN (not pretty yet) *)
   try (assert (MEmpty |= [var := v2] body : IRTStar) by (
       inversion H0; inversion H9; subst; eauto using subst_typing);
@@ -178,6 +183,14 @@ Proof.
     inversion HTy; subst. eauto using subst_typing.
   - eapply IHHst2; eauto.
     inversion HTy; subst. eauto using subst_typing.
+  - eapply MCTyF in H; auto.
+    eapply IHHst3 in H4.
+    + destruct H4; eauto.
+    + eauto using subst_typing.
+  - eapply MCTyF in H; auto.
+    eapply IHHst3 in H4.
+    + destruct H4; eauto.
+    + eauto using subst_typing.
   - (* Unboxing step needs an extra inversion on type judgment
        and value to get inside the boxed value *)
     split.
@@ -227,7 +240,9 @@ Ltac memC :=
 
 Lemma stepBigstep : forall m e m' e' m'' e'',
     mem_correct m ->
-    m / e --> m' / e' -> m' / e' ==> m'' / e'' -> m / e ==> m'' / e''.
+    m / e --> m' / e' ->
+    m' / e' ==> m'' / e'' ->
+    m / e ==> m'' / e''.
 Proof.
   intros * HM HSt HB.
   generalize dependent m''.
@@ -241,7 +256,7 @@ Proof.
   end;
   (* rewrite queries to its real values in the step *)
   repeat match goal with
-  | [ H: _ = query _ _ _ |- _ ] => rewrite <- H in HB end;
+  | [ H: _ = queryT _ _ _ |- _ ] => rewrite <- H in HB end;
   (* extract equalities from "value" steps *)
   repeat match goal with
   | [ HB: bigStep _ _ _ _ |- _] =>
@@ -257,7 +272,7 @@ Proof.
   eauto using bigStep,Value;
   (* contradictions about query not being a value *)
   try match goal with
-    |[H: ?E = query _ _ _ |- _] =>
+    |[H: ?E = queryT _ _ _ |- _] =>
         assert (HC: Value E) by (rewrite H; eauto using MCValue); inversion HC
     end; subst.
 
@@ -296,27 +311,25 @@ Proof.
 Qed.
 
 
-Lemma auxTyFun : forall m m' m'' var body e1 e2 v2,
-    m / e1 ==> m' / IREFun var body ->
-    MEmpty |= e1 : IRTFun ->
+Lemma auxTyFun : forall m' m'' var body a e2 v2,
+    (var, body) = queryF a m'' ->
     MEmpty |= e2 : IRTStar ->
     m' / e2 ==> m'' / v2 ->
-    mem_correct m ->
     mem_correct m' ->
+    mem_correct m'' ->
     MEmpty |= [var := v2] body : IRTStar.
 Proof.
   intros.
-  eapply auxTySubst; eauto.
-  assert (HTF: MEmpty |= IREFun var body : IRTFun) by
-    (eapply BPreservation; eauto).
-  inversion HTF; trivial.
+  eapply subst_typing.
+  - eauto 10 using subst_typing, MCTyF, BPreservation.
+  - eapply BPreservation; eauto.
 Qed.
 
 
 Lemma StSet' : forall m a idx val,
     Value idx ->
-    m / IRESet (IREAddr a) idx (EV2Val val) -->
-    Update a idx val m / IRENil.
+    m / IRESet (IRETAddr a) idx (EV2Val val) -->
+    UpdateT a (ToIndex idx) val m / IRENil.
 Proof.
   intros *.
   destruct val.
@@ -366,6 +379,7 @@ Proof.
    eauto 6 using multiTrans, CongLet, multistep1, step, BstepValue.
 
 Qed.
+
 
 (* }================================================================== *)
 

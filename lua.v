@@ -23,7 +23,8 @@ Inductive LE : Set :=
 | LENum : nat -> LE
 | LEPlus : LE -> LE -> LE
 | LECnst : LE
-| LEAddr : address -> LE
+| LETAddr : address -> LE
+| LEFAddr : address -> LE
 | LEGet  : LE -> LE -> LE
 | LESet : LE -> LE -> LE -> LE
 | LEVar : string -> LE
@@ -40,7 +41,8 @@ Inductive LEWT : IREnvironment -> LE -> Prop :=
 | WTNum : forall Γ n, LEWT Γ (LENum n)
 | WTPlus : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEPlus e1 e2)
 | WTCnst : forall Γ, LEWT Γ LECnst
-| WTAddr : forall Γ a, LEWT Γ (LEAddr a)
+| WTTAddr : forall Γ a, LEWT Γ (LETAddr a)
+| WTFAddr : forall Γ a, LEWT Γ (LEFAddr a)
 | WTGet : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEGet e1 e2)
 | WTSet : forall Γ e1 e2 e3, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ e3 ->
                LEWT Γ (LESet e1 e2 e3)
@@ -61,7 +63,8 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   | LEPlus e1 e2 => IREBox TgInt (IREPlus (IREUnbox TgInt (Lua2Lir e1))
                                           (IREUnbox TgInt (Lua2Lir e2)))
   | LECnst => IREBox TgTbl IRECnst
-  | LEAddr a => IREBox TgTbl (IREAddr a)
+  | LETAddr a => IREBox TgTbl (IRETAddr a)
+  | LEFAddr a => IREBox TgFun (IREFAddr a)
   | LEGet e1 e2 => IREGet (IREUnbox TgTbl (Lua2Lir e1)) (Lua2Lir e2)
   | LESet e1 e2 e3 => IREBox TgNil (IRESet (IREUnbox TgTbl (Lua2Lir e1))
                                            (Lua2Lir e2)
@@ -95,7 +98,7 @@ Fixpoint Pall2Lua (e : PE) : LE :=
 (*
 ** Casts disapear under 'dyn'
 *)
-Lemma dynCast : forall (t1 t2 : BaseType) (e : IRE),
+Lemma dynCast : forall (t1 t2 : IRType) (e : IRE),
     dyn (Cast t1 t2 e) = dyn e.
 Proof.
   intros t1 t2 e.
@@ -149,8 +152,8 @@ Qed.
 Inductive LValue : LE -> Prop :=
 | LVnil : LValue LENil
 | LVnum : forall n, LValue (LENum n)
-| LVtbl : forall a, LValue (LEAddr a)
-| LVfun : forall var body, LValue (LEFun var body)
+| LVtbl : forall a, LValue (LETAddr a)
+| LVfun : forall a, LValue (LEFAddr a)
 .
 
 Inductive LExpValue : Set :=
@@ -165,35 +168,64 @@ Definition LEV2Val (me : LExpValue) :=
 
 Inductive LMem : Set :=
 | LEmptyMem : LMem
-| LUpdate : address -> Index -> LExpValue -> LMem -> LMem.
+| LUpdateT : address -> Index -> LExpValue -> LMem -> LMem
+| LUpdateF : address -> string -> LE -> LMem -> LMem.
 
 
-Axiom LToIndex : LE -> Index.
 
-Axiom LuaIndex : forall e, LToIndex e = ToIndex (Lua2Lir e).
+Definition LToIndex (e : LE) : Index :=
+  match e with
+  | LENil => I 0 TgNil
+  | LENum n => I n TgInt
+  | LETAddr a => I a TgTbl
+  | LEFAddr a => I a TgFun
+  | _ => NI
+  end.
 
-Coercion LToIndex : LE >-> Index.
+
+Lemma LuaIndex : forall e, LToIndex e = ToIndex (Lua2Lir e).
+Proof.
+  destruct e; trivial.
+Qed.
 
 
-Fixpoint Lquery (a : address) (idx : LE) (m : LMem) :=
+
+Fixpoint LqueryT (a : address) (idx : LE) (m : LMem) :=
   match m with
   | LEmptyMem => LENil
-  | LUpdate a' idx' e m' => if Nat.eq_dec a a' then
-                           if Index_dec idx idx' then (LEV2Val e)
-                           else Lquery  a idx m'
-                         else Lquery  a idx m'
+  | LUpdateT a' idx' e m' => if Nat.eq_dec a a' then
+                           if Index_dec (LToIndex idx) idx' then (LEV2Val e)
+                           else LqueryT  a idx m'
+                         else LqueryT  a idx m'
+  | LUpdateF _ _ _ m' => LqueryT a idx m'
+  end.
+
+
+Fixpoint LqueryF (a : address) (m : LMem) : (string * LE) :=
+  match m with
+  | LEmptyMem => (""%string, LENil)
+  | LUpdateT a' _ _ m' => LqueryF a m'
+  | LUpdateF a' var body m' => if Nat.eq_dec a a' then (var, body)
+                              else LqueryF a m'
   end.
 
 
 Fixpoint Lfreshaux (m : LMem) : address :=
   match m with
   | LEmptyMem => 1
-  | LUpdate _ _ _ m' => S (Lfreshaux m')
+  | LUpdateT _ _ _ m' => S (Lfreshaux m')
+  | LUpdateF _ _ _ m' => S (Lfreshaux m')
   end.
 
 
-Definition Lfresh (m : LMem) : (address * LMem) :=
-  let f := Lfreshaux m in (f, LUpdate f LENil (LEV LENil LVnil) m).
+Definition LfreshT (m : LMem) : (address * LMem) :=
+  let f := Lfreshaux m in
+    (f, LUpdateT f (I 0 TgNil) (LEV LENil LVnil) m).
+
+
+Definition LfreshF (m : LMem) (v : string) (b : LE) : (address * LMem) :=
+  let f := Lfreshaux m in
+    (f, LUpdateF f v b m).
 
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
@@ -205,7 +237,8 @@ Fixpoint substitution (var : string) (y : LE)  (e : LE) : LE :=
  | LENum n => e
  | LEPlus e1 e2 => LEPlus ([var := y] e1) ([var := y] e2)
  | LECnst => e
- | LEAddr a => e
+ | LETAddr a => e
+ | LEFAddr a => e
  | LEGet e1 e2 => LEGet ([var := y] e1) ([var := y] e2)
  | LESet e1 e2 e3 => LESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
  | LEVar var' => if string_dec var var' then y else e
@@ -230,20 +263,24 @@ Inductive Lstep : LMem -> LE -> LMem -> LE -> Prop :=
     m' / e2 ==> m'' / (LENum n2) ->
     m / LEPlus e1 e2 ==> m'' / LENum (n1 + n2)
 | LStCstr : forall m m' free,
-    (free, m') = Lfresh m ->
-    m / LECnst ==> m' / LEAddr free
+    (free, m') = LfreshT m ->
+    m / LECnst ==> m' / LETAddr free
 | LStGet : forall m e1 m' a e2 m'' idx,
-    m / e1 ==> m' / LEAddr a ->
+    m / e1 ==> m' / LETAddr a ->
     m' / e2 ==> m'' / idx ->
-    m / LEGet e1 e2 ==> m'' / Lquery a idx m''
+    m / LEGet e1 e2 ==> m'' / LqueryT a idx m''
 | LStSet : forall m e1 m' a e2 m'' idx e3 v m''',
-    m / e1 ==> m' / LEAddr a ->
+    m / e1 ==> m' / LETAddr a ->
     m' / e2 ==> m'' / idx ->
     m'' / e3 ==> m''' / LEV2Val v ->
-    m / LESet e1 e2 e3 ==> LUpdate a idx v m''' / LENil
-| LStApp : forall m e1 var body e2 m' m'' v m''' res,
-     m / e1 ==> m' / LEFun var body ->
+    m / LESet e1 e2 e3 ==> LUpdateT a (LToIndex idx) v m''' / LENil
+| LStFun : forall m m' v b free,
+    (free, m') = LfreshF m v b ->
+    m / LEFun v b ==> m' / LEFAddr free
+| LStApp : forall m e1 a var body e2 m' m'' v m''' res,
+     m / e1 ==> m' / LEFAddr a ->
      m' / e2 ==> m'' / v ->
+     (var, body) = LqueryF a m'' ->
      m'' / ([var := v] body) ==> m''' / res ->
      m / LEApp e1 e2 ==> m''' / res
 
@@ -258,9 +295,29 @@ Proof.
 Qed.
 
 
-Example L2 : LEmptyMem / LEApp (LEFun "x" (LEVar "x")) (LENum 10) ==>
-             LEmptyMem / LENum 10.
-Proof. eauto using Lstep, LValue. Qed.
+Lemma auxmem : forall a m m' v v' e e',
+  LfreshF m v e = (a, m') ->
+  LqueryF a m' = (v', e') ->
+  v = v' /\ e = e'.
+Proof.
+  intros * Hf Hq.
+  unfold LfreshF in Hf. inversion Hf; subst.
+  simpl in Hq.
+  destruct (Nat.eq_dec (Lfreshaux m) (Lfreshaux m)); try easy.
+  intuition; congruence.
+Qed.
+
+
+Example L2 : exists m,
+    LEmptyMem / LEApp (LEFun "x" (LEVar "x")) (LENum 10) ==>
+    m / LENum 10.
+Proof. 
+  destruct (LfreshF LEmptyMem "x" (LEVar "x")) eqn:Heq.
+  destruct (LqueryF a l) eqn:Heq'.
+  specialize (auxmem _ _ _ _ _ _ _ Heq Heq') as [? ?]; subst.
+  eexists.
+  eauto using Lstep, LValue.
+Qed.
 
 
 Lemma L2LirValue : forall e, LValue e -> Value (Lua2Lir e).
@@ -275,18 +332,34 @@ Inductive Lmem_correct : LMem -> Prop :=
 | LMCU : forall a idx v m,
      LEWT MEmpty (LEV2Val v) ->
      Lmem_correct m ->
-     Lmem_correct (LUpdate a idx v m).
+     Lmem_correct (LUpdateT a idx v m)
+| LMCF : forall a var body m,
+     LEWT (var |=> IRTStar; MEmpty) body ->
+     Lmem_correct m ->
+     Lmem_correct (LUpdateF a var body m)
+.
 
 
-Lemma mem_correct_fresh : forall m m' free,
-  Lmem_correct m -> (free,m') = Lfresh m -> Lmem_correct m'.
+Lemma mem_correct_freshT : forall m m' free,
+  Lmem_correct m -> (free,m') = LfreshT m -> Lmem_correct m'.
 Proof.
-  unfold Lfresh. intros m m' free Hmc Heq. inversion Heq.
+  unfold LfreshT. intros m m' free Hmc Heq. inversion Heq.
   eauto using Lmem_correct,LEWT.
 Qed.
 
 
-Lemma LMCquery : forall a v m, LValue (Lquery a v m).
+Lemma mem_correct_freshF : forall m m' free var body,
+  LEWT (var |=> IRTStar; MEmpty) body ->
+  Lmem_correct m ->
+  (free,m') = LfreshF m var body ->
+  Lmem_correct m'.
+Proof.
+  unfold LfreshF. intros * HWT Hmc Heq. inversion Heq. subst.
+  apply LMCF; trivial.
+Qed.
+
+
+Lemma LMCqueryT : forall a v m, LValue (LqueryT a v m).
 Proof.
   intros.
   induction m; eauto using LValue.
@@ -295,13 +368,27 @@ Proof.
 Qed.
 
 
+Lemma LMCqueryF : forall a m var body,
+    (var, body) = LqueryF a m ->
+    Lmem_correct m ->
+    LEWT (var |=> IRTStar; MEmpty) body.
+Proof.
+  intros * Heq HMc. induction m.
+  - inversion Heq; subst. auto using LEWT.
+  - inversion HMc; subst.
+    auto.
+  - inversion HMc; subst.
+    simpl in Heq.
+    breakIndexDec; auto.
+    inversion Heq; subst. trivial.
+Qed.
 
-Lemma LMCWT : forall a v m, Lmem_correct m -> LEWT MEmpty (Lquery a v m).
+
+Lemma LMCWT : forall a v m, Lmem_correct m -> LEWT MEmpty (LqueryT a v m).
 Proof.
   intros a v m H.
-  induction H.
-  - eauto using LEWT.
-  - simpl. breakIndexDec; auto.
+  induction H; eauto using LEWT.
+  simpl. breakIndexDec; auto.
 Qed.
 
 
@@ -350,23 +437,26 @@ Proof.
   eauto using LValue, LEWT;
   try match goal with
   | [ HM: Lmem_correct ?M,
-      HFr: _ = Lfresh ?M |- _ ] =>
-     specialize (mem_correct_fresh _ _ _ HM HFr); clear HFr; intros
+      HFr: _ = LfreshT ?M |- _ ] =>
+     specialize (mem_correct_freshT _ _ _ HM HFr); clear HFr; intros
+  | [ HM: Lmem_correct ?M,
+      HFr: _ = LfreshF ?M _ ?b,
+      HTy: LEWT _ ?b |- _ ] =>
+     specialize (mem_correct_freshF _ _ _ _ _ HTy HM HFr); intros
   end;
-eauto using LValue, LEWT,Lmem_correct, LMCquery, LMCWT.
-
-  inversion H1; subst.
-  apply IHHSt3; auto.
-  apply subst_WT; auto.
-
+  eauto using LValue, LEWT,Lmem_correct, LMCqueryT, LMCqueryF, LMCWT,
+              subst_WT.
 Qed.
 
 
 Fixpoint MLua2Lir (m : LMem) : Mem :=
   match m with
   | LEmptyMem => EmptyMem
-  | LUpdate a n (LEV v vv) m =>
-      Update a n (EV (Lua2Lir v) (L2LirValue v vv)) (MLua2Lir m)
+  | LUpdateT a n (LEV v vv) m =>
+      UpdateT a n (EV (Lua2Lir v) (L2LirValue v vv)) (MLua2Lir m)
+  | LUpdateF a var body m =>
+      UpdateF a var
+       (IRELet var IRTStar (IREVar var) (Lua2Lir body)) (MLua2Lir m)
   end.
 
 
@@ -386,35 +476,49 @@ Corollary Lua2LirType : forall e,
 Proof. eapply Lua2LirTypeAux. Qed.
 
 
-Lemma L2LirQuery : forall mem a idx,
-    Lua2Lir (Lquery a idx mem) =
-    query a (Lua2Lir idx) (MLua2Lir mem).
+Lemma L2LirQueryT : forall mem a idx,
+    Lua2Lir (LqueryT a idx mem) =
+    queryT a (Lua2Lir idx) (MLua2Lir mem).
 Proof.
   intros mem a idx.
-  induction mem.
-  - simpl. trivial.
-- destruct l. simpl. destruct (Nat.eq_dec a a0); subst; trivial.
-    rewrite <- LuaIndex. destruct (Index_dec idx i); subst; trivial.
+  induction mem; trivial.
+  destruct l. simpl. destruct (Nat.eq_dec a a0); subst; trivial.
+  rewrite <- LuaIndex.
+  destruct (Index_dec (LToIndex idx) i); subst; trivial.
+Qed.
+
+
+Lemma L2LirQueryF : forall var body a m,
+  (var, body) = LqueryF a m ->
+  queryF a (MLua2Lir m) =
+        (var, IRELet var IRTStar (IREVar var) (Lua2Lir body)).
+Proof.
+  intros * HQ.
+  induction m.
+  - inversion HQ; subst. trivial.
+  - destruct l. eauto.
+  - simpl. simpl in HQ.
+    breakIndexDec; eauto.
+    congruence.
 Qed.
 
 
 Lemma L2LirFreshaux : forall m, Lfreshaux m = freshaux (MLua2Lir m).
 Proof.
   induction m; trivial.
-  destruct l. simpl. congruence.
+  - destruct l. simpl. congruence.
+  -simpl. congruence.
 Qed.
 
 
-Lemma L2LirFresh : forall free m m',
-  (free, m') = Lfresh m -> (free, MLua2Lir m') = fresh (MLua2Lir m).
+Lemma L2LirFreshT : forall free m m',
+  (free, m') = LfreshT m -> (free, MLua2Lir m') = freshT (MLua2Lir m).
 Proof.
   intros free m m' H.
-  unfold Lfresh in H. inversion H; subst.
-  unfold fresh.
-  simpl. f_equal.
-  - apply L2LirFreshaux.
-  - rewrite LuaIndex. simpl.
-    f_equal. apply L2LirFreshaux.
+  unfold LfreshT in H. inversion H; subst.
+  unfold freshT.
+  simpl. f_equal. apply L2LirFreshaux.
+  simpl. f_equal. apply L2LirFreshaux.
 Qed.
 
 
@@ -457,7 +561,8 @@ Proof.
   intros e m v m' HMC HWT HSt.
   induction HSt; inversion HWT; subst;
   repeat LmemC;
-  eauto using bigStep, L2LirValue, L2LirFresh, L2LirQuery.
+  eauto using bigStep, L2LirValue, L2LirFreshT, L2LirQueryT.
+
   - simpl. apply BStBox.
     eapply BStPlus.
     + eapply BStUnbox.
@@ -468,27 +573,32 @@ Proof.
       replace (IREBox TgInt (IRENum n2)) with (Lua2Lir (LENum n2))
         by trivial.
       eauto.
+
   - simpl. rewrite LuaIndex.
     destruct v.
     eapply BStBox.
     eapply BStSet; eauto.
     eapply BStUnbox.
-    replace (IREBox TgTbl (IREAddr a)) with (Lua2Lir (LEAddr a))
+    replace (IREBox TgTbl (IRETAddr a)) with (Lua2Lir (LETAddr a))
       by trivial. eauto.
-  - simpl. eapply BStFunapp; eauto.
-    + eapply BStUnbox.
-      simpl in IHHSt1. eauto.
-    + simpl. breakStrDec.
-      eapply BStLet.
-      * apply BStValue.
-        apply L2LirValue.
-        eapply (luaPreservation _ m'); eauto.
-      * simpl. rewrite <- L2LirSubst.
-        apply IHHSt3; eauto.
-        assert (HX: LEWT MEmpty (LEFun var body)).
-        { eapply (luaPreservation e1 m); eauto. }
-        inversion HX; subst.
-        apply subst_WT. auto.
-        eapply (luaPreservation e2 m'); eauto.
+
+  - simpl. eapply BStBox. eapply BStFun.
+    unfold freshF. unfold LfreshF in H.    
+    inversion H; subst.
+    f_equal. apply L2LirFreshaux.
+    simpl.
+    f_equal. apply L2LirFreshaux.
+  
+  - specialize (L2LirQueryF _ _ _ _ H) as ?.
+    simpl. eapply BStFunapp; eauto using bigStep.
+    simpl. destruct (string_dec var var); try easy.
+    specialize (luaPreservation _ _ _ _ H0 H4 HSt2) as [? [? ?]].
+    eapply BStLet.
+    + eauto using bigStep, L2LirValue.
+    + eapply IHHSt3 in H1.
+      * rewrite L2LirSubst in H1; trivial.
+      * eauto using subst_WT, LMCqueryF.
 Qed.
+
+
 

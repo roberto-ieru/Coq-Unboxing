@@ -19,10 +19,7 @@ Reserved Infix "<|" (at level 80).
 ** Precision of types
 *)
 Inductive TPrecision : IRType -> IRType -> Prop :=
-| PRNil : IRTNil <| IRTNil
-| PRInt : IRTInt <| IRTInt
-| PRTbl : IRTTbl <| IRTTbl
-| PRFun : IRTFun <| IRTFun
+| PRTag : forall tg, Tag2Type tg <| Tag2Type tg
 | TPStar : forall t, t <| IRTStar
 
   where "x '<|' y" := (TPrecision x y).
@@ -63,7 +60,7 @@ Lemma GroundTop : forall t g1 g2,
 Proof.
   intros * H1 H2.
   destruct t; destruct g1; destruct g2; trivial;
-  inversion H1; inversion H2.
+  inversion H1; subst; inversion H2.
 Qed.
 
 
@@ -370,9 +367,15 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 | PCnst : forall Γ, Precision Γ IRECnst IRTTbl IRECnst IRTTbl
 
 (* ----------------------
-   Γ⊑ ⊢ n ⊑ n : int ⊑ int	*)
-| PAddr : forall Γ addr, Precision Γ (IREAddr addr) IRTTbl
-                                     (IREAddr addr) IRTTbl
+   Γ⊑ ⊢ a ⊑ a : tbl ⊑ tbl	*)
+| PTAddr : forall Γ addr, Precision Γ (IRETAddr addr) IRTTbl
+                                      (IRETAddr addr) IRTTbl
+
+(* ----------------------
+   Γ⊑ ⊢ a ⊑ a : fun ⊑ fun	*)
+| PFAddr : forall Γ addr, Precision Γ (IREFAddr addr) IRTFun
+                                      (IREFAddr addr) IRTFun
+
 
 (* Γ⊑ ⊢ d₁ ⊑ e₁ : tbl ⊑ tbl   Γ⊑ ⊢ d₂ ⊑ e₂ : * ⊑ *
    ----------------------------------------------------
@@ -416,6 +419,9 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 (* Γ⊑ ⊢ d ⊑ e : t ⊑ g
    ----------------------------------
    Γ⊑ ⊢ d ⊑ box[g](e) : t ⊑ ★	*)
+(* Note: in our particular case, t must be equal to g, because
+   g is a ground type and there is no type strictly more precise
+   than a ground type. *)
 | PBoxR : forall Γ d e t g,
     Precision Γ d t e (Tag2Type g) ->
     Precision Γ d t (IREBox g e) IRTStar
@@ -802,6 +808,18 @@ Theorem PrecDynEqual : forall Γ e1 t1 e2 t2,
     Precision Γ e1 t1 e2 t2 -> dyn e2 = dyn e1.
 Proof.
   intros * HP. induction HP; simpl; congruence.
+Qed.
+
+
+Lemma PrecDynEqualVal : forall e1 t1 e2,
+    Value e2 ->
+    Precision PEmpty e1 t1 e2 IRTStar -> e2 = dyn e1.
+Proof.
+  intros.
+  replace e2 with (dyn e2). eauto using PrecDynEqual.
+  symmetry. apply ValueStar; trivial. 
+  replace MEmpty with (PEnv2 PEmpty) by trivial.
+  eauto using PrecisionType2.
 Qed.
 
 

@@ -86,11 +86,13 @@ Fixpoint Pall2Lua (e : PE) : LE :=
   | PENum n => LENum n
   | PEPlus e1 e2 => LEPlus (Pall2Lua e1) (Pall2Lua e2)
   | PENew _ => LENew
+  | PETAddr a _ => LETAddr a
+  | PEFAddr a _ _ => LEFAddr a
   | PEGet e1 e2 => LEGet (Pall2Lua e1) (Pall2Lua e2)
   | PESet e1 e2 e3 => LESet (Pall2Lua e1) (Pall2Lua e2) (Pall2Lua e3)
   | PEVar var => LEVar var
   | PEApp e1 e2 => LEApp (Pall2Lua e1) (Pall2Lua e2)
-  | PEFun var _ e => LEFun var (Pall2Lua e)
+  | PEFun var _ e _ => LEFun var (Pall2Lua e)
   | PECast e _ => Pall2Lua e
   end.
 

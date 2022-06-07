@@ -36,11 +36,13 @@ Inductive PE : Set :=
 | PENum : nat -> PE
 | PEPlus : PE -> PE -> PE
 | PENew : PType -> PE
+| PETAddr : address -> PType -> PE
+| PEFAddr : address -> PType -> PType -> PE
 | PEGet : PE -> PE -> PE
 | PESet : PE -> PE -> PE -> PE
 | PEVar : string -> PE
 | PEApp :  PE -> PE -> PE
-| PEFun : string -> PType -> PE -> PE
+| PEFun : string -> PType -> PE -> PType -> PE
 | PECast : PE -> PType -> PE
 .
 
@@ -62,6 +64,8 @@ Inductive PTyping : PEnvironment -> PE -> PType -> Prop :=
     Γ |= e2 : PTInt ->
     Γ |= PEPlus e1 e2 : PTInt
 | PTyNew : forall Γ T, Γ |= PENew T : PTArr T
+| PTyTAddr : forall Γ a T, Γ |= PETAddr a T : PTArr T
+| PTyFAddr : forall Γ a T1 T2, Γ |= PEFAddr a T1 T2 : PTFun T1 T2
 | PTyGet : forall Γ e1 T e2,
     Γ |= e1 : PTArr T ->
     Γ |= e2 : PTInt ->
@@ -73,7 +77,7 @@ Inductive PTyping : PEnvironment -> PE -> PType -> Prop :=
     Γ |= PESet e1 e2 e3 : PTNil
 | PTyFun : forall Γ var Tvar body Tbody,
     var |=> Tvar; Γ |= body : Tbody ->
-    Γ |= PEFun var Tvar body : PTFun Tvar Tbody
+    Γ |= PEFun var Tvar body Tbody : PTFun Tvar Tbody
 | PTyApp : forall Γ e1 e2 T1 T2,
     Γ |= e1 : PTFun T1 T2 ->
     Γ |= e2 : T1 ->
@@ -99,6 +103,8 @@ Fixpoint typeOf Γ e : option PType :=
     | _, _ => None
     end
   | PENew T => Some (PTArr T)
+  | PETAddr _ T => Some (PTArr T)
+  | PEFAddr _ T1 T2 => Some (PTFun T1 T2)
   | PEGet e1 e2 =>
     match (typeOf Γ e1), (typeOf Γ e2) with
     | Some (PTArr T), Some PTInt => Some T
@@ -117,9 +123,9 @@ Fixpoint typeOf Γ e : option PType :=
         if dec_TP T1 T1' then Some T2 else None
     | _, _ => None
     end
-  | PEFun var Tv e =>
+  | PEFun var Tv e Tb =>
     match typeOf (var |=> Tv; Γ) e with
-    | Some Tb => Some (PTFun Tv Tb)
+    | Some Tb' => if dec_TP Tb Tb' then Some (PTFun Tv Tb) else None
     | None => None
     end
   | PECast e T =>
@@ -160,18 +166,24 @@ Proof.
   simpl in Heq; inversion Heq; subst; eauto using PTyping;
   try (destTOf Γ e1; destTOf Γ e2;
     inversion Heq; subst; eauto using PTyping; fail).
-  - destTOf Γ e1.
+  - (* Set *)
+    destTOf Γ e1.
     destTOf Γ e2.
     destruct (typeOf Γ e3) eqn:?; try easy.
     destruct (dec_TP p p0) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
-  - destTOf Γ e1.
+  - (* App *)
+    destTOf Γ e1.
     destruct (typeOf Γ e2) eqn:?; try easy.
     destruct (dec_TP p p1) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
-  - destruct (typeOf (s |=> p; Γ) e) eqn:?; try easy.
+  - (* Fun *)
+    clear H0.
+    destruct (typeOf (s |=> p; Γ) e) eqn:HT; try easy.
+    destruct (dec_TP p0 p1); subst; try discriminate.
     inversion Heq; subst. eauto using PTyping.
-  - destruct (typeOf Γ e) eqn:?; try easy.
+  - (* Cast *)
+    destruct (typeOf Γ e) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
 Qed.
 
@@ -285,6 +297,8 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   | PENum a => IRENum a
   | PEPlus e1 e2 => IREPlus (Pall2Lir Γ e1) (Pall2Lir Γ e2)
   | PENew _ => IRENew
+  | PETAddr a _ => IRETAddr a
+  | PEFAddr a _ _ => IREFAddr a
   | PEGet e1 e2 =>
          <tagOf Γ e <= IRTStar>
            (IREGet (Pall2Lir Γ e1) (<IRTStar <= (Tag2Type TgInt)> (Pall2Lir Γ e2)))
@@ -293,7 +307,7 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
                  (<IRTStar <= Tag2Type TgInt> (Pall2Lir Γ e2))
                  (<IRTStar <= tagOf Γ e3> Pall2Lir Γ e3))
   | PEVar var => IREVar var
-  | PEFun var T body => let Γ' := (var |=> T; Γ) in
+  | PEFun var T body _  => let Γ' := (var |=> T; Γ) in
         IREFun var
           (IRELet var (PT2IRT T) (<PT2IRT T <= IRTStar> (IREVar var))
                      (<IRTStar <= tagOf Γ' body> (Pall2Lir Γ' body)))

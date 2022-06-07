@@ -22,7 +22,7 @@ Inductive LE : Set :=
 | LENil : LE
 | LENum : nat -> LE
 | LEPlus : LE -> LE -> LE
-| LECnst : LE
+| LENew : LE
 | LETAddr : address -> LE
 | LEFAddr : address -> LE
 | LEGet  : LE -> LE -> LE
@@ -40,7 +40,7 @@ Inductive LEWT : IREnvironment -> LE -> Prop :=
 | WTNil : forall Γ, LEWT Γ LENil
 | WTNum : forall Γ n, LEWT Γ (LENum n)
 | WTPlus : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEPlus e1 e2)
-| WTCnst : forall Γ, LEWT Γ LECnst
+| WTNew : forall Γ, LEWT Γ LENew
 | WTTAddr : forall Γ a, LEWT Γ (LETAddr a)
 | WTFAddr : forall Γ a, LEWT Γ (LEFAddr a)
 | WTGet : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEGet e1 e2)
@@ -62,7 +62,7 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   | LENum n => IREBox TgInt (IRENum n)
   | LEPlus e1 e2 => IREBox TgInt (IREPlus (IREUnbox TgInt (Lua2Lir e1))
                                           (IREUnbox TgInt (Lua2Lir e2)))
-  | LECnst => IREBox TgTbl IRECnst
+  | LENew => IREBox TgTbl IRENew
   | LETAddr a => IREBox TgTbl (IRETAddr a)
   | LEFAddr a => IREBox TgFun (IREFAddr a)
   | LEGet e1 e2 => IREGet (IREUnbox TgTbl (Lua2Lir e1)) (Lua2Lir e2)
@@ -85,7 +85,7 @@ Fixpoint Pall2Lua (e : PE) : LE :=
   | PENil => LENil
   | PENum n => LENum n
   | PEPlus e1 e2 => LEPlus (Pall2Lua e1) (Pall2Lua e2)
-  | PENew _ => LECnst
+  | PENew _ => LENew
   | PEGet e1 e2 => LEGet (Pall2Lua e1) (Pall2Lua e2)
   | PESet e1 e2 e3 => LESet (Pall2Lua e1) (Pall2Lua e2) (Pall2Lua e3)
   | PEVar var => LEVar var
@@ -236,7 +236,7 @@ Fixpoint substitution (var : string) (y : LE)  (e : LE) : LE :=
  | LENil => e
  | LENum n => e
  | LEPlus e1 e2 => LEPlus ([var := y] e1) ([var := y] e2)
- | LECnst => e
+ | LENew => e
  | LETAddr a => e
  | LEFAddr a => e
  | LEGet e1 e2 => LEGet ([var := y] e1) ([var := y] e2)
@@ -264,7 +264,7 @@ Inductive Lstep : LMem -> LE -> LMem -> LE -> Prop :=
     m / LEPlus e1 e2 ==> m'' / LENum (n1 + n2)
 | LStCstr : forall m m' free,
     (free, m') = LfreshT m ->
-    m / LECnst ==> m' / LETAddr free
+    m / LENew ==> m' / LETAddr free
 | LStGet : forall m e1 m' a e2 m'' idx,
     m / e1 ==> m' / LETAddr a ->
     m' / e2 ==> m'' / idx ->

@@ -16,16 +16,21 @@ Require Import LIR.maps.
 Inductive Tag : Set := | TgNil | TgInt | TgTbl | TgFun.
 
 
+(* Tag equality is decidable and computable *)
 Lemma dec_Tag : forall (t1 t2 : Tag), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. Defined.
 
 
+(*
+** Types for Lir
+*)
 Inductive IRType : Set :=
 | Tag2Type : Tag  -> IRType
 | IRTStar : IRType
 .
 
 
+(* Tape equality is decidable and computable *)
 Lemma dec_IRType : forall (t1 t2 : IRType), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. auto using dec_Tag. Defined.
 
@@ -54,20 +59,20 @@ Definition address := nat.
 ** Syntax for Lir expressions
 *)
 Inductive IRE : Set :=
-| IRENil : IRE
-| IRENum : nat -> IRE
-| IREPlus : IRE -> IRE -> IRE
-| IRECnst : IRE
-| IRETAddr : address -> IRE  (* only at runtime *)
-| IREFAddr : address -> IRE  (* only at runtime *)
-| IREGet : IRE -> IRE -> IRE
-| IRESet : IRE -> IRE -> IRE -> IRE
-| IREVar : string -> IRE
-| IRELet : string -> IRType -> IRE -> IRE -> IRE
-| IREFun : string -> IRE -> IRE
-| IREApp : IRE -> IRE -> IRE
-| IREBox : Tag -> IRE -> IRE
-| IREUnbox : Tag -> IRE -> IRE
+| IRENil : IRE		(* nil *)
+| IRENum : nat -> IRE	(* n - integer literals *)
+| IREPlus : IRE -> IRE -> IRE	(* e + e *)
+| IRENew : IRE		(* {} - table constructor *)
+| IRETAddr : address -> IRE  (* table address - only at runtime *)
+| IREFAddr : address -> IRE  (* function address - only at runtime *)
+| IREGet : IRE -> IRE -> IRE	(* e[e] - table access *)
+| IRESet : IRE -> IRE -> IRE -> IRE	(* e[e] := e - table assignment *)
+| IREVar : string -> IRE	(* id - variables *)
+| IRELet : string -> IRType -> IRE -> IRE -> IRE  (* let e:τ = e in e *)
+| IREFun : string -> IRE -> IRE		(* λx. e *)
+| IREApp : IRE -> IRE -> IRE	(* e e *)
+| IREBox : Tag -> IRE -> IRE	(* box[τ] e *)
+| IREUnbox : Tag -> IRE -> IRE	(* unbox[τ] e *)
 .
 
 
@@ -92,7 +97,7 @@ Notation "x '[' y ']'" := (IREGet x y)
     (in custom IRE at level 80).
 Notation "x '[' y ']' '=' z" := (IRESet x y z)
     (in custom IRE at level 80, z at level 90).
-Notation "{}" := (IRECnst) (in custom IRE at level 100).
+Notation "{}" := (IRENew) (in custom IRE at level 100).
 Notation "'λ' x ':' t '.' e" := (IREFun x t e)
     (in custom IRE at level 100, e at level 110).
 Notation "'box[' t '](' x ')'" := (IREBox t x)
@@ -115,6 +120,7 @@ Check <{ X[0] = X[0] + 1 }>.
 
 *)
 
+(* Type environments for Lir *)
 Definition IREnvironment := Map IRType.
 
 
@@ -134,7 +140,7 @@ Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
     Γ |= e1 : IRTInt ->
     Γ |= e2 : IRTInt ->
     Γ |= (IREPlus e1 e2) : IRTInt
-| IRTyCnst : forall Γ, Γ |= IRECnst : IRTTbl
+| IRTyNew : forall Γ, Γ |= IRENew : IRTTbl
 | IRTyTAddr : forall Γ addr, Γ |= IRETAddr addr : IRTTbl
 | IRTyFAddr : forall Γ addr, Γ |= IREFAddr addr : IRTFun
 | IRTyGet : forall Γ e1 e2,
@@ -183,7 +189,9 @@ Qed.
 
 
 (*
-** Value predicate for Lir expressions
+** Value predicate for Lir expressions: The only values are nil,
+** numbers, and addresses, plus a box of one of those previous values.
+** (The type system forbids boxes of boxes.)
 *)
 Inductive Value : IRE -> Prop :=
 | Vnil : Value IRENil
@@ -211,7 +219,7 @@ Fixpoint isValue (e : IRE) : bool :=
 Lemma isValueCorrect : forall e, Value e <-> isValue e = true.
 Proof.
   split; induction e; intros H; trivial;
-  inversion H; subst; eauto using Value.
+  inversion H; subst; auto using Value.
 Qed.
 
 
@@ -278,8 +286,9 @@ Qed.
 
 
 (*
-  Table indices. Only values are used as table indices, but we will
-  allow any expression for now.
+** Table indices. Only values are used as table indices, but we will
+** allow any expression for now. For values, the index has a 'nat',
+** good for numbers and addresses, and a tag.
 *)
 Inductive Index : Set :=
 | I : nat -> Tag -> Index
@@ -288,8 +297,9 @@ Inductive Index : Set :=
 
 
 (*
-  Normalize values used as indices, so that boxed and unboxed values
-  give the same index.
+** Normalize values used as indices, so that boxed and unboxed values
+** give the same index. Later we will prove that for two values, their
+** indices are equal iff they are equal up to boxes and unboxes.
 *)
 Fixpoint ToIndex (e : IRE) : Index :=
   match e with
@@ -301,7 +311,6 @@ Fixpoint ToIndex (e : IRE) : Index :=
   | IREUnbox t e' => ToIndex e'
   | _ => NI
   end.
-
 
 
 Lemma Index_dec : forall (i1 i2 : Index), {i1 = i2} + {i1 <> i2}.
@@ -317,17 +326,21 @@ Inductive ExpValue : Set :=
 | EV : forall e, Value e -> ExpValue.
 
 
+(* Extract the expression from an ExpValue *)
 Definition EV2Val (me : ExpValue) : IRE :=
   match me with
   | EV v _ => v
   end.
 
 
+(*
+** Memory for Lir.
+*)
 Inductive Mem : Set :=
 | EmptyMem : Mem
-| UpdateT :
+| UpdateT :  (* table entries *)
     address -> Index -> ExpValue -> Mem -> Mem
-| UpdateF :
+| UpdateF :  (* closures *)
     address -> string -> IRE -> Mem -> Mem.
 
 
@@ -336,6 +349,9 @@ Definition BoxedNil : IRE := IREBox TgNil IRENil.
 Definition BoxedNilValue : Value BoxedNil := Vbox TgNil IRENil Vnil.
 
 
+(*
+** Get the memory content of a table entry
+*)
 Fixpoint queryT (a : address) (idx : IRE) (m : Mem) : IRE :=
   match m with
   | EmptyMem => BoxedNil
@@ -348,6 +364,9 @@ Fixpoint queryT (a : address) (idx : IRE) (m : Mem) : IRE :=
   end.
 
 
+(*
+** Get the memory content for closures
+*)
 Fixpoint queryF (a : address) (m : Mem) : (string * IRE) :=
   match m with
   | EmptyMem => (""%string, IRELet "" IRTStar (IREVar "") BoxedNil)
@@ -374,7 +393,7 @@ Fixpoint freshaux (m : Mem) : address :=
 *)
 Definition freshT (m : Mem) : (address * Mem) :=
   let f := freshaux m in
-    (f, UpdateT f (I 0 TgNil) (EV BoxedNil BoxedNilValue) m).
+    (f, UpdateT f (ToIndex IRENil) (EV BoxedNil BoxedNilValue) m).
 
 
 (*
@@ -396,7 +415,7 @@ Fixpoint substitution (var : string) (y : IRE)  (e : IRE) : IRE :=
  | IRENil => e
  | IRENum n => e
  | IREPlus e1 e2 => IREPlus ([var := y] e1) ([var := y] e2)
- | IRECnst => e
+ | IRENew => e
  | IRETAddr a => e
  | IREFAddr a => e
  | IREGet e1 e2 => IREGet ([var := y] e1) ([var := y] e2)
@@ -476,7 +495,7 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     m /  IREPlus (IRENum n1) (IRENum n2) --> m /  IRENum (n1 + n2)
 | StCstr : forall m m' free,
     (free, m') = freshT m ->
-    m / IRECnst --> m' / IRETAddr free
+    m / IRENew --> m' / IRETAddr free
 | StGet1 : forall m e1 e2 m' e1',
     m /e1 --> m' /e1' ->
     m / IREGet e1 e2 --> m' / IREGet e1' e2
@@ -699,7 +718,7 @@ Lemma memPreservation : forall (m m' : Mem) e e' t,
   mem_correct m ->
   MEmpty |= e : t ->
   m / e --> m' / e' ->
-     mem_correct m'.
+  mem_correct m'.
 Proof.
   intros m m' e e' t HMC HTy Hst.
   generalize dependent m'.
@@ -710,6 +729,9 @@ Proof.
 Qed.
 
 
+(*
+** A well-typed box has the correct type of element inside it.
+*)
 Lemma boxTyping : forall e t,
   MEmpty |= IREBox t e : IRTStar -> MEmpty |= e : Tag2Type t.
 Proof. intros e t H. inversion H; trivial. Qed.
@@ -720,7 +742,9 @@ Proof. intros e t H. inversion H; trivial. Qed.
 *)
 Lemma expPreservation : forall m e t m' e',
   mem_correct m ->
-  MEmpty |= e : t -> m / e --> m' / e' -> MEmpty |= e' : t.
+  MEmpty |= e : t ->
+  m / e --> m' / e' ->
+  MEmpty |= e' : t.
 Proof.
   intros m e t m' e' Hmc HT.
   generalize dependent m'.
@@ -736,8 +760,10 @@ Qed.
 ** (type preservation of memory and expression)
 *)
 Theorem Preservation : forall m e t m' e',
-  mem_correct m -> MEmpty |= e : t -> m / e --> m' / e' ->
-    mem_correct m' /\ MEmpty |= e' : t.
+  mem_correct m ->
+  MEmpty |= e : t ->
+  m / e --> m' / e' ->
+  mem_correct m' /\ MEmpty |= e' : t.
 Proof. intuition; eauto using memPreservation,expPreservation. Qed.
 
 
@@ -745,11 +771,19 @@ Proof. intuition; eauto using memPreservation,expPreservation. Qed.
 ** Values cannot be reduced
 *)
 Lemma value_normal : forall m e,
-    Value e -> ~exists m' v, step m e m' v.
+    Value e -> ~exists m' v, m / e --> m' / v.
 Proof.
   intros m e HV.
   induction HV; intros HEx; destruct HEx as [m' [v' Hst]];
   inversion Hst; subst; eauto.
+Qed.
+
+Lemma value_normalF : forall m e,
+    Value e -> ~ m / e --> fail.
+Proof.
+  intros * HV.
+  induction HV; intros Hst;
+  inversion Hst; subst; auto.
 Qed.
 
 
@@ -766,7 +800,8 @@ Ltac open_value rule :=
 *)
 Theorem Progress : forall m e t,
     MEmpty |= e : t  ->
-        Value e \/ (m / e --> fail \/ exists m' e', m / e --> m' / e').
+    Value e \/
+    (m / e --> fail \/ exists m' e', m / e --> m' / e').
 Proof.
   intros m e t Hty.
   remember MEmpty as Γ.
@@ -870,8 +905,8 @@ Theorem Soundness : forall m e t m' e',
     mem_correct m ->
     MEmpty |= e : t  ->
     m / e -->* m' / e' ->
-        Value e' \/
-       (m' / e' --> fail \/ exists m'' e'', m' / e' --> m'' / e'').
+    Value e' \/
+   (m' / e' --> fail \/ exists m'' e'', m' / e' --> m'' / e'').
 Proof.
   intros m e t m' e' HTy HMem HMulti.
   remember (Some e') as E eqn:Heq.

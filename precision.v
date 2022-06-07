@@ -55,19 +55,22 @@ Proof.
 Qed.
 
 
+(*
+** Ground types have nothing below them.
+*)
+Lemma GroundFlat : forall t g,
+    t <| Tag2Type g -> t = Tag2Type g.
+Proof.
+  intros * H. inversion H; trivial.
+Qed.
+
+
 Lemma GroundTop : forall t g1 g2,
   t <| Tag2Type g1 -> t <| Tag2Type g2 -> g1 = g2.
 Proof.
   intros * H1 H2.
-  destruct t; destruct g1; destruct g2; trivial;
-  inversion H1; subst; inversion H2.
-Qed.
-
-
-Lemma GroundFlat: forall g g', (Tag2Type g) <| (Tag2Type g') -> g = g'.
-Proof.
-  intros * H.
-  eauto using GroundTop, TPrecisionRefl.
+  apply GroundFlat in H1.
+  apply GroundFlat in H2. subst. injection H2; trivial.
 Qed.
 
 
@@ -81,6 +84,9 @@ Proof.
 Qed.
 
 
+(*
+** Lift type precision to optional types.
+*)
 Inductive TPrecOption : option IRType -> option IRType -> Prop :=
 | TPrecN : TPrecOption None None
 | TPrecS : forall t1 t2, t1 <| t2 -> TPrecOption (Some t1) (Some t2)
@@ -109,20 +115,6 @@ Qed.
 
 
 (*
-** Extending environments preserve precisions
-*)
-Lemma EnvCompExt : forall Γ1 Γ2 var t,
-    Γ1 <E| Γ2 -> (var |=> t; Γ1) <E| (var |=> t; Γ2).
-Proof.
-  unfold EnvComp.
-  intros.
-  simpl.
-  destruct (string_dec var0 var); subst;
-  auto using TPrecOption, TPrecisionRefl.
-Qed.
-
-
-(*
 ** Environment precision is transitive
 *)
 Lemma EnvCompTrans : forall Γ1 Γ2 Γ3,
@@ -144,8 +136,22 @@ Qed.
 
 
 (*
-** Environments for precision
-** (Pairs of environments)
+** Extending environments preserve precision
+*)
+Lemma EnvCompExt : forall Γ1 Γ2 var t,
+    Γ1 <E| Γ2 -> (var |=> t; Γ1) <E| (var |=> t; Γ2).
+Proof.
+  unfold EnvComp.
+  intros.
+  simpl.
+  destruct (string_dec var0 var); subst;
+  auto using TPrecOption, TPrecisionRefl.
+Qed.
+
+
+(*
+** Environments for precision of expressions:
+** Pairs of environments)
 *)
 Inductive PEnvironment :=
 | PEnv : forall Γ1 Γ2, Γ1 <E| Γ2 -> PEnvironment.
@@ -335,11 +341,20 @@ Qed.
 
 
 (*
-** The Precision relation
+** The Precision relation for expressions
+*)
+
+(*
+** (Precision Γ e1 τ1 e2 τ2) means Γ⊑ ⊢ e1 ⊑ e2 : τ1 ⊑ τ2.
+** In words: In the precision environment Γ,
+** the expression e1 with type τ1 is more (or equally) precise
+** than the expression e2 with type τ2.
 *)
 Inductive Precision : PEnvironment -> IRE -> IRType ->
                                       IRE -> IRType -> Prop :=
 
+(* ----------------------
+   Γ⊑ ⊢ nil ⊑ nil : nil ⊑ nil       *)
 | PNil : forall Γ, Precision Γ IRENil IRTNil IRENil IRTNil
 
 (* Γ⊑ ∋ (x : σ ⊑ τ)
@@ -364,7 +379,7 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 
 (* ----------------------
    Γ⊑ ⊢ {} ⊑ {} : tbl ⊑ tbl	*)
-| PCnst : forall Γ, Precision Γ IRECnst IRTTbl IRECnst IRTTbl
+| PNew : forall Γ, Precision Γ IRENew IRTTbl IRENew IRTTbl
 
 (* ----------------------
    Γ⊑ ⊢ a ⊑ a : tbl ⊑ tbl	*)
@@ -525,6 +540,7 @@ Qed.
 End Examples.
 
 
+(* Inclusion for precision environments *)
 Definition Pinclusion (Γ Γ' : PEnvironment) : Prop :=
   inclusion (PEnv1 Γ) (PEnv1 Γ') /\ inclusion (PEnv2 Γ) (PEnv2 Γ').
 
@@ -537,6 +553,7 @@ Proof.
 Qed.
 
 
+(* For precision environments, equivalence implies inclusion *)
 Lemma PinclusionEquiv : forall Γ Γ',
     PEquiv Γ Γ' -> Pinclusion Γ Γ'.
 Proof.
@@ -547,6 +564,7 @@ Proof.
 Qed.
 
 
+(* Expansion preserves inclusion *)
 Lemma PinclusionExpand : forall Γ Γ' var t1 t2 H12,
     Pinclusion Γ Γ' ->
     Pinclusion (ExpandPEnv Γ var t1 t2 H12)
@@ -696,84 +714,15 @@ Proof.
 Qed.
 
 
-Lemma NoTag2Star : forall g, Tag2Type g <> IRTStar.
-Proof. destruct g; easy. Qed.
-
-
-Ltac NoTag2Star :=
-  try match goal with
-    [H: IRTStar = Tag2Type _ |- _ ] => symmetry in H
-  end;
-  match goal with
-    [H: Tag2Type _ = IRTStar |- _ ] =>
-      apply NoTag2Star in H; exfalso; trivial
-  end.
-
-
-Lemma Tag2TypeInjective : forall g1 g2,
-    Tag2Type g1 = Tag2Type g2 -> g1 = g2.
-Proof.
-  intros g1 g2. destruct g1; destruct g2; easy.
-Qed.
-
-
-Lemma TagInt : forall g,
-   Tag2Type g = IRTInt -> g = TgInt.
-Proof. intros g. destruct g; try easy. Qed.
-
-
-Lemma TagFun : forall g,
-   Tag2Type g = IRTFun -> g = TgFun.
-Proof.
-  intros g. destruct g; try easy. Qed.
-
-
-Ltac EnvUnique :=
-  match goal with
-  [ H1: In ?Γ ?var = _,
-    H2: In ?Γ ?var = _ |- _ ] =>
-    rewrite H1 in H2; injection H2; intros; subst
-  end.
-
-
-Fixpoint Env2Dyn (Γ : IREnvironment) : IREnvironment :=
-  match Γ with
-  | MEmpty => MEmpty
-  | MCons var _ Γ' => MCons var IRTStar (Env2Dyn Γ')
-  end.
-
-
-Lemma InEnv2Dyn : forall Γ var t,
-    In Γ var = Some t ->
-    In (Env2Dyn Γ) var = Some IRTStar.
-Proof.
-  intros.
-  induction Γ; try easy.
-  simpl in H.
-  destruct (string_dec var s); subst; simpl.
-  - destruct (string_dec s s); easy.
-  - destruct (string_dec var s); auto.
-Qed.
-
-
-Lemma NInEnv2Dyn : forall Γ var,
-    In Γ var = None -> In (Env2Dyn Γ) var = None.
-Proof.
-  intros.
-  induction Γ; try easy.
-  simpl in H.
-  destruct (string_dec var s); subst; simpl.
-  - destruct (string_dec s s); easy.
-  - destruct (string_dec var s); try easy; auto.
-Qed.
-
-
+(*
+** Make a precision environment with Γ and (dyn Γ).
+*)
 Definition PEnvDyn (Γ : IREnvironment) : PEnvironment.
-refine (PEnv Γ (Env2Dyn Γ) _).
+refine (PEnv Γ (dynGamma Γ) _).
   unfold EnvComp. intros.
   destruct (In Γ var) eqn:?.
-  - rewrite InEnv2Dyn with (t := i); auto using TPrecOption, TPrecision.
-  - rewrite NInEnv2Dyn; auto using TPrecOption.
+  - rewrite TP2TGammaIn with (T := i); auto using TPrecOption, TPrecision.
+  - rewrite NTP2TGammaIn; auto using TPrecOption.
 Defined.
 
 
@@ -781,6 +730,10 @@ Lemma Env2DynEmpty : PEquiv (PEnvDyn MEmpty) PEmpty.
 Proof. unfold PEquiv. split; trivial. Qed.
 
 
+(*
+** Expansion and 'dyn' commutes for precision environments
+** (up to equivalence)
+*)
 Lemma EquivDyn : forall Γ var t P,
   PEquiv (PEnvDyn (var |=> t; Γ))
           (ExpandPEnv (PEnvDyn Γ) var t IRTStar P).
@@ -791,12 +744,16 @@ Proof.
 Qed.
 
 
+(*
+** Type erasure produces expresssions that are less precise than
+** the original
+*)
 Theorem DynLessPrecise : forall Γ e t,
   Γ |= e : t -> Precision (PEnvDyn Γ) e t (dyn e) IRTStar.
 Proof.
   intros Γ e t H.
-  induction H; simpl; eauto using Precision, TPrecision, InEnv2Dyn.
-  - apply PVar; unfold PEnvDyn; simpl; eauto using InEnv2Dyn.
+  induction H; simpl; eauto using Precision, TPrecision, TP2TGammaIn.
+  - apply PVar; unfold PEnvDyn; simpl; eauto using TP2TGammaIn.
   - apply PLet with (TPStar t);
     eauto using PrecisionIrrel, EquivDyn.
   - apply PBoxR. apply PFun.
@@ -804,6 +761,10 @@ Proof.
 Qed.
 
 
+(*
+** Any pair of expressions in a precision relation are equal
+** up to type erasure.
+*)
 Theorem PrecDynEqual : forall Γ e1 t1 e2 t2,
     Precision Γ e1 t1 e2 t2 -> dyn e2 = dyn e1.
 Proof.
@@ -811,9 +772,14 @@ Proof.
 Qed.
 
 
+(*
+** Any star value less precise than an expression is equal to the
+** expression type erasure.
+*)
 Lemma PrecDynEqualVal : forall e1 t1 e2,
     Value e2 ->
-    Precision PEmpty e1 t1 e2 IRTStar -> e2 = dyn e1.
+    Precision PEmpty e1 t1 e2 IRTStar ->
+    e2 = dyn e1.
 Proof.
   intros.
   replace e2 with (dyn e2). eauto using PrecDynEqual.

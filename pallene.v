@@ -11,6 +11,7 @@ Require Import LIR.maps.
 Require Import LIR.lir.
 
 
+(* Pallene types *)
 Inductive PType : Set :=
 | PTStar : PType
 | PTNil : PType
@@ -24,6 +25,7 @@ Lemma dec_TP : forall (t1 t2 : PType), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. Qed.
 
 
+(* Type environment for Pallene *)
 Definition PEnvironment := Map PType.
 
 (*
@@ -33,7 +35,6 @@ Inductive PE : Set :=
 | PENil : PE
 | PENum : nat -> PE
 | PEPlus : PE -> PE -> PE
-(* ??? New vs. Cnst : usar o mesmo nome em todas as linguagens *)
 | PENew : PType -> PE
 | PEGet : PE -> PE -> PE
 | PESet : PE -> PE -> PE -> PE
@@ -129,6 +130,9 @@ Fixpoint typeOf Γ e : option PType :=
   end.
 
 
+(*
+** 'typeOf' is correct (part 1)
+*)
 Lemma typeOfCorrect' : forall Γ e T, Γ |= e : T -> typeOf Γ e = Some T.
 Proof.
   intros Γ e T Hty.
@@ -144,6 +148,9 @@ Qed.
 Ltac destTOf Γ e :=
     destruct (typeOf Γ e) as [[ | | | ? | ? ?] | ?] eqn:?; try easy.
 
+(*
+** 'typeOf' is correct (part 2)
+*)
 Lemma typeOfCorrect'' : forall Γ e T, typeOf Γ e = Some T -> Γ |= e : T.
 Proof.
   intros Γ e T Heq.
@@ -189,7 +196,10 @@ Proof.
 Qed.
 
 
-Definition PT2IRT (t : PType) : IRType := 
+(*
+** Convert a Pallene type to its corresponding Lir type
+*)
+Definition PT2IRT (t : PType) : IRType :=
   match t with
   | PTStar => IRTStar
   | PTNil => Tag2Type TgNil
@@ -204,6 +214,9 @@ Lemma PT2IRTFun : forall T1 T2,
 Proof. intros T1 T2. unfold PT2IRT. trivial. Qed.
 
 
+(*
+** Convert a Pallene environment to a Lir environment
+*)
 Fixpoint TP2TGamma (Γ : Map PType) : IREnvironment :=
   match Γ with
   | MEmpty => MEmpty
@@ -220,6 +233,9 @@ Proof.
 Qed.
 
 
+(*
+** Casts an expression of type 't1' to one of type 't2'.
+*)
 Definition Cast (t1 t2 : IRType) (e : IRE) : IRE :=
   match t1, t2 with
   | IRTStar, IRTStar => e
@@ -234,11 +250,15 @@ Notation "'<' t1 '<=' t2 '>' e" := (Cast t1 t2 e)
     (at level 50, t1 at next level, t2 at next level).
 
 
-
+(*
+** Get the ground type of an expression; if correctly typed;
+** otherwise assume nil. (The expression will always be correctly
+** typed.)
+*)
 Definition tagOf Γ e : IRType :=
   match typeOf Γ e with
   | Some T => PT2IRT T
-  | None => Tag2Type TgNil
+  | None => IRTNil
   end.
 
 
@@ -264,7 +284,7 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   | PENil => IRENil
   | PENum a => IRENum a
   | PEPlus e1 e2 => IREPlus (Pall2Lir Γ e1) (Pall2Lir Γ e2)
-  | PENew _ => IRECnst
+  | PENew _ => IRENew
   | PEGet e1 e2 =>
          <tagOf Γ e <= IRTStar>
            (IREGet (Pall2Lir Γ e1) (<IRTStar <= (Tag2Type TgInt)> (Pall2Lir Γ e2)))
@@ -348,7 +368,7 @@ Qed.
 
 
 (*
-** Compilation of well-typed programs result in well-typed code
+** Compilation of well-typed programs results in well-typed code
 *)
 Theorem Pall2LirWellTyped : forall Γ (e : PE) T,
     Γ |= e : T -> IRTyping (TP2TGamma Γ) (Pall2Lir Γ e) (PT2IRT T).

@@ -47,7 +47,7 @@ Qed.
 
 
 (*
-** Memory precision implies that memory is correct.
+** Memory precision implies that memory 1 is correct.
 *)
 Lemma PrecCorrect1 : forall m1 m2, m1 <M| m2 -> mem_correct m1.
 Proof.
@@ -60,7 +60,7 @@ Qed.
 
 
 (*
-** Memory precision implies that memory is correct.
+** Memory precision implies that memory 2 is correct.
 *)
 Lemma PrecCorrect2 : forall m1 m2, m1 <M| m2 -> mem_correct m2.
 Proof.
@@ -73,7 +73,7 @@ Qed.
 
 
 (*
-** Terms "similar up to precision" generate the same indices
+** Expressions equal "up to precision" generate the same indices
 *)
 Lemma PrecIndex : forall e1 e2,
     Precision PEmpty e1 IRTStar e2 IRTStar ->
@@ -81,6 +81,9 @@ Lemma PrecIndex : forall e1 e2,
 Proof. intros * HP. induction HP; eauto. Qed.
 
 
+(*
+** Memories in a precision relation generate equal "fresh" addresses
+*)
 Lemma PrecFreshaux : forall m1 m2,
     m1 <M| m2 -> freshaux m1 = freshaux m2.
 Proof.
@@ -89,6 +92,10 @@ Proof.
 Qed.
 
 
+(*
+** Creating a new table entry preserves memory precision and
+** results in equal addresses.
+*)
 Lemma PrecFreshT : forall m1 m2 free m1',
     m1 <M| m2 ->
     (free, m1') = freshT m1 ->
@@ -103,6 +110,10 @@ Proof.
 Qed.
 
 
+(*
+** Creating a new closure preserves memory precision and
+** results in equal addresses.
+*)
 Lemma PrecFreshF : forall m1 m2 var d1 d2 free m1',
     m1 <M| m2 ->
     Precision
@@ -227,13 +238,6 @@ Proof.
 Qed.
 
 
-Lemma GroundFlat' : forall t g g',
-    t <| Tag2Type g' -> t = Tag2Type g -> g = g'.
-Proof.
-  intros * H HEq. subst. auto using GroundFlat.
-Qed.
-
-
 Ltac ContraTags :=
   try match goal with
     [H: IRTStar <| Tag2Type _ |- _] =>
@@ -243,6 +247,12 @@ Ltac ContraTags :=
     [H: IRTStar = Tag2Type ?g |- _] =>
       destruct g; discriminate
   end.
+
+
+Lemma GroundFlat': forall g g', (Tag2Type g) <| (Tag2Type g') -> g = g'.
+Proof.
+  intros * H. apply GroundFlat in H. injection H; trivial.
+Qed.
 
 
 Lemma GroundType: forall g t g',
@@ -255,7 +265,7 @@ Proof.
     rewrite <- Heq' in HT;
     replace t with (Tag2Type g') in HT by (subst; trivial);
     symmetry;
-    eauto using GroundFlat).
+    subst; eauto using GroundFlat').
 Qed.
 
 
@@ -285,6 +295,9 @@ Proof.
 Qed.
 
 
+(*
+** Catch-up steps preserve precision
+*)
 Lemma PrecisionPreservation : forall e1 e2 e2' t1 t2 m m',
     Precision PEmpty e1 t1 e2 t2 ->
     Value e1 ->
@@ -307,8 +320,10 @@ Proof.
 Qed.
 
 
-(* Rename "M" to "Mult" *)
-Lemma PrecisionPreservationM : forall e1 e2 e2' t1 t2 m m',
+(*
+** Catch-up multi-steps preserve precision
+*)
+Lemma PrecisionPreservationMult : forall e1 e2 e2' t1 t2 m m',
     Precision PEmpty e1 t1 e2 t2 ->
     Value e1 ->
     m / e2 -->* m' / e2' ->
@@ -342,8 +357,7 @@ Qed.
 
 
 (*
-** If the term "catching-up" has type '*' and it converges, it converges
-** to a box.
+** If the term "catching-up" has type '*', it converges to a box.
 *)
 Lemma ValueStarP : forall tg t v e m e',
     Precision PEmpty v t e IRTStar ->
@@ -366,7 +380,7 @@ Qed.
 
 
 (*
-** Obs: reduction uses only unbox(box x); does not change memory
+** Obs: reduction uses only unbox(box x); it does not change memory
 *)
 Lemma CatchUp : forall e1 t1 e2 t2 m,
   Precision PEmpty e1 t1 e2 t2 ->
@@ -442,9 +456,9 @@ Ltac doCatchUp :=
 
 
 (*
-** Main simulation theorem
+** Main simulation lemma
 *)
-Theorem Sim : forall m1 e1 t1 e2 m2 t2 m1' e1',
+Lemma Sim : forall m1 e1 t1 e2 m2 t2 m1' e1',
   Precision PEmpty e1 t1 e2 t2 ->
   m1 / e1 --> m1' / e1'   ->
   m1 <M| m2 ->
@@ -478,18 +492,18 @@ Proof.
     clear IHHP1.
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongPlus1, CongPlus2,
-                  Precision, PrecisionPreservationM.
+                  Precision, PrecisionPreservationMult.
 
   - (* StPlus *)
     clear IHHP1 IHHP2.
 
     assert (N1: x = IRENum n1). {
-      specialize (PrecisionPreservationM HP1 (Vnum n1) H) as NH1.
+      specialize (PrecisionPreservationMult HP1 (Vnum n1) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
     }
 
     assert (N2: x0 = IRENum n2). {
-      specialize (PrecisionPreservationM HP2 (Vnum n2) H1) as NH2.
+      specialize (PrecisionPreservationMult HP2 (Vnum n2) H1) as NH2.
       inversion NH2; subst; trivial; NoValueUnbox.
     }
 
@@ -508,50 +522,50 @@ Proof.
   - (* StGet2 *)
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongGet1, CongGet2,
-                  Precision, PrecisionPreservationM.
+                  Precision, PrecisionPreservationMult.
 
   - (* StGet *)
     clear IHHP1 IHHP2.
 
     assert (N1: x = IRETAddr a). {
-      specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
+      specialize (PrecisionPreservationMult HP1 (Vtbl a) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
     exists (queryT a x0 m2). exists m2. split; try split;
       eauto 7 using multiTrans, CongGet1, CongGet2, multistep1, step,
-         Precision, PrecQueryT, PrecisionPreservationM.
+         Precision, PrecQueryT, PrecisionPreservationMult.
 
   - (* StSet2 *)
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongSet1, CongSet2,
-                  Precision, PrecisionPreservationM.
+                  Precision, PrecisionPreservationMult.
 
   - (* StSet3 *)
    clear IHHP1 IHHP2.
     eexists; exists x0; split; try split;
       eauto 6 using multiTrans, CongSet1, CongSet2, CongSet3,
-                  Precision, PrecisionPreservationM.
+                  Precision, PrecisionPreservationMult.
 
   - (* StSet *)
     clear IHHP1 IHHP2 IHHP3.
 
     assert (N1: x = IRETAddr a). {
-      specialize (PrecisionPreservationM HP1 (Vtbl a) H) as NH1.
+      specialize (PrecisionPreservationMult HP1 (Vtbl a) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
     exists IRENil. eexists (UpdateT _ _ (EV x1 H4) _).
     split; try split;
       eauto 9 using multiTrans, CongSet1, CongSet2, CongSet3,
-        multistep1, step, Precision, PrecQueryT, PrecisionPreservationM,
+        multistep1, step, Precision, PrecQueryT, PrecisionPreservationMult,
         PrecUpdate.
 
   - (* StLet *)
     clear IHHP1 IHHP2.
     eexists ([var := x] b2); exists m2; split; try split;
       eauto using multiTrans, CongLet, multistep1, step,
-                  PrecSubs, PrecisionPreservationM, PEquivRefl.
+                  PrecSubs, PrecisionPreservationMult, PEquivRefl.
 
   - (* StFun *)
     clear IHHP. 
@@ -562,13 +576,13 @@ Proof.
   - (* StFunApp2 *)
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongFunApp1, CongFunApp2,
-                  Precision, PrecisionPreservationM.
+                  Precision, PrecisionPreservationMult.
 
   - (* StFunApp *)
     clear IHHP1 IHHP2.
 
     assert (N1: x0 = IREFAddr a). {
-      specialize (PrecisionPreservationM HP2 (Vfun a) H1) as NH1.
+      specialize (PrecisionPreservationMult HP2 (Vfun a) H1) as NH1.
       inversion NH1; subst. eauto. NoValueUnbox.
     }
     subst.
@@ -577,7 +591,7 @@ Proof.
     specialize (PrecQueryF _ HM H5 HEq2) as [? ?]; subst.
     exists ([var' := x] body'). exists m2. repeat split;
     eauto 7 using multiTrans, CongFunApp1, CongFunApp2, multistep1, step,
-         Precision, PrecSubs',  PrecisionPreservationM. 
+         Precision, PrecSubs',  PrecisionPreservationMult. 
 
   - (* StUnbox *)
     clear IHHP.
@@ -591,7 +605,10 @@ Proof.
 Qed.
 
 
-Corollary SimMult : forall m1 e1 t1 e2 m2 t2 m1' e1',
+(*
+** Simulation theorem
+*)
+Theorem SimMult : forall m1 e1 t1 e2 m2 t2 m1' e1',
   m1 / e1 -->* m1' / e1'   ->
   Value e1' ->
   Precision PEmpty e1 t1 e2 t2 ->
@@ -608,7 +625,7 @@ Proof.
   generalize dependent e2.
   induction HMSt; intros * HV HPE HMem.
   - specialize (CatchUp m2 HPE HV) as [? [? ?]].
-    eexists. eexists; repeat split; eauto using PrecisionPreservationM.
+    eexists. eexists; repeat split; eauto using PrecisionPreservationMult.
   - specialize (Sim HPE H HMem) as [? [? [? [? ?]]]].
     specialize (IHHMSt _ _ _ HV H2 H1) as [? [? [? [? [? ?]]]]].
     exists x1. exists x2. repeat split; eauto using multiTrans.

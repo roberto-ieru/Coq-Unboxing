@@ -12,7 +12,7 @@ Require Import LIR.lir.
 
 
 (*
-** 'dyn' transformation
+** 'dyn' transformation: type erasure for Lir expressions
 *)
 Fixpoint dyn (e : IRE) : IRE :=
   match e with
@@ -20,7 +20,7 @@ Fixpoint dyn (e : IRE) : IRE :=
   | IRENum n => IREBox TgInt (IRENum n)
   | IREPlus e1 e2 => IREBox TgInt (IREPlus (IREUnbox TgInt (dyn e1))
                                            (IREUnbox TgInt (dyn e2)))
-  | IRECnst => IREBox TgTbl IRECnst
+  | IRENew => IREBox TgTbl IRENew
   | IRETAddr a => IREBox TgTbl (IRETAddr a)
   | IREFAddr a => IREBox TgFun (IREFAddr a)
   | IREGet e1 e2 => IREGet (IREUnbox TgTbl (dyn e1)) (dyn e2)
@@ -47,6 +47,8 @@ Fixpoint dynGamma (Γ : IREnvironment) : IREnvironment :=
   end.
 
 
+(* Correctness of dynGamma *)
+
 Lemma TP2TGammaIn : forall Γ var T,
     In Γ var = Some T -> In (dynGamma Γ) var = Some IRTStar.
 Proof.
@@ -56,8 +58,20 @@ Proof.
 Qed.
 
 
+Lemma NTP2TGammaIn : forall Γ var,
+    In Γ var = None -> In (dynGamma Γ) var = None.
+Proof.
+  intros.
+  induction Γ; try easy.
+  simpl in H.
+  destruct (string_dec var s); subst; simpl.
+  - destruct (string_dec s s); easy.
+  - destruct (string_dec var s); try easy; auto.
+Qed.
+
+
 (*
-** 'dyn' produces well-typed terms
+** 'dyn' preserves well-typeness
 *)
 Theorem dynTyping : forall Γ e T,
     Γ |= e : T -> dynGamma Γ |= (dyn e) : IRTStar.
@@ -68,8 +82,7 @@ Qed.
 
 
 (*
-** 'dyn' produces well-typed terms in the empty
-** environment
+** 'dyn' preserves well-typeness in the empty environment
 *)
 Lemma dynTypingE : forall e,
     MEmpty |= e : IRTStar -> MEmpty |= dyn e : IRTStar.
@@ -81,7 +94,7 @@ Qed.
 
 
 (*
-** 'dyn' preserves "valueness"
+** 'dyn' preserves "valueness".
 *)
 Lemma dynValue : forall e, Value e -> Value (dyn e).
 Proof.
@@ -102,6 +115,9 @@ Proof.
 Qed.
 
 
+(*
+** Erases the types of all values in a memory
+*)
 Fixpoint dynMem (m : Mem) : Mem :=
   match m with
   | EmptyMem => EmptyMem
@@ -127,12 +143,16 @@ Proof.
 Qed.
 
 
+(* 'dyn' preserves indices *)
 Lemma DynIndex : forall e, ToIndex e = ToIndex (dyn e).
 Proof.
   induction e; eauto.
 Qed.
 
 
+(*
+** Two values have equal indices iff they are equal up to type erasure.
+*)
 Lemma DynIndexEq : forall e1 e2,
     Value e1 ->
     Value e2 ->
@@ -146,6 +166,9 @@ Proof.
 Qed.
  
 
+(*
+** For values with ground types, 'dyn' means boxing them.
+*)
 Lemma ValueTag : forall e tg,
     Value e -> MEmpty |= e : Tag2Type tg -> dyn e = IREBox tg e.
 Proof.
@@ -154,6 +177,9 @@ Proof.
 Qed.
 
 
+(*
+** For values with type '*', 'dyn' does nothing.
+*)
 Lemma ValueStar : forall e,
     Value e -> MEmpty |= e : IRTStar -> e = dyn e.
 Proof.

@@ -27,7 +27,7 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
     m / IREPlus e1 e2 ==> m'' / IRENum (n1 + n2)
 | BStCstr : forall m m' free,
     (free, m') = freshT m ->
-    m / IRECnst ==> m' / IRETAddr free
+    m / IRENew ==> m' / IRETAddr free
 | BStGet : forall m e1 m' a e2 m'' v idx,
     m / e1 ==> m' / IRETAddr a ->
     m'/ e2 ==> m'' / idx ->

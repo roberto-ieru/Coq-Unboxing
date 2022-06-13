@@ -10,6 +10,7 @@ Require Import LIR.maps.
 
 
 Require Import LIR.pallene.
+Require Import LIR.pall2lir.
 Require Import LIR.lir.
 Require Import LIR.dyn.
 Require Import LIR.biglir.

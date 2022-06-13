@@ -10,5 +10,6 @@ precision.vo: precision.v maps.vo lir.vo dyn.vo
 simprec.vo: simprec.v precision.vo maps.vo lir.vo
 biglir.vo: biglir.v lir.vo
 pallene.vo: pallene.v maps.vo lir.vo
-lua.vo: lua.v maps.vo pallene.vo lir.vo dyn.vo biglir.vo
+pall2lir.vo: pall2lir.v pallene.vo maps.vo lir.vo
+lua.vo: lua.v maps.vo pallene.vo pall2lir.vo lir.vo dyn.vo biglir.vo
 

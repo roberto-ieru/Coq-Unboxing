@@ -357,9 +357,16 @@ Inductive PMem : Set :=
 | PUpdateF : address -> string -> PType -> PE -> PMem -> PMem.
 
 
+(* [nil as *] *)
+Definition NilStar : PE := PECast PENil PTStar.
+
+(* Proof object that [nil as *] is a value *)
+Definition NilStarVal : PValue NilStar := PVbox PENil PVnil.
+
+
 Fixpoint PqueryT (a : address) (idx : nat) (m : PMem) : PE :=
   match m with
-  | PEmptyMem => PENil
+  | PEmptyMem => NilStar
   | PUpdateT a' idx' e m' => if Nat.eq_dec a a' then
                            if Index_dec (PToIndex idx) idx' then (PEV2Val e)
                            else PqueryT  a idx m'
@@ -370,7 +377,7 @@ Fixpoint PqueryT (a : address) (idx : nat) (m : PMem) : PE :=
 
 Fixpoint PqueryF (a : address) (m : PMem) : (string * PType * PE) :=
   match m with
-  | PEmptyMem => (""%string, PTStar,  PENil)
+  | PEmptyMem => (""%string, PTStar,  NilStar)
   | PUpdateT a' _ _ m' => PqueryF a m'
   | PUpdateF a' var type body m' => if Nat.eq_dec a a' then (var, type,  body)
                                     else PqueryF a m'
@@ -387,13 +394,13 @@ Fixpoint Pfreshaux (m : PMem) : address :=
 
 Definition PfreshT (m : PMem) : (address * PMem) :=
   let f := Pfreshaux m in
-    (f, PUpdateT f (I 0 TgNil) (PEV PENil PVnil) m).
+    (f, PUpdateT f (I 0 TgNil) (PEV NilStar NilStarVal) m).
 
 
 Definition PfreshF (m : PMem) (v : string) (t : PType) (b : PE) :
              (address * PMem) :=
   let f := Pfreshaux m in
-    (f, PUpdateF f v t b m).
+    (f, PUpdateF f v t (PECast b PTStar) m).
 
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
@@ -458,6 +465,11 @@ Proof.
 Qed.
 
 
+Definition setTable (m : PMem) (a : address) (idx : nat) (v : PE)
+                    (Vv : PValue v) : PMem :=
+        PUpdateT a (PToIndex idx) (PEV (PECast v PTStar) (PVbox v Vv)) m.
+
+
 (*
 ** Evaluation steps for Lir expressions
 *)
@@ -503,8 +515,7 @@ Inductive pstep : PMem -> PE -> PMem -> PE -> Prop :=
     m / PESet e1 e2 e3 --> m' / PESet e1 e2 e3'
 | PStSet : forall m a idx v T (Vv : PValue v),
     PValue v ->  (* shouldn't be necessary, but otherwise it is shelved *)
-    m / PESet (PETAddr a T) (PENum idx) v -->
-            PUpdateT a (PToIndex idx) (PEV v Vv) m / PENil
+    m / PESet (PETAddr a T) (PENum idx) v --> setTable m a idx v Vv / PENil
 | PStFun : forall m m' v b free T1 T2,
     (free, m') = PfreshF m v T1 b ->
     m / PEFun v T1 b T2 --> m' / PEFAddr free T1 T2
@@ -614,12 +625,12 @@ Qed.
 *)
 Inductive Pmem_correct : PMem -> Prop :=
 | PMCE : Pmem_correct PEmptyMem
-| PMCT : forall a idx v m T,
-     MEmpty |= PEV2Val v : T ->
+| PMCT : forall a idx v m,
+     MEmpty |= PEV2Val v : PTStar ->
      Pmem_correct m ->
      Pmem_correct (PUpdateT a idx v m)
-| PMCF : forall a var type body m T,
-     var |=> type; MEmpty |= body : T ->
+| PMCF : forall a var type body m,
+     var |=> type; MEmpty |= body : PTStar ->
      Pmem_correct m ->
      Pmem_correct (PUpdateF a var type body m)
 .
@@ -643,12 +654,11 @@ Qed.
 *)
 Lemma PMCTy : forall m a n Γ,
     Pmem_correct m ->
-    exists T, Γ |= (PqueryT a n m) : T.
+    Γ |= (PqueryT a n m) : PTStar.
 Proof.
   intros * H.
-  induction H; trivial.
-  - eauto using typing_empty, PTyping.
-  - simpl. breakIndexDec; subst; eauto using Ptyping_empty.
+  induction H; eauto using typing_empty, PTyping.
+  simpl. breakIndexDec; subst; eauto using Ptyping_empty.
 Qed.
 
 
@@ -658,7 +668,7 @@ Qed.
 Lemma PMCTyF : forall m a var type body Γ,
     (var, type,  body) = PqueryF a m ->
     Pmem_correct m ->
-    exists T, var |=> type; Γ |= body : T.
+    var |=> type; Γ |= body : PTStar.
 Proof.
   intros * HEq HMC.
   induction HMC; eauto.
@@ -692,7 +702,20 @@ Lemma Pmem_correct_freshF : forall m m' var T1 T2 body free,
 Proof.
   unfold PfreshF. intros * HTy Hmc Heq.
   inversion Heq; subst.
-  eauto using Pmem_correct.
+  eapply PMCF; trivial.
+  eauto using Pmem_correct, PTyping.
+Qed.
+
+
+Lemma memCorrectSet : forall a idx v (Vv: PValue v) T m,
+  MEmpty |= v : T ->
+  Pmem_correct m ->
+  Pmem_correct (setTable m a idx v Vv).
+Proof.
+  intros * PTy PMC.
+  unfold setTable.
+  eapply PMCT; trivial.
+  eauto using PTyping.
 Qed.
 
 
@@ -711,7 +734,8 @@ Proof.
   generalize dependent e'.
   remember MEmpty as Γ.
   induction HTy; intros e' m' Hst; inversion Hst; subst;
-  eauto using Pmem_correct_freshT, Pmem_correct_freshF, Pmem_correct.
+  eauto using Pmem_correct_freshT, Pmem_correct_freshF, Pmem_correct,
+              memCorrectSet.
 Qed.
 
 
@@ -732,10 +756,10 @@ Proof.
   eauto using PTyping, PMCTy, PMCTyF, Psubst_typing, CastEqType.
   - inversion HT1; subst.
     assert (PValue (PqueryT a idx m')) by eauto using PMCValue.
-    specialize (PMCTy m' a idx MEmpty Hmc) as [T' ?].
+    specialize (PMCTy m' a idx MEmpty Hmc) as ?.
     eauto using CastEqType.
   - inversion HT1; subst.
-    specialize (PMCTyF m' a var type body MEmpty H3 Hmc) as [T' ?].
+    specialize (PMCTyF m' a var type body MEmpty H3 Hmc) as ?.
     eauto using CastEqType, CastValue, PTyCast, Psubst_typing.
 Qed.
 

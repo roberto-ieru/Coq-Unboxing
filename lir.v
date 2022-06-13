@@ -493,7 +493,7 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
     m /  IREPlus e1 e2 --> m' /  IREPlus e1 e2'
 | StPlus : forall m n1 n2,
     m /  IREPlus (IRENum n1) (IRENum n2) --> m /  IRENum (n1 + n2)
-| StCstr : forall m m' free,
+| StNew : forall m m' free,
     (free, m') = freshT m ->
     m / IRENew --> m' / IRETAddr free
 | StGet1 : forall m e1 e2 m' e1',
@@ -624,6 +624,7 @@ Ltac breakIndexDec :=
 
 (*
 ** Ensures that all elements of tables in a memory have type '*'
+** and that all "functions" are correctly typed
 *)
 Inductive mem_correct : Mem -> Prop :=
 | MCE : mem_correct EmptyMem

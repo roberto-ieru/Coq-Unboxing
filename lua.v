@@ -192,7 +192,7 @@ Qed.
 
 
 
-Fixpoint LqueryT (a : address) (idx : LE) (m : LMem) :=
+Fixpoint LqueryT (a : address) (idx : LE) (m : LMem) : LE :=
   match m with
   | LEmptyMem => LENil
   | LUpdateT a' idx' e m' => if Nat.eq_dec a a' then

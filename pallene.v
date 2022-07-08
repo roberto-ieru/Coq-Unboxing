@@ -8,7 +8,7 @@ Require Import Lia.
 
 Require Import LIR.maps.
 
-Require Import LIR.lir.
+Require LIR.lir.
 
 
 (* Pallene types *)
@@ -36,8 +36,8 @@ Inductive PE : Set :=
 | PENum : nat -> PE
 | PEPlus : PE -> PE -> PE
 | PENew : PType -> PE
-| PETAddr : address -> PType -> PE
-| PEFAddr : address -> PType -> PType -> PE
+| PETAddr : lir.address -> PType -> PE
+| PEFAddr : lir.address -> PType -> PType -> PE
 | PEGet : PE -> PE -> PE
 | PESet : PE -> PE -> PE -> PE
 | PEVar : string -> PE
@@ -208,6 +208,25 @@ Proof.
 Qed.
 
 
+Lemma PinclusionType : forall Γ Γ' e T,
+  Γ |= e : T ->
+  inclusion Γ Γ' ->
+  Γ' |= e : T.
+Proof.
+  intros * HTy HIn.
+  generalize dependent Γ'.
+  induction HTy; intros; eauto using PTyping, inclusion_update.
+Qed.
+
+
+Lemma PinclusionEmpty : forall Γ e T,
+  MEmpty |= e : T ->
+  Γ |= e : T.
+Proof.
+  eauto using PinclusionType, inclusion_empty.
+Qed.
+
+
 (*
 ** Pallene values
 *)
@@ -320,8 +339,7 @@ Lemma CastToItsType : forall T v,
   PCast v T = Some v.
 Proof.
   intros * HV HT.
-  remember MEmpty as Gamma eqn:HEq.
-  induction HT; trivial; inversion HV; subst; trivial.
+  induction HV; inversion HT; trivial.
 Qed.
 
 
@@ -337,7 +355,7 @@ Proof.
 Qed.
 
 
-Fixpoint PToIndex (n : nat) : Index := I n TgInt.
+Definition PToIndex (n : nat) : lir.Index := lir.I n lir.TgInt.
 
 
 Inductive PExpValue : Set :=
@@ -353,8 +371,8 @@ Definition PEV2Val (me : PExpValue) : PE :=
 
 Inductive PMem : Set :=
 | PEmptyMem : PMem
-| PUpdateT : address -> Index -> PExpValue -> PMem -> PMem
-| PUpdateF : address -> string -> PType -> PE -> PMem -> PMem.
+| PUpdateT : lir.address -> lir.Index -> PExpValue -> PMem -> PMem
+| PUpdateF : lir.address -> string -> PType -> PE -> PMem -> PMem.
 
 
 (* [nil as *] *)
@@ -364,18 +382,18 @@ Definition NilStar : PE := PECast PENil PTStar.
 Definition NilStarVal : PValue NilStar := PVbox PENil PVnil.
 
 
-Fixpoint PqueryT (a : address) (idx : nat) (m : PMem) : PE :=
+Fixpoint PqueryT (a : lir.address) (idx : nat) (m : PMem) : PE :=
   match m with
   | PEmptyMem => NilStar
   | PUpdateT a' idx' e m' => if Nat.eq_dec a a' then
-                           if Index_dec (PToIndex idx) idx' then (PEV2Val e)
+                           if lir.Index_dec (PToIndex idx) idx' then (PEV2Val e)
                            else PqueryT  a idx m'
                          else PqueryT  a idx m'
   | PUpdateF _ _ _ _ m' => PqueryT a idx m'
   end.
 
 
-Fixpoint PqueryF (a : address) (m : PMem) : (string * PType * PE) :=
+Fixpoint PqueryF (a : lir.address) (m : PMem) : (string * PType * PE) :=
   match m with
   | PEmptyMem => (""%string, PTStar,  NilStar)
   | PUpdateT a' _ _ m' => PqueryF a m'
@@ -384,7 +402,7 @@ Fixpoint PqueryF (a : address) (m : PMem) : (string * PType * PE) :=
   end.
 
 
-Fixpoint Pfreshaux (m : PMem) : address :=
+Fixpoint Pfreshaux (m : PMem) : lir.address :=
   match m with
   | PEmptyMem => 1
   | PUpdateT _ _ _ m' => S (Pfreshaux m')
@@ -392,13 +410,13 @@ Fixpoint Pfreshaux (m : PMem) : address :=
   end.
 
 
-Definition PfreshT (m : PMem) : (address * PMem) :=
+Definition PfreshT (m : PMem) : (lir.address * PMem) :=
   let f := Pfreshaux m in
-    (f, PUpdateT f (I 0 TgNil) (PEV NilStar NilStarVal) m).
+    (f, PUpdateT f (lir.I 0 lir.TgNil) (PEV NilStar NilStarVal) m).
 
 
 Definition PfreshF (m : PMem) (v : string) (t : PType) (b : PE) :
-             (address * PMem) :=
+             (lir.address * PMem) :=
   let f := Pfreshaux m in
     (f, PUpdateF f v t (PECast b PTStar) m).
 
@@ -465,7 +483,7 @@ Proof.
 Qed.
 
 
-Definition setTable (m : PMem) (a : address) (idx : nat) (v : PE)
+Definition setTable (m : PMem) (a : lir.address) (idx : nat) (v : PE)
                     (Vv : PValue v) : PMem :=
         PUpdateT a (PToIndex idx) (PEV (PECast v PTStar) (PVbox v Vv)) m.
 
@@ -644,7 +662,7 @@ Proof.
   intros.
   induction m; eauto using PValue.
   destruct p. simpl.
-  breakIndexDec; trivial.
+  lir.breakIndexDec; trivial.
 Qed.
 
 
@@ -657,8 +675,8 @@ Lemma PMCTy : forall m a n Γ,
     Γ |= (PqueryT a n m) : PTStar.
 Proof.
   intros * H.
-  induction H; eauto using typing_empty, PTyping.
-  simpl. breakIndexDec; subst; eauto using Ptyping_empty.
+  induction H; eauto using PTyping.
+  simpl. lir.breakIndexDec; subst; eauto using Ptyping_empty.
 Qed.
 
 
@@ -674,7 +692,7 @@ Proof.
   induction HMC; eauto.
   - simpl in HEq. injection HEq; intros; subst.
     eauto using PTyping.
-  - simpl in HEq. breakIndexDec; eauto.
+  - simpl in HEq. lir.breakIndexDec; eauto.
     injection HEq; intros; subst.
     eauto using Pinclusion_typing, inclusion_update, inclusion_empty.
 Qed.
@@ -686,7 +704,7 @@ Qed.
 Lemma Pmem_correct_freshT : forall m m' free,
   Pmem_correct m -> (free,m') = PfreshT m -> Pmem_correct m'.
 Proof.
-  unfold freshT. intros m m' free Hmc Heq. inversion Heq.
+  intros m m' free Hmc Heq. inversion Heq.
   eauto using Pmem_correct, PTyping.
 Qed.
 
@@ -761,6 +779,23 @@ Proof.
   - inversion HT1; subst.
     specialize (PMCTyF m' a var type body MEmpty H3 Hmc) as ?.
     eauto using CastEqType, CastValue, PTyCast, Psubst_typing.
+Qed.
+
+
+(*
+** Preservation of types for Pallene expressions,
+** function version.
+*)
+Lemma PexpPreservTypeOf : forall m e t m' e',
+  Pmem_correct m ->
+  MEmpty |= e : t ->
+  m / e --> m' / e' ->
+  typeOf MEmpty e = typeOf MEmpty e'.
+Proof.
+  intros * PM PTy PSt.
+  erewrite typeOfCorrect'; eauto.
+  erewrite typeOfCorrect'; eauto.
+  eauto using PexpPreservation.
 Qed.
 
 

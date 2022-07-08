@@ -261,11 +261,11 @@ Proof.
   intros * HT Heq.
   destruct t eqn:Heq';
   ContraTags;
-  try (injection Heq; intros;
+  injection Heq; intros;
     rewrite <- Heq' in HT;
     replace t with (Tag2Type g') in HT by (subst; trivial);
     symmetry;
-    subst; eauto using GroundFlat').
+    subst; eauto using GroundFlat'.
 Qed.
 
 

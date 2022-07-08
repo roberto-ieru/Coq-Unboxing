@@ -316,7 +316,19 @@ Fixpoint ToIndex (e : IRE) : Index :=
 Lemma Index_dec : forall (i1 i2 : Index), {i1 = i2} + {i1 <> i2}.
 Proof. 
   decide equality; auto using Nat.eq_dec, dec_Tag.
-Defined.
+Qed.
+
+
+Ltac breakIndexDec :=
+  repeat match goal with
+  | [ |- context C [Nat.eq_dec ?V1 ?V2] ] =>
+    destruct (Nat.eq_dec V1 V2)
+  | [ |- context C [Index_dec ?V1 ?V2] ] =>
+    destruct (Index_dec V1 V2) eqn:? ;
+  try easy
+  | [ H : context C [Nat.eq_dec ?V1 ?V2] |- _] =>
+    destruct (Nat.eq_dec V1 V2); subst
+  end.
 
 
 (*
@@ -362,6 +374,18 @@ Fixpoint queryT (a : address) (idx : IRE) (m : Mem) : IRE :=
                                   else queryT a idx m'
   | UpdateF _ _ _ m' => queryT a idx m'
   end.
+
+
+Lemma queryTIndexEq : forall m a idx idx',
+  ToIndex idx = ToIndex idx' ->
+  queryT a idx m = queryT a idx' m.
+Proof.
+  intros * HEq.
+  induction m; trivial.
+  simpl.
+  breakIndexDec; subst; trivial;
+  exfalso; auto.
+Qed.
 
 
 (*
@@ -608,18 +632,6 @@ Inductive stepF : Mem -> IRE -> Prop :=
 
  where "m / e --> 'fail'" := (stepF m e)
 .
-
-
-Ltac breakIndexDec :=
-  repeat match goal with
-  | [ |- context C [Nat.eq_dec ?V1 ?V2] ] =>
-    destruct (Nat.eq_dec V1 V2)
-  | [ |- context C [Index_dec ?V1 ?V2] ] =>
-    destruct (Index_dec V1 V2) eqn:? ;
-  try easy
-  | [ H : context C [Nat.eq_dec ?V1 ?V2] |- _] =>
-    destruct (Nat.eq_dec V1 V2); subst
-  end.
 
 
 (*

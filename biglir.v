@@ -46,7 +46,7 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
 | BStFun : forall m m' v b free,
     (free, m') = freshF m v b ->
     m / IREFun v b ==> m' / IREFAddr free
-| BStFunapp : forall m e1 m' a var body e2 m'' v2 m''' res,
+| BStApp : forall m e1 m' a var body e2 m'' v2 m''' res,
     m / e1 ==> m' / IREFAddr a ->
     m' / e2 ==> m'' / v2 ->
     (var, body) = queryF a m'' ->
@@ -99,14 +99,14 @@ Inductive bigStepF : Mem -> IRE -> Prop :=
      m / exp ==> m' / v1 ->
      m' / ([var := v1] body) ==> fail ->
      m / IRELet var t exp body ==> fail
-| BStFunapp1F : forall m e1 e2,
+| BStApp1F : forall m e1 e2,
     m / e1 ==> fail ->
     m / IREApp e1 e2 ==> fail
-| BStFunapp2F : forall m e1 m' v1 e2,
+| BStApp2F : forall m e1 m' v1 e2,
     m / e1 ==> m' / v1 ->
     m' / e2 ==> fail ->
     m / IREApp e1 e2 ==> fail
-| BStFunapp3F : forall m e1 m' var body e2 m'' v2,
+| BStApp3F : forall m e1 m' var body e2 m'' v2,
     m / e1 ==> m' / IREFun var body ->
     m' / e2 ==> m'' / v2 ->
     m'' / ([var := v2] body) ==> fail ->
@@ -367,7 +367,7 @@ Proof.
     unshelve (eauto 11 using
       CongPlus1, CongPlus2, CongGet1, CongGet2,
       CongSet1, CongSet2, CongSet3,
-      CongFunApp1, CongFunApp2, CongLet,
+      CongApp1, CongApp2, CongLet,
       CongBox, CongUnbox,
       Value, multistep1, step, multiTrans,
       BstepValue, BstepTy,  StSet', auxTyFun, invertTyBox);

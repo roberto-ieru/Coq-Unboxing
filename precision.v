@@ -426,7 +426,7 @@ Inductive Precision : PEnvironment -> IRE -> IRType ->
 (* Γ⊑ ⊢ d₁ ⊑ e₁ : fun ⊑ fun    Γ⊑ ⊢ d₂ ⊑ e₂ : * ⊑ *
   -------------------------------------------------
   Γ⊑ ⊢ d₁(d₂) ⊑ e₁(e₂) : * ⊑ *	*)
-| PFunApp : forall Γ f1 v1 f2 v2,
+| PApp : forall Γ f1 v1 f2 v2,
     Precision Γ v1 IRTStar v2 IRTStar ->
     Precision Γ f1 IRTFun f2 IRTFun ->
     Precision Γ (IREApp f1 v1) IRTStar (IREApp f2 v2) IRTStar

@@ -537,14 +537,14 @@ Inductive pstep : PMem -> PE -> PMem -> PE -> Prop :=
 | PStFun : forall m m' v b free T1 T2,
     (free, m') = PfreshF m v T1 b ->
     m / PEFun v T1 b T2 --> m' / PEFAddr free T1 T2
-| PStFunapp1 : forall m e1 e2 m' e1',
+| PStApp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / PEApp e1 e2 --> m' / PEApp e1' e2
-| PStFunapp2 : forall m e1 e2 m' e2',
+| PStApp2 : forall m e1 e2 m' e2',
     PValue e1 ->
     m / e2 --> m' / e2' ->
     m / PEApp e1 e2 --> m' / PEApp e1 e2'
-| PStFunapp : forall m a var type body v v' T1 T2,
+| PStApp : forall m a var type body v v' T1 T2,
     PValue v ->
     (var, type, body) = PqueryF a m ->
     PCast v type = Some v' ->
@@ -593,14 +593,14 @@ Inductive pstepF : PMem -> PE -> Prop :=
     PValue e1 -> PValue e2 ->
     m / e3 --> fail ->
     m / PESet e1 e2 e3 --> fail
-| PStFunapp1F : forall m e1 e2,
+| PStApp1F : forall m e1 e2,
     m / e1 --> fail ->
     m / PEApp e1 e2 --> fail
-| PStFunapp2F : forall m e1 e2,
+| PStApp2F : forall m e1 e2,
     PValue e1 ->
     m / e2 --> fail ->
     m / PEApp e1 e2 --> fail
-| PStFunappF : forall m a var type body v T1 T2,
+| PStAppF : forall m a var type body v T1 T2,
     PValue v ->
     (var, type, body) = PqueryF a m ->
     PCast v type = None ->

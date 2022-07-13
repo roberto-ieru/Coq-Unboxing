@@ -159,7 +159,7 @@ Inductive IRTyping : IREnvironment -> IRE -> IRType -> Prop :=
 | IRTyFun : forall Γ var body,
     var |=> IRTStar; Γ |= body : IRTStar ->
     Γ |= (IREFun var body) : IRTFun
-| IRTyFunApp : forall Γ e1 e2,
+| IRTyApp : forall Γ e1 e2,
     Γ |= e1 : IRTFun ->
     Γ |= e2 : IRTStar ->
     Γ |= (IREApp e1 e2) : IRTStar
@@ -555,14 +555,14 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
 | StFun : forall m m' v b free,
     (free, m') = freshF m v b ->
     m / IREFun v b --> m' / IREFAddr free
-| StFunapp1 : forall m e1 e2 m' e1',
+| StApp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / IREApp e1 e2 --> m' / IREApp e1' e2
-| StFunapp2 : forall m e1 e2 m' e2',
+| StApp2 : forall m e1 e2 m' e2',
     Value e1 ->
     m / e2 --> m' / e2' ->
     m / IREApp e1 e2 --> m' / IREApp e1 e2'
-| StFunapp : forall m a var body v,
+| StApp : forall m a var body v,
     Value v ->
     (var, body) = queryF a m ->
     m / IREApp (IREFAddr a) v --> m / [var := v] body
@@ -612,10 +612,10 @@ Inductive stepF : Mem -> IRE -> Prop :=
 | StLet1F : forall var t e body m,
     m / e --> fail ->
     m / IRELet var t e body --> fail
-| StFunapp1F : forall m e1 e2,
+| StApp1F : forall m e1 e2,
     m / e1 --> fail ->
     m / IREApp e1 e2 --> fail
-| StFunapp2F : forall m e1 e2,
+| StApp2F : forall m e1 e2,
     Value e1 ->
     m / e2 --> fail ->
     m / IREApp e1 e2 --> fail
@@ -984,11 +984,11 @@ Lemma CongLet : forall var t body m e m' e',
     m / IRELet var t e body -->* m' / IRELet var t e' body.
 Proof. finishmExp. Qed.
 
-Lemma CongFunApp1 : forall e2 m e m' e',
+Lemma CongApp1 : forall e2 m e m' e',
     m / e -->* m' / e' ->  m / IREApp e e2 -->* m' / IREApp e' e2.
 Proof. intros e2. finishmExp. Qed.
 
-Lemma CongFunApp2 : forall e1, Value e1 -> forall m e m' e',
+Lemma CongApp2 : forall e1, Value e1 -> forall m e m' e',
     m / e -->* m' / e' ->  m / IREApp e1 e -->* m' / IREApp e1 e'.
 Proof. intros e1 HV; finishmExp. Qed.
 

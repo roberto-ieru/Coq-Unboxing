@@ -264,13 +264,13 @@ Proof with eauto using IRTyping.
       * subst. simpl.
         apply IRTyVar. apply InEq.
 
-  - (* FunApp *)
+  - (* App *)
     destruct (tagOf Γ (PEApp e1 e2)) eqn:?.
     + specialize (invertCall _ _ _ _ _ H H0) as H2.
       unfold tagOf in Heqi. rewrite H2 in Heqi.
       simpl.
       apply IRTyUnbox; trivial.
-      eapply IRTyFunApp; eauto.
+      eapply IRTyApp; eauto.
       destruct (tagOf Γ e2) eqn:?.
       * apply IRTyBox.
         specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
@@ -280,11 +280,11 @@ Proof with eauto using IRTyping.
     + unfold Cast.
       specialize (invertFun _ _ _ _ _ H Heqi); intros; subst; simpl.
       destruct (tagOf Γ e2) eqn:?.
-      * eapply IRTyFunApp; eauto using IRTyping.
+      * eapply IRTyApp; eauto using IRTyping.
         eapply IRTyBox.
         specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
         rewrite <- HTt. trivial.
-      * eapply IRTyFunApp; eauto using IRTyping.
+      * eapply IRTyApp; eauto using IRTyping.
         specialize (typeStar _ _ _ H0 Heqi0) as HTS.
         subst. trivial.
 
@@ -788,13 +788,13 @@ Proof.
 
   - simpl. tagOf2T.
     destruct (PT2IRT T);
-    eauto using CongUnbox, CongFunApp1.
+    eauto using CongUnbox, CongApp1.
 
   - simpl.
     tagOf2T.
     destruct (PT2IRT T);
       destruct (PT2IRT T1);
-      eauto using CongUnbox, CongFunApp2, PValueValue, CongBox.
+      eauto using CongUnbox, CongApp2, PValueValue, CongBox.
 
   - inversion H5; subst.
     destruct (queryF a (MPall2Lir m)) eqn:?.
@@ -812,7 +812,7 @@ Proof.
     destruct (PT2IRT T0) eqn:?.
 
     + eapply MStMStep.
-      * eapply StFunapp.
+      * eapply StApp.
         ** eauto using Value, PValueValue.
         ** symmetry. eauto.
       * simpl. destruct (string_dec var var); try easy.
@@ -844,7 +844,7 @@ Proof.
     + replace T0 with PTStar in * by (symmetry; auto using PTStarB).
       clear Heqi.
       eapply MStMStep.
-      * eapply StFunapp.
+      * eapply StApp.
         ** eauto using Value, PValueValue.
         ** symmetry. eauto.
       * simpl. destruct (string_dec var var); try easy.

@@ -593,7 +593,7 @@ Proof.
     f_equal. apply L2LirFreshaux.
   
   - specialize (L2LirQueryF _ _ _ _ H) as ?.
-    simpl. eapply BStFunapp; eauto using bigStep.
+    simpl. eapply BStApp; eauto using bigStep.
     simpl. destruct (string_dec var var); try easy.
     specialize (luaPreservation _ _ _ _ H0 H4 HSt2) as [? [? ?]].
     eapply BStLet.

@@ -483,7 +483,7 @@ Proof.
   (* Handle all "first" cases *)
   try (eexists; eexists; split; try split;
     eauto using Precision, CongPlus1, CongGet1, CongSet1, CongLet,
-                CongFunApp1;
+                CongApp1;
     fail);
 
     repeat doCatchUp.
@@ -573,12 +573,12 @@ Proof.
     eexists. eexists. repeat split;
     eauto using multistep1, step, Precision.
 
-  - (* StFunApp2 *)
+  - (* StApp2 *)
     eexists; exists x0; split; try split;
-      eauto using multiTrans, CongFunApp1, CongFunApp2,
+      eauto using multiTrans, CongApp1, CongApp2,
                   Precision, PrecisionPreservationMult.
 
-  - (* StFunApp *)
+  - (* StApp *)
     clear IHHP1 IHHP2.
 
     assert (N1: x0 = IREFAddr a). {
@@ -590,7 +590,7 @@ Proof.
     destruct (queryF a m2) as [var' body'] eqn:HEq2. symmetry in HEq2.
     specialize (PrecQueryF _ HM H5 HEq2) as [? ?]; subst.
     exists ([var' := x] body'). exists m2. repeat split;
-    eauto 7 using multiTrans, CongFunApp1, CongFunApp2, multistep1, step,
+    eauto 7 using multiTrans, CongApp1, CongApp2, multistep1, step,
          Precision, PrecSubs',  PrecisionPreservationMult. 
 
   - (* StUnbox *)

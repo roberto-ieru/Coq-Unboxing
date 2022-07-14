@@ -783,19 +783,22 @@ Proof. intuition; eauto using memPreservation,expPreservation. Qed.
 (*
 ** Values cannot be reduced
 *)
-Lemma value_normal : forall m e,
-    Value e -> ~exists m' v, m / e --> m' / v.
+Lemma value_normal : forall m e m' v,
+    ~(Value e  /\  m / e --> m' / v).
 Proof.
-  intros m e HV.
-  induction HV; intros HEx; destruct HEx as [m' [v' Hst]];
+  intros * [HV Hst].
+  generalize dependent m'.
+  generalize dependent v.
+  induction HV; intros;
   inversion Hst; subst; eauto.
 Qed.
 
+
 Lemma value_normalF : forall m e,
-    Value e -> ~ m / e --> fail.
+    ~(Value e  /\  m / e --> fail).
 Proof.
-  intros * HV.
-  induction HV; intros Hst;
+  intros * [HV Hst].
+  induction HV;
   inversion Hst; subst; auto.
 Qed.
 
@@ -806,6 +809,22 @@ Ltac open_value rule :=
         Hv : Value ?e |- _] =>
           eapply rule in Ht; trivial; decompose [ex or and] Ht
     end.
+
+
+(*
+** Regular steps and fail steps are excludent.
+*)
+Lemma failNfail : forall e m e' m' T,
+    MEmpty |= e : T ->
+    ~(m / e --> m' / e'  /\  m / e --> fail).
+Proof.
+  intros * HTy [St HStF].
+  generalize dependent T.
+  induction St; intros; inversion HTy; inversion HStF; subst;
+  solve [ eauto
+        | eapply value_normal; eauto using Value
+        | eapply value_normalF; eauto using Value].
+Qed.
 
 
 (*

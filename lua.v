@@ -314,7 +314,7 @@ Qed.
 Example L2 : exists m,
     LEmptyMem / LEApp (LEFun "x" (LEVar "x")) (LENum 10) ==>
     m / LENum 10.
-Proof. 
+Proof.
   destruct (LfreshF LEmptyMem "x" (LEVar "x")) eqn:Heq.
   destruct (LqueryF a l) eqn:Heq'.
   specialize (auxmem _ _ _ _ _ _ _ Heq Heq') as [? ?]; subst.
@@ -564,18 +564,7 @@ Proof.
   intros e m v m' HMC HWT HSt.
   induction HSt; inversion HWT; subst;
   repeat LmemC;
-  eauto using bigStep, L2LirValue, L2LirFreshT, L2LirQueryT.
-
-  - simpl. apply BStBox.
-    eapply BStPlus.
-    + eapply BStUnbox.
-      replace (IREBox TgInt (IRENum n1)) with (Lua2Lir (LENum n1))
-        by trivial.
-      eauto.
-    + eapply BStUnbox.
-      replace (IREBox TgInt (IRENum n2)) with (Lua2Lir (LENum n2))
-        by trivial.
-      eauto.
+  eauto 7 using bigStep, L2LirValue, L2LirFreshT, L2LirQueryT.
 
   - simpl. rewrite LuaIndex.
     destruct v.
@@ -586,12 +575,12 @@ Proof.
       by trivial. eauto.
 
   - simpl. eapply BStBox. eapply BStFun.
-    unfold freshF. unfold LfreshF in H.    
+    unfold freshF. unfold LfreshF in H.
     inversion H; subst.
     f_equal. apply L2LirFreshaux.
     simpl.
     f_equal. apply L2LirFreshaux.
-  
+
   - specialize (L2LirQueryF _ _ _ _ H) as ?.
     simpl. eapply BStApp; eauto using bigStep.
     simpl. destruct (string_dec var var); try easy.

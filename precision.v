@@ -783,7 +783,7 @@ Lemma PrecDynEqualVal : forall e1 t1 e2,
 Proof.
   intros.
   replace e2 with (dyn e2). eauto using PrecDynEqual.
-  symmetry. apply ValueStar; trivial. 
+  symmetry. apply ValueStar; trivial.
   replace MEmpty with (PEnv2 PEmpty) by trivial.
   eauto using PrecisionType2.
 Qed.

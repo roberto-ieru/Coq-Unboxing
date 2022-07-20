@@ -164,7 +164,7 @@ Proof.
     simpl in *; congruence.
   - rewrite DynIndex. rewrite (DynIndex e2). congruence.
 Qed.
- 
+
 
 (*
 ** For values with ground types, 'dyn' means boxing them.

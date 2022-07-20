@@ -42,7 +42,7 @@ Lemma PrecMemRefl : forall m,
 Proof.
   intros m Hm.
   induction Hm; constructor; trivial;
-  eapply PrecisionRefl; eauto. 
+  eapply PrecisionRefl; eauto.
 Qed.
 
 
@@ -149,7 +149,7 @@ Lemma PrecQueryF : forall m1 m2 a var var' body body',
     (var, body) = queryF a m1 ->
     (var', body') = queryF a m2 ->
     var = var' /\
-      Precision 
+      Precision
          (ExpandPEnv PEmpty var IRTStar IRTStar (TPrecisionRefl IRTStar))
           body IRTStar body' IRTStar.
 Proof.
@@ -371,10 +371,9 @@ Proof.
   intros * HP HSty HVP HStep HV.
   inversion HP; subst; try (inversion HVP; fail);
   ContraTags.
-  replace g with tg in *. 2:{
-    apply PPT in H.
-    eauto using GroundTop.
-  }
+  replace g with tg in * by (
+    apply PPT in H;
+    eauto using GroundTop).
   eauto using BoxPreservePrecision.
 Qed.
 
@@ -568,7 +567,7 @@ Proof.
                   PrecSubs, PrecisionPreservationMult, PEquivRefl.
 
   - (* StFun *)
-    clear IHHP. 
+    clear IHHP.
     specialize (PrecFreshF HM HP H4) as [? [? ?]].
     eexists. eexists. repeat split;
     eauto using multistep1, step, Precision.
@@ -591,7 +590,7 @@ Proof.
     specialize (PrecQueryF _ HM H5 HEq2) as [? ?]; subst.
     exists ([var' := x] body'). exists m2. repeat split;
     eauto 7 using multiTrans, CongApp1, CongApp2, multistep1, step,
-         Precision, PrecSubs',  PrecisionPreservationMult. 
+         Precision, PrecSubs',  PrecisionPreservationMult.
 
   - (* StUnbox *)
     clear IHHP.

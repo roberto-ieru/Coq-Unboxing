@@ -131,8 +131,8 @@ Proof.
   simpl;
   repeat rewrite dynCast;
   (* break if's from casts *)
-  repeat match goal with [ |- context [tagOf ?G ?E] ] =>
-    destruct (tagOf G E) end;
+  repeat match goal with [ |- context [GtypeOf ?G ?E] ] =>
+    destruct (GtypeOf G E) end;
   simpl;
   congruence.
 Qed.

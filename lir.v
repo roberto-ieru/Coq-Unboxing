@@ -314,7 +314,7 @@ Fixpoint ToIndex (e : IRE) : Index :=
 
 
 Lemma Index_dec : forall (i1 i2 : Index), {i1 = i2} + {i1 <> i2}.
-Proof. 
+Proof.
   decide equality; auto using Nat.eq_dec, dec_Tag.
 Qed.
 
@@ -900,12 +900,9 @@ where "m / e -->* m1 / e1" := (multistep m e m1 e1)
 
 
 Inductive multistepF : Mem -> IRE -> Prop :=
-| MStStepF : forall m e,
-    m / e --> fail ->
-    m / e -->* fail
-| MStMStepF : forall m e m' e',
-    m / e --> m' / e' ->
-    m' / e' -->* fail ->
+| MStStepF : forall m e m' e',
+    m / e -->* m' / e' ->
+    m' / e' --> fail ->
     m / e -->* fail
 
 where "m / e -->* 'fail'" := (multistepF m e)
@@ -1022,6 +1019,4 @@ Proof. finishmExp. Qed.
 Lemma CongUnbox : forall m e m' e' g,
     m / e -->* m' / e' -> m / IREUnbox g e -->* m' / IREUnbox g e'.
 Proof. finishmExp. Qed.
-
-
 

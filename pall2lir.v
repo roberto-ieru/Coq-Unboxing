@@ -66,6 +66,25 @@ Notation "'<' t1 '<=' t2 '>' e" := (Cast t1 t2 e)
     (at level 50, t1 at next level, t2 at next level).
 
 
+Lemma SubstCast : forall var e1 e2 T T',
+  lir.substitution var e1 (<T <= T'> e2) =
+  <T <= T'> lir.substitution var e1 e2.
+Proof.
+  intros.
+  destruct T; destruct T'; simpl; trivial.
+  destruct (dec_Tag t t0); subst; trivial.
+Qed.
+
+
+Lemma StCastF : forall m e T T',
+  stepF m e -> stepF m (<T <= T'> e).
+Proof.
+  intros.
+  destruct T; destruct T'; simpl; eauto using stepF.
+  destruct (dec_Tag t t0); eauto using stepF.
+Qed.
+
+
 Lemma CastStep : forall t1 t2 e m e' m',
   step m e m' e' ->
   step m (<t1 <= t2> e) m' (<t1 <= t2> e').
@@ -74,6 +93,17 @@ Proof.
   unfold Cast.
   destruct t1; destruct t2; eauto using step.
   destruct (dec_Tag t t0); eauto using step.
+Qed.
+
+
+Lemma CastStepF : forall t1 t2 e m,
+  stepF m e ->
+  stepF m (<t1 <= t2> e).
+Proof.
+  intros * HSt.
+  unfold Cast.
+  destruct t1; destruct t2; eauto using stepF.
+  destruct (dec_Tag t t0); eauto using stepF.
 Qed.
 
 
@@ -92,25 +122,25 @@ Qed.
 ** otherwise assume nil. (The expression will always be correctly
 ** typed.)
 *)
-Definition tagOf Γ e : IRType :=
+Definition GtypeOf Γ e : IRType :=
   match typeOf Γ e with
   | Some T => PT2IRT T
   | None => IRTNil
   end.
 
 
-Lemma tagOfT : forall Γ e T, typeOf Γ e = Some T -> tagOf Γ e = PT2IRT T.
-Proof. intros. unfold tagOf. rewrite H. trivial. Qed.
+Lemma GtypeOfT : forall Γ e T, typeOf Γ e = Some T -> GtypeOf Γ e = PT2IRT T.
+Proof. intros. unfold GtypeOf. rewrite H. trivial. Qed.
 
 
-Lemma tagOfT' : forall Γ e T, Γ |= e : T -> tagOf Γ e = PT2IRT T.
-Proof. eauto using tagOfT, typeOfCorrect'. Qed.
+Lemma GtypeOfT' : forall Γ e T, Γ |= e : T -> GtypeOf Γ e = PT2IRT T.
+Proof. eauto using GtypeOfT, typeOfCorrect'. Qed.
 
 
 Lemma tagStar2type : forall Γ e,
-    tagOf Γ e = IRTStar -> typeOf Γ e = Some PTStar.
+    GtypeOf Γ e = IRTStar -> typeOf Γ e = Some PTStar.
 Proof.
-  unfold tagOf.
+  unfold GtypeOf.
   intros Γ e H.
   destruct (typeOf Γ e) eqn:?; try easy.
   destruct p; easy.
@@ -129,21 +159,21 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   | PETAddr a _ => IRETAddr a
   | PEFAddr a _ _ => IREFAddr a
   | PEGet e1 e2 =>
-         <tagOf Γ e <= IRTStar>
+         <GtypeOf Γ e <= IRTStar>
            (IREGet (Pall2Lir Γ e1) (<IRTStar <= (Tag2Type TgInt)> (Pall2Lir Γ e2)))
   | PESet e1 e2 e3 =>
          (IRESet (Pall2Lir Γ e1)
                  (<IRTStar <= Tag2Type TgInt> (Pall2Lir Γ e2))
-                 (<IRTStar <= tagOf Γ e3> Pall2Lir Γ e3))
+                 (<IRTStar <= GtypeOf Γ e3> Pall2Lir Γ e3))
   | PEVar var => IREVar var
   | PEFun var T body _  => let Γ' := (var |=> T; Γ) in
         IREFun var
           (IRELet var (PT2IRT T) (<PT2IRT T <= IRTStar> (IREVar var))
-                     (<IRTStar <= tagOf Γ' body> (Pall2Lir Γ' body)))
-  | PEApp e1 e2 => <tagOf Γ e <= IRTStar>
+                     (<IRTStar <= GtypeOf Γ' body> (Pall2Lir Γ' body)))
+  | PEApp e1 e2 => <GtypeOf Γ e <= IRTStar>
          (IREApp (Pall2Lir Γ e1)
-                  (<IRTStar <= (tagOf Γ e2)> Pall2Lir Γ e2))
-  | PECast e1 t => <PT2IRT t <= tagOf Γ e1> (Pall2Lir Γ e1)
+                  (<IRTStar <= (GtypeOf Γ e2)> Pall2Lir Γ e2))
+  | PECast e1 t => <PT2IRT t <= GtypeOf Γ e1> (Pall2Lir Γ e1)
   end.
 
 
@@ -159,11 +189,11 @@ Qed.
 
 Lemma invertFun : forall Γ e1 e2 T1 T2,
     typeOf Γ e1 = Some (PTFun T1 T2) ->
-    tagOf Γ (PEApp e1 e2) = IRTStar ->
+    GtypeOf Γ (PEApp e1 e2) = IRTStar ->
     T2 = PTStar.
 Proof.
   intros Γ e1 e2 T1 T2 H1 H2.
-  unfold tagOf in H2.
+  unfold GtypeOf in H2.
   destruct (typeOf Γ (PEApp e1 e2)) eqn:?; try easy.
   apply typeOfCorrect'' in H1.
   apply typeOfCorrect'' in Heqo.
@@ -176,8 +206,8 @@ Qed.
 
 Ltac breakTagOf :=
   match goal with
-  [H: typeOf _ ?E = Some ?T |- context C [tagOf _ ?E] ] =>
-    apply tagOfT in H; rewrite H; destruct (PT2IRT T) eqn:?;
+  [H: typeOf _ ?E = Some ?T |- context C [GtypeOf _ ?E] ] =>
+    apply GtypeOfT in H; rewrite H; destruct (PT2IRT T) eqn:?;
     eauto using IRTyping
   end.
 
@@ -197,22 +227,27 @@ Proof.
   destruct T; inversion H; easy.
 Qed.
 
+Ltac T2Star :=
+  try match goal with
+  |[H: PT2IRT _ = IRTStar |- _] => rewrite (PTStarB _ H) in *
+  end.
+
 
 Lemma typeStar : forall Γ e T,
-    typeOf Γ e = Some T -> tagOf Γ e = IRTStar -> T = PTStar.
+    typeOf Γ e = Some T -> GtypeOf Γ e = IRTStar -> T = PTStar.
 Proof.
   intros Γ e T HT Htg.
-  unfold tagOf in Htg.
+  unfold GtypeOf in Htg.
   rewrite HT in Htg.
   auto using PTStarB.
 Qed.
 
 
 Lemma typeTag : forall Γ e T tg,
-    typeOf Γ e = Some T -> tagOf Γ e = Tag2Type tg -> PT2IRT T = Tag2Type tg.
+    typeOf Γ e = Some T -> GtypeOf Γ e = Tag2Type tg -> PT2IRT T = Tag2Type tg.
 Proof.
   intros Γ e T tg HT Htg.
-  unfold tagOf in Htg.
+  unfold GtypeOf in Htg.
   rewrite HT in Htg.
   auto.
 Qed.
@@ -236,22 +271,22 @@ Proof with eauto using IRTyping.
   end.
 
   - (* Get *)
-    unfold tagOf. simpl. rewrite H. rewrite H0.
+    unfold GtypeOf. simpl. rewrite H. rewrite H0.
     destruct (PT2IRT T) eqn:?; simpl; eauto using IRTyping.
 
   - (* Set *)
-    unfold tagOf. rewrite H1.
+    unfold GtypeOf. rewrite H1.
     destruct (PT2IRT T) eqn:?; simpl; eauto using IRTyping.
 
   - (* Fun *)
     apply IRTyFun. eapply IRTyLet.
-    + destruct (tagOf (var |=> Tvar; Γ)) eqn:?; subst.
+    + destruct (GtypeOf (var |=> Tvar; Γ)) eqn:?; subst.
       * apply IRTyBox.
         eapply inclusion_typing.
         ** eapply inclusion_shadow'.
-        ** unfold tagOf in Heqi. rewrite H in Heqi.
+        ** unfold GtypeOf in Heqi. rewrite H in Heqi.
            rewrite <- Heqi. trivial.
-      *  unfold tagOf in Heqi. rewrite H in Heqi.
+      *  unfold GtypeOf in Heqi. rewrite H in Heqi.
         rewrite Heqi in IHPTyping.
         simpl in IHPTyping.
         eapply inclusion_typing; eauto.
@@ -265,13 +300,13 @@ Proof with eauto using IRTyping.
         apply IRTyVar. apply InEq.
 
   - (* App *)
-    destruct (tagOf Γ (PEApp e1 e2)) eqn:?.
+    destruct (GtypeOf Γ (PEApp e1 e2)) eqn:?.
     + specialize (invertCall _ _ _ _ _ H H0) as H2.
-      unfold tagOf in Heqi. rewrite H2 in Heqi.
+      unfold GtypeOf in Heqi. rewrite H2 in Heqi.
       simpl.
       apply IRTyUnbox; trivial.
       eapply IRTyApp; eauto.
-      destruct (tagOf Γ e2) eqn:?.
+      destruct (GtypeOf Γ e2) eqn:?.
       * apply IRTyBox.
         specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
         rewrite <- HTt. trivial.
@@ -279,7 +314,7 @@ Proof with eauto using IRTyping.
         subst. trivial.
     + unfold Cast.
       specialize (invertFun _ _ _ _ _ H Heqi); intros; subst; simpl.
-      destruct (tagOf Γ e2) eqn:?.
+      destruct (GtypeOf Γ e2) eqn:?.
       * eapply IRTyApp; eauto using IRTyping.
         eapply IRTyBox.
         specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
@@ -291,7 +326,7 @@ Proof with eauto using IRTyping.
   - (* Cast *)
     unfold Cast.
     destruct (PT2IRT T2) eqn:?;
-    unfold tagOf;
+    unfold GtypeOf;
     rewrite H;
     destruct (PT2IRT T1) eqn:?.
     + destruct (dec_Tag t t0); subst; trivial.
@@ -315,21 +350,21 @@ Proof.
   erewrite typeOfCorrect'; eauto.
 Qed.
 
-Lemma tagOfEq : forall Γ1 e1 Γ2 e2 T,
+Lemma GtypeOfEq : forall Γ1 e1 Γ2 e2 T,
   Γ1 |= e1 : T ->
   Γ2 |= e2 : T ->
-  tagOf Γ1 e1 = tagOf Γ2 e2.
+  GtypeOf Γ1 e1 = GtypeOf Γ2 e2.
 Proof.
   intros * HTy1 HTy2.
-  unfold tagOf.
+  unfold GtypeOf.
   erewrite typeOfEq; eauto.
 Qed.
 
 
-Ltac tagOf2T :=
-  repeat   (* replace tagOfs with theirs types *)
-      (erewrite tagOfT';
-       eauto using PTyping, PinclusionType, inclusion_update,
+Ltac GtypeOf2T :=
+  repeat   (* replace GtypeOfs with theirs types *)
+      (erewrite GtypeOfT';
+       eauto 4 using PTyping, PinclusionType, inclusion_update,
                    Psubst_typing, inclusion_shadow, inclusion_permute,
                    PexpPreservation).
 
@@ -342,8 +377,8 @@ Proof.
   intros * HTy HIn.
   generalize dependent Γ'.
   induction HTy; intros; subst; trivial;
-  simpl;   (* expose tagOfs *)
-  tagOf2T;
+  simpl;   (* expose GtypeOfs *)
+  GtypeOf2T;
   repeat match goal with   (* do the rewrites from the hypotheses *)
   | [ H: _ -> _ -> _ = _ |- _] =>
      erewrite H; eauto using inclusion_update; clear H
@@ -369,31 +404,31 @@ Proof.
      erewrite H; eauto using inclusion_update, PTyping; clear H
   end.
 
-  - tagOf2T.
+  - GtypeOf2T.
     destruct (PT2IRT te); trivial.
 
   - simpl.
-    tagOf2T.
+    GtypeOf2T.
     destruct (PT2IRT T); trivial.
 
   - simpl. destruct (string_dec var s); trivial.
     symmetry. eauto using Pall2LirEEnv, PinclusionType, inclusion_empty.
 
   - simpl.
-    tagOf2T.
+    GtypeOf2T.
     destruct (PT2IRT te).
     + destruct t; simpl; destruct (PT2IRT T1); trivial.
     + simpl.
       destruct (PT2IRT T1); trivial.
 
    - simpl. destruct (string_dec var s); subst; simpl.
-     + tagOf2T.
+     + GtypeOf2T.
        replace (Pall2Lir (s |=> p; (s |=> Tvar; Γ)) e2)
          with (Pall2Lir (s |=> p; Γ) e2); trivial.
        eauto using Pall2LirEEnv,  inclusion_shadow,
          PinclusionType, inclusion_shadow'.
      + destruct (PT2IRT p); subst.
-       * tagOf2T.
+       * GtypeOf2T.
          destruct t;
          simpl;
             f_equal;
@@ -409,14 +444,14 @@ Proof.
         f_equal.
         f_equal.
         ** destruct (string_dec var s); easy.
-        ** tagOf2T.
+        ** GtypeOf2T.
            destruct (PT2IRT p0); simpl;
            f_equal;
            replace (Pall2Lir (s |=> p; (var |=> Tvar; Γ)) e2)
              with  (Pall2Lir (var |=> Tvar; (s |=> p; Γ)) e2);
            eauto using Pall2LirEEnv, inclusion_permute, PinclusionType.
 
-  - simpl. tagOf2T.
+  - simpl. GtypeOf2T.
     destruct (PT2IRT te); subst; destruct (PT2IRT T1); subst; simpl;
     try destruct (dec_Tag t t0); subst; eauto.
 Qed.
@@ -426,7 +461,7 @@ Lemma PValueValue : forall e, PValue e -> Value (Pall2Lir MEmpty e).
 Proof.
   intros * PV.
   induction PV; simpl; eauto using Value.
-  destruct (tagOf MEmpty v); eauto using Value.
+  destruct (GtypeOf MEmpty v); eauto using Value.
 Defined.
 
 
@@ -482,9 +517,9 @@ Qed.
 
 Lemma TagFromType : forall e T,
   MEmpty |= e : T ->
-  tagOf MEmpty e = PT2IRT T.
+  GtypeOf MEmpty e = PT2IRT T.
 Proof.
-  unfold tagOf. intros * HTy.
+  unfold GtypeOf. intros * HTy.
   replace (typeOf MEmpty e) with (Some T); trivial.
   symmetry; eauto using typeOfCorrect'.
 Qed.
@@ -494,7 +529,7 @@ Lemma PreserveTagOf' : forall m e T m' e',
   Pmem_correct m ->
   m / e --> m' / e' ->
   MEmpty |= e : T ->
-  tagOf MEmpty e' = PT2IRT T.
+  GtypeOf MEmpty e' = PT2IRT T.
 Proof.
   intros * HM HSt HTy.
   eauto using TagFromType, PexpPreservation.
@@ -505,9 +540,9 @@ Lemma PreserveTagOf : forall m e t m' e',
   Pmem_correct m ->
   MEmpty |= e : t ->
   m / e --> m' / e' ->
-  tagOf MEmpty e = tagOf MEmpty e'.
+  GtypeOf MEmpty e = GtypeOf MEmpty e'.
 Proof.
-  unfold tagOf. intros * HM HTy Hst.
+  unfold GtypeOf. intros * HM HTy Hst.
   replace (typeOf MEmpty e') with (typeOf MEmpty e)
         by eauto using pstep, PexpPreservTypeOf.
   trivial.
@@ -563,15 +598,6 @@ Proof.
 Qed.
 
 
-Lemma PCast2Lir : forall e T1 T2 v,
-  MEmpty |= e : T1 ->
-  PValue e ->
-  PCast e T2 = Some v ->
-  Pall2Lir MEmpty v = < PT2IRT T2 <= PT2IRT T1> (Pall2Lir MEmpty e).
-Proof.
-Abort.
-
-
 Lemma PCastBox : forall v T v' t,
   MEmpty |= v : PTStar ->
   PValue v ->
@@ -603,7 +629,7 @@ Proof.
   - destruct T; simpl in *; try discriminate.
     injection HEq; injection HCst; intros; subst. trivial.
 
-  - unfold tagOf.
+  - unfold GtypeOf.
     replace (typeOf MEmpty (PECast v PTStar)) with (Some T1)
       by (symmetry; eauto using typeOfCorrect').
     inversion HTy; subst.
@@ -639,7 +665,7 @@ Proof.
   exfalso.
   inversion HTy; subst; eauto. }
   subst; simpl.
-  tagOf2T.
+  GtypeOf2T.
   destruct T; only 1: easy;
   inversion HEq; subst; trivial.
 Qed.
@@ -701,7 +727,7 @@ Proof.
   intros * HV HTy HCst HEq.
   induction HV; inversion HTy; subst.
   simpl.
-  tagOf2T.
+  GtypeOf2T.
   assert (PCast v T = Some v') by (destruct T; easy).
   destruct (PT2IRT T1) eqn:?.
   - replace t with t0 by eauto using PCast2NStar.
@@ -710,10 +736,102 @@ Proof.
     destruct T; try easy;
       try (simpl in H; injection H; intros; subst; trivial);
       inversion H1; subst; discriminate.
-  - replace T1 with PTStar in * by (symmetry; auto using PTStarB).
+  - T2Star.
     auto.
 Qed.
 
+
+(*
+** A cast to a type IR-equivalent to its onw type never fails.
+*)
+Lemma CastToItsIRType : forall v T T',
+  PCast v T' = None ->
+  MEmpty |= v : T ->
+  PValue v ->
+  PT2IRT T = PT2IRT T'->
+  False.
+Proof.
+  intros * HEq HTy HV.
+  inversion HV; subst; inversion HTy; subst;
+  destruct T' eqn:?; easy.
+Qed.
+
+
+Lemma castFStarF : forall v v' T t t',
+  PValue v ->
+  MEmpty |= v : PTStar ->
+  PCast v T = None ->
+  PT2IRT T = Tag2Type t ->
+  (Pall2Lir MEmpty v) = IREBox t' v' ->
+  t <> t'.
+Proof.
+  intros * HV HTy HCst HEq HEq1 HEq2; subst.
+  induction HV; inversion HTy; subst.
+  simpl in *.
+  erewrite GtypeOfT' in HEq1; eauto.
+  destruct (dec_TP T PTStar); subst; simpl in *; try discriminate.
+  assert(PCast v T = None).
+  { destruct T; try discriminate; trivial. } clear HCst.
+  destruct (PT2IRT T1) eqn:?.
+  - replace t' with t in * by congruence.
+    eapply (CastToItsIRType v T1 T); eauto.
+    congruence.
+  - T2Star.
+    eauto.
+Qed.
+
+
+Lemma CastToStar': forall v, PCast v PTStar = None -> False.
+Proof.
+  intros.
+  specialize (CastToStar v) as [? ?].
+  congruence.
+Qed.
+
+
+Lemma CastFail : forall v m T T',
+  PValue v ->
+  MEmpty |= v : T' ->
+  PCast v T = None ->
+  stepF (MPall2Lir m)  (< PT2IRT T <= PT2IRT T' > Pall2Lir MEmpty v).
+Proof.
+  intros * HV HTy HC.
+  induction HV; inversion HTy; subst;
+  (destruct T; simpl in HC; try discriminate;
+      try (eapply StUnboxF; try easy; eauto using Value; fail)).
+
+  - destruct T1; simpl; GtypeOf2T; simpl;
+      try (eapply StUnboxF; auto using PValueValue; easy).
+    + specialize (ValStar _ HV H3) as [v' [? ?]].
+      subst. simpl. destruct (GtypeOf MEmpty v') eqn:?.
+      * eapply StUnboxF; eauto using PValueValue.
+        simpl in HC. intros HEq; subst.
+        inversion H3; subst.
+        erewrite GtypeOfT' in Heqi; eauto.
+        replace T1 with PTNil in *
+          by (destruct T1; try discriminate; trivial).
+        rewrite CastToItsType in HC; trivial.
+        discriminate.
+      * specialize (IHHV H3 HC). simpl in IHHV.
+        rewrite Heqi in IHHV. trivial.
+    + rewrite CastToItsType in HC; trivial.
+      discriminate.
+
+  - destruct T1; simpl; GtypeOf2T; simpl;
+      try (eapply StUnboxF; auto using PValueValue; try easy; fail).
+    + specialize (IHHV H3 HC). simpl in IHHV. trivial.
+    + rewrite CastToItsType in HC; trivial. discriminate.
+
+  - destruct T1; simpl; GtypeOf2T; simpl;
+      try (eapply StUnboxF; auto using PValueValue; try easy; fail).
+    + specialize (IHHV H3 HC). simpl in IHHV. trivial.
+    + exfalso. eauto using CastToItsIRType.
+
+  - destruct T1; simpl; GtypeOf2T; simpl;
+      try (eapply StUnboxF; auto using PValueValue; try easy; fail).
+    + specialize (IHHV H3 HC). simpl in IHHV. trivial.
+    + exfalso. eauto using CastToItsIRType.
+ Qed.
 
 
 Lemma SimPallLir : forall m e T m' e',
@@ -735,18 +853,14 @@ Proof.
        HTy: PTyping MEmpty ?E _ |- _] =>
       specialize (H HM _ HTy)
   end;
-  try (simpl; eauto using step, multistep1, PValueValue, P2LfreshT,
-              CongPlus1, CongPlus2; fail).
+  simpl;
 
-  - simpl. tagOf2T.
-    destruct (PT2IRT T);
-    eauto using CongGet1, CongUnbox.
+  try (GtypeOf2T;
+       simpl; eauto using step, multistep1, PValueValue, P2LfreshT,
+              CongPlus1, CongPlus2, CongCast, CongGet1, CongUnbox,
+              CongGet1, CongGet2, CongBox; fail).
 
-  - simpl. tagOf2T.
-    destruct (PT2IRT T);
-    eauto using CongUnbox, CongGet2, CongBox, PValueValue.
-
-  - simpl. tagOf2T.
+  - GtypeOf2T.
     destruct (PT2IRT T0) eqn:?.
     + simpl.
       inversion H3; subst.
@@ -766,11 +880,11 @@ Proof.
       injection H; intros; subst.
       constructor.
 
-  - destruct (tagOf MEmpty e3); eauto using CongSet1.
+  - destruct (GtypeOf MEmpty e3); eauto using CongSet1.
 
-  - destruct (tagOf MEmpty e3); eauto using CongSet2, CongBox, PValueValue.
+  - destruct (GtypeOf MEmpty e3); eauto using CongSet2, CongBox, PValueValue.
 
-  - simpl. tagOf2T.
+  - GtypeOf2T.
     destruct (PT2IRT T0);
       eapply CongSet3; eauto using CongBox, PValueValue, Value.
 
@@ -786,12 +900,11 @@ Proof.
     unfold freshF.
     rewrite sameFreeaux. trivial.
 
-  - simpl. tagOf2T.
+  - GtypeOf2T.
     destruct (PT2IRT T);
     eauto using CongUnbox, CongApp1.
 
-  - simpl.
-    tagOf2T.
+  - GtypeOf2T.
     destruct (PT2IRT T);
       destruct (PT2IRT T1);
       eauto using CongUnbox, CongApp2, PValueValue, CongBox.
@@ -804,9 +917,7 @@ Proof.
     specialize (PMCTyF _ _ _ _ _ MEmpty H0 HM) as HTy'.
     intros; subst.
     simpl.
-    erewrite tagOfT'; eauto.
-    erewrite tagOfT'; eauto.
-    erewrite tagOfT'; eauto using Psubst_typing.
+    GtypeOf2T.
     simpl.
     eapply CongCast.
     destruct (PT2IRT T0) eqn:?.
@@ -833,13 +944,10 @@ Proof.
                **** eauto using CastEqType.
 
         ** simpl.
-           replace type with PTStar in * by (symmetry; auto using PTStarB).
+           T2Star.
            erewrite castStar; eauto.
-           erewrite Psubst.
-           eapply multistep1.
-           *** eauto using step, PValueValue,  CastValue, Value.
-           *** eapply HTy'.
-           *** trivial.
+           erewrite Psubst;
+               eauto using multistep1, step, PValueValue,  CastValue, Value.
 
     + replace T0 with PTStar in * by (symmetry; auto using PTStarB).
       clear Heqi.
@@ -853,9 +961,7 @@ Proof.
         destruct (PT2IRT type) eqn:?.
 
         ** simpl.
-           erewrite Psubst.
-           2: { eauto. }
-           2: { eauto. }
+           erewrite Psubst; eauto.
            replace (Pall2Lir MEmpty v) with
                    (IREBox t (Pall2Lir MEmpty v')) by
                       (symmetry; eauto using castFStar).
@@ -865,13 +971,11 @@ Proof.
         ** simpl.
            replace type with PTStar in * by (symmetry; auto using PTStarB).
            replace v' with v.
-           2:{ specialize (CastToItsType PTStar v H H7).
-               congruence. }
-           erewrite Psubst; eauto using multistep1, step, PValueValue.
+           *** erewrite Psubst; eauto using multistep1, step, PValueValue.
+           *** specialize (CastToItsType PTStar v H H7).
+               congruence.
 
-  - simpl. tagOf2T. eauto using CongCast.
-
-  - simpl. tagOf2T.
+  - GtypeOf2T.
     destruct (PT2IRT T0) eqn:?; destruct (PT2IRT T1) eqn:?; simpl.
     + replace t0 with t in * by (symmetry; eauto using PCast2NStar).
       destruct (dec_Tag t t); try easy.
@@ -888,5 +992,117 @@ Proof.
       constructor.
 Qed.
 
+
+Lemma WCast : forall t v,
+      (match t with | Tag2Type t => IREBox t v | IRTStar => v end) =
+      Cast IRTStar t v.
+Proof. trivial. Qed.
+
+
+Lemma CongStarP2L : forall v,
+  PValue v ->
+  MEmpty |= v : PTStar ->
+    exists (o : IRE) (t : Tag),
+         Pall2Lir MEmpty v = IREBox t o /\ Value o.
+Proof.
+  intros.
+  assert (IRTyping MEmpty (Pall2Lir MEmpty v) IRTStar)
+    by eauto using Pall2LirWellTyped.
+  assert (Value (Pall2Lir MEmpty v)) by eauto using PValueValue.
+  specialize (valbox MEmpty (Pall2Lir MEmpty v) H1 H2)
+     as [? [? [? [? ?]]]].
+  eexists; eexists; eauto.
+Qed.
+
+
+Lemma SimPallLirF : forall m e T,
+  Pmem_correct m ->
+  MEmpty |= e : T ->
+  m / e --> fail ->
+  multistepF (MPall2Lir m) (Pall2Lir MEmpty e).
+Proof.
+  intros * HM HTy HSt.
+  generalize dependent T.
+  induction HSt; intros * HTy;
+  inversion HTy; subst;
+
+  (* instantiate induction hipothesis *)
+  try match goal with
+    | [H: Pmem_correct ?m -> forall _, PTyping MEmpty ?E _ -> _,
+       HM: Pmem_correct ?m,
+       HTy: PTyping MEmpty ?E _ |- _] => specialize (H HM _ HTy)
+    end;
+    try (inversion IHHSt; subst;
+         eauto 12 using multistepF, stepF, PValueValue, Value,
+           CongCast, CastStepF,
+           CongPlus1, CongPlus2, CongGet1, CongGet2, CongBox,
+           CongSet1, CongSet2, CongSet3, CongApp1, CongApp2;
+         fail).
+
+  - (* Get *)
+    simpl.
+    GtypeOf2T.
+    inversion H3; subst.
+    destruct (PT2IRT T0) eqn:?.
+    + eapply MStStepF.
+      * eapply multistep1.
+        eapply CastStep.
+        eapply StGet.
+        auto using Value.
+      * simpl.
+        unshelve erewrite (PqueryT2 _ _ _ _ _ eq_refl); trivial.
+        specialize (PMCTy m a idx MEmpty HM) as ?.
+        specialize (PMCValue m a idx) as ?.
+        remember (PqueryT a idx m) as v.
+        specialize (CongStarP2L v H1 H0) as [? [? [? ?]]].
+        rewrite H2.
+        eapply StUnboxF; eauto.
+        eapply castFStarF; eauto.
+
+    + apply PTStarB in Heqi; subst.
+      specialize (CastToStar (PqueryT a idx m)) as [? ?].
+      congruence.
+
+  - (* App *)
+    simpl. GtypeOf2T.
+    destruct (queryF a (MPall2Lir m)) eqn:?.
+    symmetry in Heqp.
+    specialize (PqueryF2V _ _ _ _ _ _ _ HM H0 Heqp) as ?; subst.
+    specialize (PqueryF2 _ _ _ _ _ _  HM H0 Heqp) as ?; subst.
+    eapply MStStepF.
+    + eapply CongCast.
+      rewrite WCast.
+      eapply MStMStep.
+      * eapply StApp.
+        ** simpl. destruct (PT2IRT T0); eauto using Value, PValueValue.
+        ** eauto.
+      * simpl. destruct (string_dec s s); try easy.
+        eapply MStRefl.
+
+    + rewrite WCast.
+      rewrite SubstCast.
+      simpl. destruct (string_dec s s); try easy. clear e.
+      eapply StCastF.
+      rewrite WCast.
+      eapply StLet1F.
+      destruct (PT2IRT type) eqn:?.
+      * destruct (PT2IRT T0) eqn:?; simpl.
+        ** eapply StUnboxF; eauto using PValueValue.
+           intros ?. subst.
+           eapply CastToItsIRType; eauto. congruence.
+        ** T2Star.
+           specialize (CastFail _ m _ _ H H7 H1) as ?.
+           simpl in H2.
+           destruct (PT2IRT type); inversion Heqi; subst; trivial.
+      * T2Star.
+        exfalso.
+        eauto using CastToStar'.
+
+  - (* Cast *)
+    simpl.
+    GtypeOf2T.
+    eauto using multistep, multistepF, CastFail.
+
+Qed.
 
 

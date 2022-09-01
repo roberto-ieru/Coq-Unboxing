@@ -209,17 +209,10 @@ Proof.
     rewrite Expand1 in H1.
     rewrite Expand2 in H2.
     breakStrDec.
-    + rewrite InEq in H1.
-      rewrite InEq in H2.
-      replace t0 with t1 by congruence.
+    + replace t0 with t1 by congruence.
       replace t3 with t2 by congruence.
       eauto using PrecisionInclusion, PinclusionEmpty.
-
-    + apply PVar.
-      * rewrite InNotEq' in H1;
-        congruence.
-      * rewrite InNotEq' in H2;
-        congruence.
+    + apply PVar; congruence.
 Qed.
 
 

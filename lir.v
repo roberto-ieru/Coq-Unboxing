@@ -493,8 +493,8 @@ Proof.
   breakStrDec;
   eauto 6 using inclusion_typing, inclusion_shadow, inclusion_permute,
     IRTyping, typing_empty, InNotEq.
-  - assert (te = tv). { rewrite InEq in H1. congruence. }
-      subst. eauto using typing_empty.
+  - replace te with tv by congruence.
+    eauto using typing_empty.
 Qed.
 
 
@@ -907,6 +907,12 @@ Inductive multistepF : Mem -> IRE -> Prop :=
 
 where "m / e -->* 'fail'" := (multistepF m e)
 .
+
+
+Lemma multistepF1 : forall m e, m / e --> fail -> m / e -->* fail.
+Proof.
+  eauto using multistep, multistepF.
+Qed.
 
 
 (*

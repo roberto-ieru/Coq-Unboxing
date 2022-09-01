@@ -478,8 +478,8 @@ Proof.
   breakStrDec;
   eauto 6 using Pinclusion_typing, inclusion_shadow, inclusion_permute,
     PTyping, Ptyping_empty, InNotEq.
-  - assert (te = tv). { rewrite InEq in H1. congruence. }
-      subst. eauto using Ptyping_empty.
+  - replace te with tv by congruence.
+    eauto using Ptyping_empty.
 Qed.
 
 

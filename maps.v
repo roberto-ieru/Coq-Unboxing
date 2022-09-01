@@ -21,6 +21,7 @@ Notation "v |=> T ; M" := (MCons v T M) (at level 40).
 
 
 Ltac breakStrDec :=
+  simpl in *;
   repeat match goal with
   | [ |- context [string_dec ?v ?v'] ] =>
       destruct (string_dec v v'); subst; try easy
@@ -85,8 +86,6 @@ Proof.
   unfold inclusion.
   intros A M var t1 t2 var' t' Hin.
   simpl. breakStrDec.
-  - rewrite InEq in Hin. congruence with InEq.
-  - eauto using InNotEq.
 Qed.
 
 

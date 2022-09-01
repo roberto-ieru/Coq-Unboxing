@@ -43,7 +43,7 @@ Fixpoint TP2TGamma (Γ : Map PType) : IREnvironment :=
 Lemma TP2TGammaIn : forall Γ var T,
     In Γ var = Some T -> In (TP2TGamma Γ) var = Some (PT2IRT T).
 Proof.
-  induction Γ; intros var T H; simpl in *; breakStrDec;
+  induction Γ; intros var T H; breakStrDec;
   auto;
   congruence.
 Qed.
@@ -177,9 +177,10 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   end.
 
 
-Lemma invertCall : forall Γ e1 e2 T1 T2,
-  typeOf Γ e1 = Some (PTFun T1 T2) -> typeOf Γ e2 = Some T1 ->
-    typeOf Γ (PEApp e1 e2) = Some T2.
+Lemma invertCall : forall {Γ e1 e2 T1 T2},
+  typeOf Γ e1 = Some (PTFun T1 T2) ->
+  typeOf Γ e2 = Some T1 ->
+  typeOf Γ (PEApp e1 e2) = Some T2.
 Proof.
   intros Γ e1 r2 T1 T2 H1 H2.
   simpl. rewrite H1. rewrite H2.
@@ -187,7 +188,7 @@ Proof.
 Qed.
 
 
-Lemma invertFun : forall Γ e1 e2 T1 T2,
+Lemma invertFun : forall {Γ e1 e2 T1 T2},
     typeOf Γ e1 = Some (PTFun T1 T2) ->
     GtypeOf Γ (PEApp e1 e2) = IRTStar ->
     T2 = PTStar.
@@ -212,7 +213,7 @@ Ltac breakTagOf :=
   end.
 
 
-Lemma PT2IRTag : forall tg T,
+Lemma PT2IRTag : forall {tg T},
   PT2IRT T = Tag2Type tg -> T <> PTStar.
 Proof.
   intros * Heq HCnt.
@@ -228,12 +229,12 @@ Proof.
 Qed.
 
 Ltac T2Star :=
-  try match goal with
+  repeat match goal with
   |[H: PT2IRT _ = IRTStar |- _] => rewrite (PTStarB _ H) in *
   end.
 
 
-Lemma typeStar : forall Γ e T,
+Lemma typeStar : forall {Γ e T},
     typeOf Γ e = Some T -> GtypeOf Γ e = IRTStar -> T = PTStar.
 Proof.
   intros Γ e T HT Htg.
@@ -243,8 +244,10 @@ Proof.
 Qed.
 
 
-Lemma typeTag : forall Γ e T tg,
-    typeOf Γ e = Some T -> GtypeOf Γ e = Tag2Type tg -> PT2IRT T = Tag2Type tg.
+Lemma typeTag : forall {Γ e T tg},
+    typeOf Γ e = Some T ->
+    GtypeOf Γ e = Tag2Type tg ->
+    PT2IRT T = Tag2Type tg.
 Proof.
   intros Γ e T tg HT Htg.
   unfold GtypeOf in Htg.
@@ -301,27 +304,27 @@ Proof with eauto using IRTyping.
 
   - (* App *)
     destruct (GtypeOf Γ (PEApp e1 e2)) eqn:?.
-    + specialize (invertCall _ _ _ _ _ H H0) as H2.
+    + specialize (invertCall H H0) as H2.
       unfold GtypeOf in Heqi. rewrite H2 in Heqi.
       simpl.
       apply IRTyUnbox; trivial.
       eapply IRTyApp; eauto.
       destruct (GtypeOf Γ e2) eqn:?.
       * apply IRTyBox.
-        specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
+        specialize (typeTag H0 Heqi0) as HTt.
         rewrite <- HTt. trivial.
-      * specialize (typeStar _ _ _ H0 Heqi0) as HTS.
-        subst. trivial.
+      * replace T1 with PTStar in * by (symmetry; eauto using typeStar).
+        trivial.
     + unfold Cast.
-      specialize (invertFun _ _ _ _ _ H Heqi); intros; subst; simpl.
+      specialize (invertFun H Heqi); intros; subst; simpl.
       destruct (GtypeOf Γ e2) eqn:?.
       * eapply IRTyApp; eauto using IRTyping.
         eapply IRTyBox.
-        specialize (typeTag _ _ _ _ H0 Heqi0) as HTt.
-        rewrite <- HTt. trivial.
+        replace (Tag2Type t) with (PT2IRT T1); trivial.
+        eauto using typeTag.
       * eapply IRTyApp; eauto using IRTyping.
-        specialize (typeStar _ _ _ H0 Heqi0) as HTS.
-        subst. trivial.
+        replace T1 with PTStar in * by (symmetry; eauto using typeStar).
+        trivial.
 
   - (* Cast *)
     unfold Cast.
@@ -411,7 +414,7 @@ Proof.
     GtypeOf2T.
     destruct (PT2IRT T); trivial.
 
-  - simpl. destruct (string_dec var s); trivial.
+  - breakStrDec.
     symmetry. eauto using Pall2LirEEnv, PinclusionType, inclusion_empty.
 
   - simpl.
@@ -421,7 +424,7 @@ Proof.
     + simpl.
       destruct (PT2IRT T1); trivial.
 
-   - simpl. destruct (string_dec var s); subst; simpl.
+   - breakStrDec; simpl.
      + GtypeOf2T.
        replace (Pall2Lir (s |=> p; (s |=> Tvar; Γ)) e2)
          with (Pall2Lir (s |=> p; Γ) e2); trivial.
@@ -433,7 +436,7 @@ Proof.
          simpl;
             f_equal;
             f_equal;
-           destruct (string_dec var s); try easy;
+            breakStrDec;
            destruct (PT2IRT p0); simpl;
                f_equal;
                     replace (Pall2Lir (s |=> p; (var |=> Tvar; Γ)) e2)
@@ -443,7 +446,7 @@ Proof.
       * simpl.
         f_equal.
         f_equal.
-        ** destruct (string_dec var s); easy.
+        ** breakStrDec.
         ** GtypeOf2T.
            destruct (PT2IRT p0); simpl;
            f_equal;
@@ -549,7 +552,7 @@ Proof.
 Qed.
 
 
-Lemma PqueryT2 : forall m a idx v,
+Lemma PqueryT2 : forall {m a idx v},
   Pmem_correct m ->
   PqueryT a idx m = v ->
   queryT a (IREBox TgInt (IRENum idx)) (MPall2Lir m) = Pall2Lir MEmpty v.
@@ -567,7 +570,7 @@ Proof.
 Qed.
 
 
-Lemma PqueryF2 : forall m a var T body body',
+Lemma PqueryF2 : forall {m a var T body body'},
   Pmem_correct m ->
   (var, T, body) = PqueryF a m ->
   (var, body') = queryF a (MPall2Lir m) ->
@@ -583,7 +586,7 @@ Proof.
 Qed.
 
 
-Lemma PqueryF2V : forall m a var var' T body body',
+Lemma PqueryF2V : forall {m a var var' T body body'},
   Pmem_correct m ->
   (var, T, body) = PqueryF a m ->
   (var', body') = queryF a (MPall2Lir m) ->
@@ -595,6 +598,21 @@ Proof.
   - destruct p. eauto.
   - simpl in *. destruct (Nat.eq_dec a a0); eauto.
     injection HQr1; injection HQr2; intros; subst; trivial.
+Qed.
+
+
+Lemma PQueryQuery : forall {s type body a m},
+  Pmem_correct m ->
+  (s, type, body) = PqueryF a m ->
+  (s, IRELet s (PT2IRT type) (< PT2IRT type <= IRTStar > IREVar s)
+         (Pall2Lir (s |=> type; MEmpty) body)) = queryF a (MPall2Lir m).
+Proof.
+  intros * HM HEq.
+  destruct (queryF a (MPall2Lir m)) eqn:HEq1.
+  symmetry in HEq1.
+  specialize (PqueryF2V HM HEq HEq1) as ?; subst.
+  specialize (PqueryF2 HM HEq HEq1) as ?; subst.
+  trivial.
 Qed.
 
 
@@ -645,8 +663,7 @@ Lemma subsCast : forall var e T,
   < T <= IRTStar > e.
 Proof.
   intros.
-  destruct T; simpl;
-  destruct (string_dec var var); easy.
+  destruct T; breakStrDec.
 Qed.
 
 
@@ -658,7 +675,7 @@ Lemma PCast2Star : forall {v v' T tg},
   Pall2Lir MEmpty v' = IREBox tg (Pall2Lir MEmpty v).
 Proof.
   intros * HV HTy HEq HCast.
-  specialize (PT2IRTag _ _ HEq) as ?.
+  specialize (PT2IRTag HEq) as ?.
   assert (v' = PECast v PTStar).
   { induction HV; simpl in *;
   injection HCast; try congruence.
@@ -741,99 +758,6 @@ Proof.
 Qed.
 
 
-(*
-** A cast to a type IR-equivalent to its onw type never fails.
-*)
-Lemma CastToItsIRType : forall v T T',
-  PCast v T' = None ->
-  MEmpty |= v : T ->
-  PValue v ->
-  PT2IRT T = PT2IRT T'->
-  False.
-Proof.
-  intros * HEq HTy HV.
-  inversion HV; subst; inversion HTy; subst;
-  destruct T' eqn:?; easy.
-Qed.
-
-
-Lemma castFStarF : forall v v' T t t',
-  PValue v ->
-  MEmpty |= v : PTStar ->
-  PCast v T = None ->
-  PT2IRT T = Tag2Type t ->
-  (Pall2Lir MEmpty v) = IREBox t' v' ->
-  t <> t'.
-Proof.
-  intros * HV HTy HCst HEq HEq1 HEq2; subst.
-  induction HV; inversion HTy; subst.
-  simpl in *.
-  erewrite GtypeOfT' in HEq1; eauto.
-  destruct (dec_TP T PTStar); subst; simpl in *; try discriminate.
-  assert(PCast v T = None).
-  { destruct T; try discriminate; trivial. } clear HCst.
-  destruct (PT2IRT T1) eqn:?.
-  - replace t' with t in * by congruence.
-    eapply (CastToItsIRType v T1 T); eauto.
-    congruence.
-  - T2Star.
-    eauto.
-Qed.
-
-
-Lemma CastToStar': forall v, PCast v PTStar = None -> False.
-Proof.
-  intros.
-  specialize (CastToStar v) as [? ?].
-  congruence.
-Qed.
-
-
-Lemma CastFail : forall v m T T',
-  PValue v ->
-  MEmpty |= v : T' ->
-  PCast v T = None ->
-  stepF (MPall2Lir m)  (< PT2IRT T <= PT2IRT T' > Pall2Lir MEmpty v).
-Proof.
-  intros * HV HTy HC.
-  induction HV; inversion HTy; subst;
-  (destruct T; simpl in HC; try discriminate;
-      try (eapply StUnboxF; try easy; eauto using Value; fail)).
-
-  - destruct T1; simpl; GtypeOf2T; simpl;
-      try (eapply StUnboxF; auto using PValueValue; easy).
-    + specialize (ValStar _ HV H3) as [v' [? ?]].
-      subst. simpl. destruct (GtypeOf MEmpty v') eqn:?.
-      * eapply StUnboxF; eauto using PValueValue.
-        simpl in HC. intros HEq; subst.
-        inversion H3; subst.
-        erewrite GtypeOfT' in Heqi; eauto.
-        replace T1 with PTNil in *
-          by (destruct T1; try discriminate; trivial).
-        rewrite CastToItsType in HC; trivial.
-        discriminate.
-      * specialize (IHHV H3 HC). simpl in IHHV.
-        rewrite Heqi in IHHV. trivial.
-    + rewrite CastToItsType in HC; trivial.
-      discriminate.
-
-  - destruct T1; simpl; GtypeOf2T; simpl;
-      try (eapply StUnboxF; auto using PValueValue; try easy; fail).
-    + specialize (IHHV H3 HC). simpl in IHHV. trivial.
-    + rewrite CastToItsType in HC; trivial. discriminate.
-
-  - destruct T1; simpl; GtypeOf2T; simpl;
-      try (eapply StUnboxF; auto using PValueValue; try easy; fail).
-    + specialize (IHHV H3 HC). simpl in IHHV. trivial.
-    + exfalso. eauto using CastToItsIRType.
-
-  - destruct T1; simpl; GtypeOf2T; simpl;
-      try (eapply StUnboxF; auto using PValueValue; try easy; fail).
-    + specialize (IHHV H3 HC). simpl in IHHV. trivial.
-    + exfalso. eauto using CastToItsIRType.
- Qed.
-
-
 Lemma SimPallLir : forall m e T m' e',
   Pmem_correct m ->
   MEmpty |= e : T ->
@@ -866,7 +790,7 @@ Proof.
       inversion H3; subst.
       eapply MStMStep.
       eapply StUnbox1; eauto using step, Value.
-      unshelve erewrite (PqueryT2 _ _ _ _ _ eq_refl); trivial.
+      unshelve erewrite (PqueryT2 _ eq_refl); trivial.
       eapply multistep1.
       erewrite (PCastBox);
       eauto using step, PValueValue, CastValue, PMCValue, PMCTy.
@@ -875,8 +799,8 @@ Proof.
       replace T0 with PTStar in * by (destruct T0; easy).
       clear T0 Heqi.
       eapply MStMStep; eauto using step, Value.
-      unshelve erewrite (PqueryT2 _ _ _ _ _ eq_refl); trivial.
-      erewrite CastToItsType in H; eauto using PMCValue, PMCTy.
+      unshelve erewrite (PqueryT2 _ eq_refl); trivial.
+      rewrite CastToItsType in H; auto using PMCValue, PMCTy.
       injection H; intros; subst.
       constructor.
 
@@ -912,7 +836,7 @@ Proof.
   - inversion H5; subst.
     destruct (queryF a (MPall2Lir m)) eqn:?.
     replace s with var in * by eauto using PqueryF2V.
-    specialize (PqueryF2 m a var type body i HM H0 (eq_sym Heqp)).
+    specialize (PqueryF2 HM H0 (eq_sym Heqp)).
     assert (MEmpty |= v' : type) by eauto using CastEqType.
     specialize (PMCTyF _ _ _ _ _ MEmpty H0 HM) as HTy'.
     intros; subst.
@@ -926,7 +850,7 @@ Proof.
       * eapply StApp.
         ** eauto using Value, PValueValue.
         ** symmetry. eauto.
-      * simpl. destruct (string_dec var var); try easy.
+      * breakStrDec.
         clear e.
         rewrite subsCast.
         destruct (PT2IRT type) eqn:?.
@@ -939,7 +863,7 @@ Proof.
                eapply multistep1.
                **** replace (Pall2Lir MEmpty v')
                        with (Pall2Lir MEmpty v) by eauto using castTags.
-               eauto using step, PValueValue.
+                    eauto using step, PValueValue.
                **** eapply HTy'.
                **** eauto using CastEqType.
 
@@ -949,13 +873,13 @@ Proof.
            erewrite Psubst;
                eauto using multistep1, step, PValueValue,  CastValue, Value.
 
-    + replace T0 with PTStar in * by (symmetry; auto using PTStarB).
+    + T2Star.
       clear Heqi.
       eapply MStMStep.
       * eapply StApp.
         ** eauto using Value, PValueValue.
         ** symmetry. eauto.
-      * simpl. destruct (string_dec var var); try easy.
+      * breakStrDec.
         clear e.
         rewrite subsCast.
         destruct (PT2IRT type) eqn:?.
@@ -969,28 +893,131 @@ Proof.
            eauto using step, MStMStep, multistep1, CastValue, PValueValue.
 
         ** simpl.
-           replace type with PTStar in * by (symmetry; auto using PTStarB).
+           T2Star.
            replace v' with v.
            *** erewrite Psubst; eauto using multistep1, step, PValueValue.
-           *** specialize (CastToItsType PTStar v H H7).
+           *** rewrite CastToItsType in H1; trivial.
                congruence.
 
   - GtypeOf2T.
-    destruct (PT2IRT T0) eqn:?; destruct (PT2IRT T1) eqn:?; simpl.
+    destruct (PT2IRT T0) eqn:?; destruct (PT2IRT T1) eqn:?; simpl;
+    T2Star.
     + replace t0 with t in * by (symmetry; eauto using PCast2NStar).
       destruct (dec_Tag t t); try easy.
       erewrite castTags; eauto using multistep.
-    + replace T1 with PTStar in * by (symmetry; eauto using PTStarB).
-      erewrite PCastBox; eauto using multistep1, step, PValueValue,
+    + erewrite PCastBox; eauto using multistep1, step, PValueValue,
                                      CastValue.
-    + replace T0 with PTStar in * by (symmetry; eauto using PTStarB).
-      erewrite <- PCast2Star; eauto using multistep.
-    + replace T0 with PTStar in * by (symmetry; eauto using PTStarB).
-      replace T1 with PTStar in * by (symmetry; eauto using PTStarB).
-      specialize (CastToItsType _ _ H H6) as ?.
+    + erewrite <- PCast2Star; eauto using multistep.
+    + rewrite CastToItsType in H1; trivial.
       replace v' with v by congruence.
       constructor.
 Qed.
+
+
+
+(*
+** Simulation for Fails
+*)
+
+(*
+** A cast to a type IR-equivalent to its onw type never fails.
+*)
+Lemma CastToItsIRType : forall v T T',
+  PCast v T' = None ->
+  MEmpty |= v : T ->
+  PValue v ->
+  PT2IRT T = PT2IRT T'->
+  False.
+Proof.
+  intros * HEq HTy HV.
+  inversion HV; subst; inversion HTy; subst;
+  destruct T' eqn:?; easy.
+Qed.
+
+
+Lemma CastToStar': forall v, PCast v PTStar = None -> False.
+Proof.
+  intros.
+  specialize (CastToStar v) as [? ?].
+  congruence.
+Qed.
+
+
+Ltac CastToStarNone :=
+  try match goal with
+  |[H: PCast _ PTStar = None |- _] =>
+ exfalso; apply (CastToStar' _ H)
+end.
+
+
+(*
+** Main lemma for fail simulation: A failed cast in Pallene will
+** fail when translated to Lir.
+*)
+Lemma CastFail : forall {v} m {T T'},
+  PValue v ->
+  MEmpty |= v : T ->
+  PCast v T' = None ->
+  stepF (MPall2Lir m)  (< PT2IRT T' <= PT2IRT T > Pall2Lir MEmpty v).
+Proof.
+  intros * HV HTy HC.
+  induction HV; inversion HTy; subst;
+  destruct T'; simpl in HC;
+   (* easy cases *)
+      (* impossible cases (PCast could not fail) *)
+      try discriminate;
+      (* cases that actually fail *)
+      try (eapply StUnboxF; try easy; eauto using Value; fail);
+   (* not so easy cases *)
+   destruct T1; simpl; GtypeOf2T; simpl;
+      (* specialize induction hypothesis *)
+      try (specialize (IHHV H3 HC); simpl in IHHV; trivial);
+      (* cases that actually fail *)
+      try (eapply StUnboxF; auto using stepF, PValueValue; easy);
+      (* impossible cases (PCast could not fail) *)
+      try (exfalso; eauto using CastToItsIRType; fail).
+ Qed.
+
+
+(*
+** 'CastFail' when original type is *
+*)
+Lemma CastFailStar : forall v m t T,
+  PValue v ->
+  MEmpty |= v : PTStar ->
+  PCast v T = None ->
+  PT2IRT T = Tag2Type t ->
+  stepF (MPall2Lir m)  (IREUnbox t (Pall2Lir MEmpty v)).
+Proof.
+  intros * HV HTy HCst Heq.
+  specialize (CastFail m HV HTy HCst) as ?.
+  simpl in H. unfold Cast in H. rewrite Heq in H.
+  trivial.
+Qed.
+
+
+(*
+** Similar to 'CastFail', but pass through * when going from T to T'
+*)
+Lemma DoubleCastFail : forall v m T T',
+  PCast v T' = None ->
+  PValue v ->
+  MEmpty |= v : T  ->
+  stepF (MPall2Lir m)
+    (<PT2IRT T' <= IRTStar> (<IRTStar <= PT2IRT T> Pall2Lir MEmpty v)).
+Proof.
+  intros * HCst HV HTy.
+  destruct (PT2IRT T') eqn:?; T2Star.
+  * destruct (PT2IRT T) eqn:?; simpl; T2Star.
+    ** eapply StUnboxF; eauto using PValueValue.
+       intros ?. subst.
+       eapply CastToItsIRType; eauto. congruence.
+    ** specialize (CastFail m HV HTy HCst) as ?.
+       destruct (PT2IRT T'); inversion Heqi; subst; trivial.
+  * CastToStarNone.
+Qed.
+
+
 
 
 Lemma WCast : forall t v,
@@ -999,13 +1026,15 @@ Lemma WCast : forall t v,
 Proof. trivial. Qed.
 
 
-Lemma CongStarP2L : forall v,
-  PValue v ->
-  MEmpty |= v : PTStar ->
+Lemma CanonQuery : forall m a idx,
+  Pmem_correct m ->
     exists (o : IRE) (t : Tag),
-         Pall2Lir MEmpty v = IREBox t o /\ Value o.
+         Pall2Lir MEmpty (PqueryT a idx m) = IREBox t o /\ Value o.
 Proof.
-  intros.
+  intros * HM.
+  specialize (PMCTy m a idx MEmpty HM) as ?.
+  specialize (PMCValue m a idx) as ?.
+  remember (PqueryT a idx m) as v.
   assert (IRTyping MEmpty (Pall2Lir MEmpty v) IRTStar)
     by eauto using Pall2LirWellTyped.
   assert (Value (Pall2Lir MEmpty v)) by eauto using PValueValue.
@@ -1037,71 +1066,39 @@ Proof.
            CongCast, CastStepF,
            CongPlus1, CongPlus2, CongGet1, CongGet2, CongBox,
            CongSet1, CongSet2, CongSet3, CongApp1, CongApp2;
-         fail).
+         fail);
+     simpl; GtypeOf2T;
+       eauto using multistep, multistepF, CastFail.
 
   - (* Get *)
-    simpl.
-    GtypeOf2T.
     inversion H3; subst.
-    destruct (PT2IRT T0) eqn:?.
-    + eapply MStStepF.
-      * eapply multistep1.
-        eapply CastStep.
-        eapply StGet.
-        auto using Value.
-      * simpl.
-        unshelve erewrite (PqueryT2 _ _ _ _ _ eq_refl); trivial.
-        specialize (PMCTy m a idx MEmpty HM) as ?.
-        specialize (PMCValue m a idx) as ?.
-        remember (PqueryT a idx m) as v.
-        specialize (CongStarP2L v H1 H0) as [? [? [? ?]]].
-        rewrite H2.
-        eapply StUnboxF; eauto.
-        eapply castFStarF; eauto.
-
-    + apply PTStarB in Heqi; subst.
-      specialize (CastToStar (PqueryT a idx m)) as [? ?].
-      congruence.
+    destruct (PT2IRT T0) eqn:?; T2Star; CastToStarNone.
+    eapply MStStepF.
+    + eapply multistep1.
+      eapply CastStep.
+      eapply StGet.
+      auto using Value.
+    + simpl.
+      unshelve erewrite (PqueryT2 _ eq_refl); trivial.
+      specialize (CanonQuery m a idx HM) as HCQ.
+      decompose [ex and] HCQ.
+      eauto using CastFailStar, PMCValue, PMCTy.
 
   - (* App *)
-    simpl. GtypeOf2T.
-    destruct (queryF a (MPall2Lir m)) eqn:?.
-    symmetry in Heqp.
-    specialize (PqueryF2V _ _ _ _ _ _ _ HM H0 Heqp) as ?; subst.
-    specialize (PqueryF2 _ _ _ _ _ _  HM H0 Heqp) as ?; subst.
+    specialize (PQueryQuery HM H0) as ?.
     eapply MStStepF.
-    + eapply CongCast.
+    + apply CongCast.
       rewrite WCast.
       eapply MStMStep.
       * eapply StApp.
         ** simpl. destruct (PT2IRT T0); eauto using Value, PValueValue.
         ** eauto.
-      * simpl. destruct (string_dec s s); try easy.
-        eapply MStRefl.
+      * breakStrDec.
+        apply MStRefl.
 
-    + rewrite WCast.
-      rewrite SubstCast.
-      simpl. destruct (string_dec s s); try easy. clear e.
-      eapply StCastF.
-      rewrite WCast.
-      eapply StLet1F.
-      destruct (PT2IRT type) eqn:?.
-      * destruct (PT2IRT T0) eqn:?; simpl.
-        ** eapply StUnboxF; eauto using PValueValue.
-           intros ?. subst.
-           eapply CastToItsIRType; eauto. congruence.
-        ** T2Star.
-           specialize (CastFail _ m _ _ H H7 H1) as ?.
-           simpl in H2.
-           destruct (PT2IRT type); inversion Heqi; subst; trivial.
-      * T2Star.
-        exfalso.
-        eauto using CastToStar'.
-
-  - (* Cast *)
-    simpl.
-    GtypeOf2T.
-    eauto using multistep, multistepF, CastFail.
+    + rewrite SubstCast.
+      breakStrDec.
+      eauto using StCastF, stepF, DoubleCastFail.
 
 Qed.
 

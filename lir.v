@@ -6,6 +6,7 @@ Require Import Ascii.
 Require Import Bool.
 Require Import Nat.
 Require Import Lia.
+Require Import Coq.Program.Equality.
 
 Require Import LIR.maps.
 
@@ -187,6 +188,7 @@ Proof.
   auto ; try congruence.
 Qed.
 
+Unset Elimination Schemes.
 
 (*
 ** Value predicate for Lir expressions: The only values are nil,
@@ -200,6 +202,18 @@ Inductive Value : IRE -> Prop :=
 | Vfun : forall a, Value (IREFAddr a)
 | Vbox : forall gt v, Value v -> Value (IREBox gt v)
 .
+
+Set Elimination Schemes.
+
+Scheme Value_ind := Induction for Value Sort Prop.
+
+Lemma Value_unique: forall v (Vv1 Vv2 : Value v), Vv1 = Vv2.
+Proof.
+  intros.
+  dependent induction Vv1;
+  dependent destruction Vv2; trivial.
+  f_equal; auto.
+Qed.
 
 
 (*
@@ -828,6 +842,35 @@ Proof.
   generalize dependent T.
   induction St; intros; inversion HTy; inversion HStF; subst;
   eauto using value_normal, value_normalF, Value.
+Qed.
+
+
+Lemma DeterministicStepM : forall m e m1 e1 m2 e2,
+    m / e --> m1 / e1 ->
+    m / e --> m2 / e2 ->
+    m1 = m2.
+Proof.
+  intros * HSt1.
+  generalize dependent m2.
+  generalize dependent e2.
+  induction HSt1; intros * HSt2; inversion HSt2; subst; eauto;
+   try (exfalso; eauto using value_normal, Value; fail);
+   try congruence.
+   f_equal. f_equal. eauto using Value_unique.
+Qed.
+
+
+Lemma DeterministicStep : forall m e m1 e1 m2 e2,
+    m / e --> m1 / e1 ->
+    m / e --> m2 / e2 ->
+    e1 = e2.
+Proof.
+  intros * HSt1.
+  generalize dependent m2.
+  generalize dependent e2.
+  induction HSt1; intros * HSt2; inversion HSt2; subst; eauto;
+   try (exfalso; eauto using value_normal, Value; fail);
+   f_equal; eauto; congruence.
 Qed.
 
 

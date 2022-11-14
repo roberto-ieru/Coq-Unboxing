@@ -31,6 +31,7 @@ Inductive LE : Set :=
 | LEVar : string -> LE
 | LEApp : LE -> LE -> LE
 | LEFun : string -> LE -> LE
+| LELet : string -> LE -> LE -> LE
 .
 
 
@@ -51,6 +52,10 @@ Inductive LEWT : IREnvironment -> LE -> Prop :=
 | WTApp : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEApp e1 e2)
 | WTFun : forall Γ var body, LEWT (var |=> IRTStar; Γ) body ->
             LEWT Γ (LEFun var body)
+| WFLet : forall Γ var init body,
+              LEWT Γ init ->
+              LEWT (var |=> IRTStar; Γ) body ->
+              LEWT Γ(LELet var init body)
 .
 
 
@@ -74,6 +79,8 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
   | LEFun var body =>
       IREBox TgFun (IREFun var
          (IRELet var IRTStar (IREVar var) (Lua2Lir body)))
+  | LELet var init body =>
+         (IRELet var IRTStar (Lua2Lir init) (Lua2Lir body))
   | LEApp e1 e2 => IREApp (IREUnbox TgFun (Lua2Lir e1)) (Lua2Lir e2)
   end.
 
@@ -94,6 +101,7 @@ Fixpoint Pall2Lua (e : PE) : LE :=
   | PEVar var => LEVar var
   | PEApp e1 e2 => LEApp (Pall2Lua e1) (Pall2Lua e2)
   | PEFun var _ e _ => LEFun var (Pall2Lua e)
+  | PELet var _ init body => LELet var (Pall2Lua init) (Pall2Lua body)
   | PECast e _ => Pall2Lua e
   end.
 
@@ -247,6 +255,10 @@ Fixpoint substitution (var : string) (y : LE)  (e : LE) : LE :=
  | LEVar var' => if string_dec var var' then y else e
  | LEFun var' body => if string_dec var var' then e
                        else LEFun var' ([var := y] body)
+ | LELet var' init body =>
+      if string_dec var var'
+         then LELet var' ([var := y] init) body
+         else LELet var' ([var := y] init) ([var := y] body)
  | LEApp e1 e2 => LEApp ([var := y] e1) ([var := y] e2)
 end
 where "'[' x ':=' s ']' t" := (substitution x s t)
@@ -280,6 +292,10 @@ Inductive Lstep : LMem -> LE -> LMem -> LE -> Prop :=
 | LStFun : forall m m' v b free,
     (free, m') = LfreshF m v b ->
     m / LEFun v b ==> m' / LEFAddr free
+| LStLet : forall init vinit var body res m m' m'',
+    m / init ==> m' / vinit ->
+    m' / ([var := vinit] body) ==> m'' / res ->
+    m / LELet var init body ==> m'' / res
 | LStApp : forall m e1 a var body e2 m' m'' v m''' res,
      m / e1 ==> m' / LEFAddr a ->
      m' / e2 ==> m'' / v ->
@@ -416,18 +432,18 @@ Proof.
   induction e2; intros Γ var e1 HWT2 HWT1; simpl;
   inversion HWT2; subst;
   breakStrDec;
-  eauto using LEWT, WT_empty, InNotEq, inclusion_WT, inclusion_shadow,
+  eauto 6 using LEWT, WT_empty, InNotEq, inclusion_WT, inclusion_shadow,
   inclusion_permute.
 Qed.
 
 
 Lemma luaPreservation : forall e m v m',
+  m / e ==> m' / v ->
   Lmem_correct m ->
   LEWT MEmpty e ->
-  m / e ==> m' / v ->
   Lmem_correct m' /\ LValue v /\ LEWT MEmpty v.
 Proof.
-  intros e m v m' HM HWT HSt.
+  intros e m v m' HSt HM HWT.
   induction HSt; inversion HWT; subst;
   try (repeat split; try apply HM; eauto using LValue; fail);
   (* instantiate and split induction hyphoteses *)
@@ -450,6 +466,14 @@ Proof.
   eauto using LValue, LEWT,Lmem_correct, LMCqueryT, LMCqueryF, LMCWT,
               subst_WT.
 Qed.
+
+
+Corollary luaPreservationWT : forall e m v m',
+  m / e ==> m' / v ->
+  Lmem_correct m ->
+  LEWT MEmpty e ->
+  LEWT MEmpty v.
+Proof. eapply luaPreservation. Qed.
 
 
 Fixpoint MLua2Lir (m : LMem) : Mem :=
@@ -581,10 +605,14 @@ Proof.
     simpl.
     f_equal. apply L2LirFreshaux.
 
+  - simpl. eapply BStLet.
+    eauto. rewrite <- L2LirSubst.
+    eauto using subst_WT, luaPreservationWT.
+
   - specialize (L2LirQueryF _ _ _ _ H) as ?.
     simpl. eapply BStApp; eauto using bigStep.
     simpl. destruct (string_dec var var); try easy.
-    specialize (luaPreservation _ _ _ _ H0 H4 HSt2) as [? [? ?]].
+    specialize (luaPreservation _ _ _ _ HSt2 H0 H4) as [? [? ?]].
     eapply BStLet.
     + eauto using bigStep, L2LirValue.
     + eapply IHHSt3 in H1.

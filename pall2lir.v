@@ -170,6 +170,8 @@ Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
         IREFun var
           (IRELet var (PT2IRT T) (<PT2IRT T <= IRTStar> (IREVar var))
                      (<IRTStar <= GtypeOf Γ' body> (Pall2Lir Γ' body)))
+  | PELet var T init body =>
+      IRELet var (PT2IRT T) (Pall2Lir Γ init) (Pall2Lir (var |=> T; Γ) body)
   | PEApp e1 e2 => <GtypeOf Γ e <= IRTStar>
          (IREApp (Pall2Lir Γ e1)
                   (<IRTStar <= (GtypeOf Γ e2)> Pall2Lir Γ e2))
@@ -453,6 +455,16 @@ Proof.
            replace (Pall2Lir (s |=> p; (var |=> Tvar; Γ)) e2)
              with  (Pall2Lir (var |=> Tvar; (s |=> p; Γ)) e2);
            eauto using Pall2LirEEnv, inclusion_permute, PinclusionType.
+
+  - destruct (string_dec var s) eqn:HVeq; subst.
+    + simpl. f_equal;
+       eauto using Pall2LirEEnv,  inclusion_shadow,
+         PinclusionType, inclusion_shadow'.
+    + simpl. f_equal; eauto.
+      replace (Pall2Lir (s |=> p; (var |=> Tvar; Γ)) e2_2)
+      with (Pall2Lir (var |=> Tvar; (s |=> p; Γ)) e2_2) by
+           eauto using Pall2LirEEnv, inclusion_permute, PinclusionType.
+      eauto using Pall2LirEEnv, inclusion_permute, PinclusionType.
 
   - simpl. GtypeOf2T.
     destruct (PT2IRT te); subst; destruct (PT2IRT T1); subst; simpl;
@@ -782,7 +794,7 @@ Proof.
   try (GtypeOf2T;
        simpl; eauto using step, multistep1, PValueValue, P2LfreshT,
               CongPlus1, CongPlus2, CongCast, CongGet1, CongUnbox,
-              CongGet1, CongGet2, CongBox; fail).
+              CongGet1, CongGet2, CongBox, CongLet; fail).
 
   - GtypeOf2T.
     destruct (PT2IRT T0) eqn:?.
@@ -823,6 +835,10 @@ Proof.
     injection H; intros; subst.
     unfold freshF.
     rewrite sameFreeaux. trivial.
+
+  - (* Let *)
+    eapply multistep1.
+    erewrite Psubst; eauto using step, PValueValue.
 
   - GtypeOf2T.
     destruct (PT2IRT T);
@@ -1065,7 +1081,7 @@ Proof.
          eauto 12 using multistepF, stepF, PValueValue, Value,
            CongCast, CastStepF,
            CongPlus1, CongPlus2, CongGet1, CongGet2, CongBox,
-           CongSet1, CongSet2, CongSet3, CongApp1, CongApp2;
+           CongSet1, CongSet2, CongSet3, CongApp1, CongApp2, CongLet;
          fail);
      simpl; GtypeOf2T;
        eauto using multistep, multistepF, CastFail.

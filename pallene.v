@@ -43,6 +43,7 @@ Inductive PE : Set :=
 | PEVar : string -> PE
 | PEApp :  PE -> PE -> PE
 | PEFun : string -> PType -> PE -> PType -> PE
+| PELet : string -> PType -> PE -> PE -> PE
 | PECast : PE -> PType -> PE
 .
 
@@ -78,6 +79,10 @@ Inductive PTyping : PEnvironment -> PE -> PType -> Prop :=
 | PTyFun : forall Γ var Tvar body Tbody,
     var |=> Tvar; Γ |= body : Tbody ->
     Γ |= PEFun var Tvar body Tbody : PTFun Tvar Tbody
+| PTyLet : forall Γ var Tvar init body Tbody,
+    Γ |= init : Tvar ->
+    var |=> Tvar; Γ |= body : Tbody ->
+    Γ |= PELet var Tvar init body : Tbody
 | PTyApp : forall Γ e1 e2 T1 T2,
     Γ |= e1 : PTFun T1 T2 ->
     Γ |= e2 : T1 ->
@@ -127,6 +132,12 @@ Fixpoint typeOf Γ e : option PType :=
     match typeOf (var |=> Tv; Γ) e with
     | Some Tb' => if dec_TP Tb Tb' then Some (PTFun Tv Tb) else None
     | None => None
+    end
+  | PELet var Tv init body =>
+    match typeOf Γ init, typeOf (var |=> Tv; Γ) body with
+    | Some Tv', Some Tb =>
+        if dec_TP Tv Tv' then Some Tb else None
+    | _, _ => None
     end
   | PECast e T =>
     match typeOf Γ e with
@@ -181,6 +192,11 @@ Proof.
     clear H0.
     destruct (typeOf (s |=> p; Γ) e) eqn:HT; try easy.
     destruct (dec_TP p0 p1); subst; try discriminate.
+    inversion Heq; subst. eauto using PTyping.
+  - (* Let *)
+    destruct (typeOf Γ e1) eqn:HT1; try easy.
+    destruct (typeOf (s |=> p; Γ) e2) eqn:HT2; try easy.
+    destruct (dec_TP p p0); subst; try easy.
     inversion Heq; subst. eauto using PTyping.
   - (* Cast *)
     destruct (typeOf Γ e) eqn:?; try easy.
@@ -437,6 +453,10 @@ Fixpoint substitution (var : string) (y : PE)  (e : PE) : PE :=
  | PEVar var' => if string_dec var var' then y else e
  | PEFun var' T1 body T2 => if string_dec var var' then e
                           else PEFun var' T1 ([var := y] body) T2
+ | PELet var' Tvar init body =>
+     if string_dec var var'
+       then PELet var' Tvar ([var := y] init) body
+       else PELet var' Tvar ([var := y] init) ([var := y] body)
  | PEApp e1 e2 => PEApp ([var := y] e1) ([var := y] e2)
  | PECast e T => PECast ([var := y] e) T
 end
@@ -537,6 +557,12 @@ Inductive pstep : PMem -> PE -> PMem -> PE -> Prop :=
 | PStFun : forall m m' v b free T1 T2,
     (free, m') = PfreshF m v T1 b ->
     m / PEFun v T1 b T2 --> m' / PEFAddr free T1 T2
+| PStLet1 : forall m m' init init' body var TV,
+    m / init --> m' / init' ->
+    m / PELet var TV init body --> m' / PELet var TV init' body
+| PStLet : forall m init body var TV,
+  PValue init ->
+  m / PELet var TV init body --> m / ([var := init] body)
 | PStApp1 : forall m e1 e2 m' e1',
     m / e1 --> m' / e1' ->
     m / PEApp e1 e2 --> m' / PEApp e1' e2
@@ -593,6 +619,9 @@ Inductive pstepF : PMem -> PE -> Prop :=
     PValue e1 -> PValue e2 ->
     m / e3 --> fail ->
     m / PESet e1 e2 e3 --> fail
+| PStLet1F : forall m init body var TV,
+    m / init --> fail ->
+    m / PELet var TV init body --> fail
 | PStApp1F : forall m e1 e2,
     m / e1 --> fail ->
     m / PEApp e1 e2 --> fail

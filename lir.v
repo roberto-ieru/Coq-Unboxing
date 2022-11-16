@@ -579,7 +579,7 @@ Inductive step : Mem -> IRE -> Mem -> IRE -> Prop :=
 | StApp : forall m a var body v,
     Value v ->
     (var, body) = queryF a m ->
-    m / IREApp (IREFAddr a) v --> m / [var := v] body
+    m / IREApp (IREFAddr a) v --> m / IRELet var IRTStar v body
 | StBox1 : forall m t e m' e',
     m / e --> m' / e' ->
     m / IREBox t e --> m' / IREBox t e'

@@ -796,25 +796,11 @@ Proof.
               CongPlus1, CongPlus2, CongCast, CongGet1, CongUnbox,
               CongGet1, CongGet2, CongBox, CongLet; fail).
 
-  - GtypeOf2T.
-    destruct (PT2IRT T0) eqn:?.
-    + simpl.
-      inversion H3; subst.
-      eapply MStMStep.
-      eapply StUnbox1; eauto using step, Value.
-      unshelve erewrite (PqueryT2 _ eq_refl); trivial.
-      eapply multistep1.
-      erewrite (PCastBox);
-      eauto using step, PValueValue, CastValue, PMCValue, PMCTy.
-    + simpl.
-      inversion H3; subst.
-      replace T0 with PTStar in * by (destruct T0; easy).
-      clear T0 Heqi.
-      eapply MStMStep; eauto using step, Value.
-      unshelve erewrite (PqueryT2 _ eq_refl); trivial.
-      rewrite CastToItsType in H; auto using PMCValue, PMCTy.
-      injection H; intros; subst.
-      constructor.
+  - inversion H2; subst.
+    erewrite <- PqueryT2; eauto.
+    GtypeOf2T.
+    2:{ eauto using PMCTy. }
+    eauto using CongCast, multistep1, step, Value.
 
   - destruct (GtypeOf MEmpty e3); eauto using CongSet1.
 
@@ -849,71 +835,41 @@ Proof.
       destruct (PT2IRT T1);
       eauto using CongUnbox, CongApp2, PValueValue, CongBox.
 
-  - inversion H5; subst.
-    destruct (queryF a (MPall2Lir m)) eqn:?.
-    replace s with var in * by eauto using PqueryF2V.
-    specialize (PqueryF2 HM H0 (eq_sym Heqp)).
-    assert (MEmpty |= v' : type) by eauto using CastEqType.
-    specialize (PMCTyF _ _ _ _ _ MEmpty H0 HM) as HTy'.
-    intros; subst.
-    simpl.
-    GtypeOf2T.
+  - GtypeOf2T. 
+    2:{ eapply PTyLet.
+        - eauto using PTyCast.
+        - eapply PMCTyF; eauto. }
+    inversion H4; subst.
     simpl.
     eapply CongCast.
     destruct (PT2IRT T0) eqn:?.
+    + eapply MStMStep.
+      * eapply StApp.
+        ** eauto using PValueValue, Value.
+        ** eapply PQueryQuery; eauto.
+      * eapply MStMStep.
+        ** eapply StLet; eauto using PValueValue, Value.
+        ** simpl. destruct (string_dec var var); try easy.
+           rewrite SubstCast. simpl.
+           destruct (string_dec var var); try easy.
+           simpl.
+           destruct (PT2IRT type) eqn:?; simpl.
+           *** destruct (dec_Tag t0 t) eqn:?; subst; simpl.
+               ++ eapply multistep1. eauto using step, PValueValue.
+               ++ eapply MStRefl.
+           *** eapply MStRefl.
 
     + eapply MStMStep.
       * eapply StApp.
-        ** eauto using Value, PValueValue.
-        ** symmetry. eauto.
-      * breakStrDec.
-        clear e.
-        rewrite subsCast.
-        destruct (PT2IRT type) eqn:?.
-
-        ** simpl.
-           replace t0 with t in * by eauto using PCast2NStar.
-           eapply MStMStep.
-           *** eauto using step, PValueValue.
-           *** erewrite Psubst.
-               eapply multistep1.
-               **** replace (Pall2Lir MEmpty v')
-                       with (Pall2Lir MEmpty v) by eauto using castTags.
-                    eauto using step, PValueValue.
-               **** eapply HTy'.
-               **** eauto using CastEqType.
-
-        ** simpl.
-           T2Star.
-           erewrite castStar; eauto.
-           erewrite Psubst;
-               eauto using multistep1, step, PValueValue,  CastValue, Value.
-
-    + T2Star.
-      clear Heqi.
-      eapply MStMStep.
-      * eapply StApp.
-        ** eauto using Value, PValueValue.
-        ** symmetry. eauto.
-      * breakStrDec.
-        clear e.
-        rewrite subsCast.
-        destruct (PT2IRT type) eqn:?.
-
-        ** simpl.
-           erewrite Psubst; eauto.
-           replace (Pall2Lir MEmpty v) with
-                   (IREBox t (Pall2Lir MEmpty v')) by
-                      (symmetry; eauto using castFStar).
-           eapply MStMStep;
-           eauto using step, MStMStep, multistep1, CastValue, PValueValue.
-
-        ** simpl.
-           T2Star.
-           replace v' with v.
-           *** erewrite Psubst; eauto using multistep1, step, PValueValue.
-           *** rewrite CastToItsType in H1; trivial.
-               congruence.
+        ** eauto using PValueValue, Value.
+        ** eapply PQueryQuery; eauto.
+      * eapply MStMStep.
+        ** eapply StLet; eauto using PValueValue, Value.
+        ** simpl. destruct (string_dec var var); try easy.
+           rewrite SubstCast. simpl.
+           destruct (string_dec var var); try easy.
+           simpl.
+           eapply MStRefl.
 
   - GtypeOf2T.
     destruct (PT2IRT T0) eqn:?; destruct (PT2IRT T1) eqn:?; simpl;
@@ -1085,36 +1041,6 @@ Proof.
          fail);
      simpl; GtypeOf2T;
        eauto using multistep, multistepF, CastFail.
-
-  - (* Get *)
-    inversion H3; subst.
-    destruct (PT2IRT T0) eqn:?; T2Star; CastToStarNone.
-    eapply MStStepF.
-    + eapply multistep1.
-      eapply CastStep.
-      eapply StGet.
-      auto using Value.
-    + simpl.
-      unshelve erewrite (PqueryT2 _ eq_refl); trivial.
-      specialize (CanonQuery m a idx HM) as HCQ.
-      decompose [ex and] HCQ.
-      eauto using CastFailStar, PMCValue, PMCTy.
-
-  - (* App *)
-    specialize (PQueryQuery HM H0) as ?.
-    eapply MStStepF.
-    + apply CongCast.
-      rewrite WCast.
-      eapply MStMStep.
-      * eapply StApp.
-        ** simpl. destruct (PT2IRT T0); eauto using Value, PValueValue.
-        ** eauto.
-      * breakStrDec.
-        apply MStRefl.
-
-    + rewrite SubstCast.
-      breakStrDec.
-      eauto using StCastF, stepF, DoubleCastFail.
 
 Qed.
 

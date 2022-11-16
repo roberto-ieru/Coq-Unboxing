@@ -537,9 +537,8 @@ Inductive pstep : PMem -> PE -> PMem -> PE -> Prop :=
     PValue e1 ->
     m /e2 --> m' /e2' ->
     m / PEGet e1 e2 --> m' / PEGet e1 e2'
-| PStGet : forall m a idx v T,
-    PCast (PqueryT a idx m) T = Some v ->
-    m / PEGet (PETAddr a T) (PENum idx) --> m / v
+| PStGet : forall m a idx T,
+    m / PEGet (PETAddr a T) (PENum idx) --> m / PECast (PqueryT a idx m) T
 | PStSet1 : forall m e1 e2 e3 m' e1',
     m / e1 --> m' / e1' ->
     m / PESet e1 e2 e3 --> m' / PESet e1' e2 e3
@@ -570,11 +569,11 @@ Inductive pstep : PMem -> PE -> PMem -> PE -> Prop :=
     PValue e1 ->
     m / e2 --> m' / e2' ->
     m / PEApp e1 e2 --> m' / PEApp e1 e2'
-| PStApp : forall m a var type body v v' T1 T2,
+| PStApp : forall m a var type body v T1 T2,
     PValue v ->
     (var, type, body) = PqueryF a m ->
-    PCast v type = Some v' ->
-    m / PEApp (PEFAddr a T1 T2) v --> m / PECast ([var := v'] body) T2
+    m / PEApp (PEFAddr a T1 T2) v -->
+          m / PECast (PELet var type (PECast v type) body) T2
 | PStCast1 : forall m e m' e' T,
     m / e --> m' / e' ->
     m / PECast e T --> m' / PECast e' T
@@ -605,9 +604,6 @@ Inductive pstepF : PMem -> PE -> Prop :=
     PValue e1 ->
     m /e2 --> fail ->
     m / PEGet e1 e2 --> fail
-| PStGetF : forall m a idx T,
-    PCast (PqueryT a idx m) T = None ->
-    m / PEGet (PETAddr a T) (PENum idx) --> fail
 | PStSet1F : forall m e1 e2 e3,
     m / e1 --> fail ->
     m / PESet e1 e2 e3 --> fail
@@ -629,11 +625,6 @@ Inductive pstepF : PMem -> PE -> Prop :=
     PValue e1 ->
     m / e2 --> fail ->
     m / PEApp e1 e2 --> fail
-| PStAppF : forall m a var type body v T1 T2,
-    PValue v ->
-    (var, type, body) = PqueryF a m ->
-    PCast v type = None ->
-    m / PEApp (PEFAddr a T1 T2) v --> fail
 | PStCast1F : forall m t e,
     m / e --> fail ->
     m / PECast e t --> fail
@@ -802,12 +793,9 @@ Proof.
   induction HT; intros e' m' Hst; inversion Hst; subst;
   eauto using PTyping, PMCTy, PMCTyF, Psubst_typing, CastEqType.
   - inversion HT1; subst.
-    assert (PValue (PqueryT a idx m')) by eauto using PMCValue.
-    specialize (PMCTy m' a idx MEmpty Hmc) as ?.
-    eauto using CastEqType.
+    eauto using PTyping, PMCTy, PMCValue.
   - inversion HT1; subst.
-    specialize (PMCTyF m' a var type body MEmpty H3 Hmc) as ?.
-    eauto using CastEqType, CastValue, PTyCast, Psubst_typing.
+    eauto using PTyping, PMCTyF.
 Qed.
 
 
@@ -884,17 +872,12 @@ Proof.
     pose (PfreshT m) as P. destruct P eqn:?;
     dostep.
 
-  - (* Get *)
-    destruct (PCast (PqueryT x0 x m) T) eqn:?; subst;
-    dostep.
-
   - (* Fun *)
     pose (PfreshF m var Tvar body) as P; destruct P eqn:?;
     dostep.
 
   - (* App *)
     pose (PqueryF x m) as P. destruct P as [[? ?] ?] eqn:?; subst.
-    destruct (PCast e2 p) eqn:?;
     dostep.
 
   - (* Cast *)

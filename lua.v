@@ -615,8 +615,10 @@ Proof.
     specialize (luaPreservation _ _ _ _ HSt2 H0 H4) as [? [? ?]].
     eapply BStLet.
     + eauto using bigStep, L2LirValue.
-    + eapply IHHSt3 in H1.
-      * rewrite L2LirSubst in H1; trivial.
+    + simpl. destruct (string_dec var var); try easy.
+      eapply IHHSt3 in H1.
+      * rewrite L2LirSubst in H1.
+        eauto using bigStep, L2LirValue.
       * eauto using subst_WT, LMCqueryF.
 Qed.
 

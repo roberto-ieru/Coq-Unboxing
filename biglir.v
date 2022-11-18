@@ -50,7 +50,7 @@ Inductive bigStep : Mem -> IRE -> Mem -> IRE -> Prop :=
     m / e1 ==> m' / IREFAddr a ->
     m' / e2 ==> m'' / v2 ->
     (var, body) = queryF a m'' ->
-    m'' / ([var := v2] body) ==> m''' / res ->
+    m'' / IRELet var IRTStar v2 body ==> m''' / res ->
     m / IREApp e1 e2 ==> m''' / res
 | BStBox : forall m e m' e' t,
     m / e ==> m' / e' ->
@@ -186,11 +186,9 @@ Proof.
   - eapply MCTyF in H; auto.
     eapply IHHst3 in H4.
     + destruct H4; eauto.
-    + eauto using subst_typing.
+    + eauto using IRTyping.
   - eapply MCTyF in H; auto.
-    eapply IHHst3 in H4.
-    + destruct H4; eauto.
-    + eauto using subst_typing.
+    eapply IHHst3 in H4; destruct H4; eauto using IRTyping.
   - (* Unboxing step needs an extra inversion on type judgment
        and value to get inside the boxed value *)
     split.
@@ -374,10 +372,15 @@ Proof.
     try apply TgNil.
 
    (* Let is still going the wrong way... *)
-   eapply multiTrans.
-   2: { eauto using auxTySubst. }
-   eauto 6 using multiTrans, CongLet, multistep1, step, BstepValue.
+   - eapply multiTrans.
+     2: { eauto using auxTySubst. }
+     eauto 6 using multiTrans, CongLet, multistep1, step, BstepValue.
 
+  - eapply multiTrans.
+   + eauto using CongApp1.
+   + eapply multiTrans.
+     * eauto using CongApp2, Value.
+     * eauto 8 using multistep, step,  BstepValue, IRTyping, MCTyF, BstepTy.
 Qed.
 
 

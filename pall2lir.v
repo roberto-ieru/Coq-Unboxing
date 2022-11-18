@@ -847,25 +847,29 @@ Proof.
       * eapply StApp.
         ** eauto using PValueValue, Value.
         ** eapply PQueryQuery; eauto.
-      * simpl. destruct (string_dec var var); try easy.
-        rewrite SubstCast. simpl.
-        destruct (string_dec var var); try easy.
-        simpl.
-        destruct (PT2IRT type) eqn:?; simpl.
-        *** destruct (dec_Tag t0 t) eqn:?; subst; simpl.
-            ++ eapply multistep1. eauto using step, PValueValue.
-            ++ eapply MStRefl.
-        *** eapply MStRefl.
+      * eapply MStMStep.
+        ** eapply StLet; eauto using PValueValue, Value.
+        ** simpl. destruct (string_dec var var); try easy.
+           rewrite SubstCast. simpl.
+           destruct (string_dec var var); try easy.
+           simpl.
+           destruct (PT2IRT type) eqn:?; simpl.
+           *** destruct (dec_Tag t0 t) eqn:?; subst; simpl.
+               ++ eapply multistep1. eauto using step, PValueValue.
+               ++ eapply MStRefl.
+           *** eapply MStRefl.
 
     + eapply MStMStep.
       * eapply StApp.
         ** eauto using PValueValue, Value.
         ** eapply PQueryQuery; eauto.
-      * simpl. destruct (string_dec var var); try easy.
-        rewrite SubstCast. simpl.
-        destruct (string_dec var var); try easy.
-        simpl.
-        eapply MStRefl.
+      * eapply MStMStep.
+        ** eapply StLet; eauto using PValueValue, Value.
+        ** simpl. destruct (string_dec var var); try easy.
+           rewrite SubstCast. simpl.
+           destruct (string_dec var var); try easy.
+           simpl.
+           eapply MStRefl.
 
   - GtypeOf2T.
     destruct (PT2IRT T0) eqn:?; destruct (PT2IRT T1) eqn:?; simpl;

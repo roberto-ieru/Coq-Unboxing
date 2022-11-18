@@ -581,9 +581,10 @@ Proof.
 
     destruct (queryF a m2) as [var' body'] eqn:HEq2. symmetry in HEq2.
     specialize (PrecQueryF _ HM H5 HEq2) as [? ?]; subst.
-    exists ([var' := x] body'). exists m2. repeat split;
+    exists (IRELet var' IRTStar x body').
+    exists m2. repeat split;
     eauto 7 using multiTrans, CongApp1, CongApp2, multistep1, step,
-         Precision, PrecSubs',  PrecisionPreservationMult.
+         Precision, PrecisionPreservationMult.
 
   - (* StUnbox *)
     clear IHHP.

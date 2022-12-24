@@ -5,6 +5,7 @@ Require Import Ascii.
 Require Import Bool.
 Require Import Nat.
 Require Import Lia.
+Require Import Coq.Program.Equality.
 
 Require Import LIR.maps.
 
@@ -160,12 +161,23 @@ Qed.
 ** translation to Lir
 *)
 
+Unset Elimination Schemes.
 Inductive LValue : LE -> Prop :=
 | LVnil : LValue LENil
 | LVnum : forall n, LValue (LENum n)
 | LVtbl : forall a, LValue (LETAddr a)
 | LVfun : forall a, LValue (LEFAddr a)
 .
+Set Elimination Schemes.
+
+Scheme LValue_ind := Induction for LValue Sort Prop.
+
+Lemma LV_unique: forall v  (V1 V2 : LValue v), V1 = V2.
+Proof.
+  intros *.
+  induction V1; dependent destruction V2; trivial.
+Qed.
+
 
 Inductive LExpValue : Set :=
 | LEV : forall e, LValue e -> LExpValue.
@@ -175,6 +187,15 @@ Definition LEV2Val (me : LExpValue) :=
   match me with
   | LEV v _ => v
   end.
+
+
+Lemma LEV2ValEq : forall vv vv',
+  LEV2Val vv = LEV2Val vv' -> vv = vv'.
+Proof.
+  intros * HEq.
+  destruct vv. destruct vv'. simpl in HEq; subst.
+  replace l0 with l by (apply LV_unique); trivial.
+Qed.
 
 
 Inductive LMem : Set :=
@@ -337,6 +358,54 @@ Proof.
   eexists.
   eauto using Lstep, LValue.
 Qed.
+
+
+Lemma ValueStep : forall m e m' e',
+  LValue e ->
+  m / e ==> m' / e' ->
+  m = m' /\ e = e'.
+Proof.
+  induction e; intros * HV HSt; try (inversion HV; fail);
+  inversion HSt; subst; split; trivial.
+Qed.
+
+
+Ltac NoValue :=
+  match goal with |[H: LValue _ |- _] => inversion H end.
+
+Ltac applyH :=
+  repeat match goal with
+      |[H: forall _ _, (Lstep ?M ?E _ _) -> _,
+        H1: Lstep ?M ?E _ _ |- _] =>
+              specialize (H _ _ H1) as [? ?]; subst
+  end.
+
+
+Lemma LuaDeterminism : forall m e m1' v1 m2' v2,
+    m / e ==> m1' / v1  ->
+    m / e ==> m2' / v2  ->
+    m1' = m2' /\ v1 = v2.
+Proof.
+  intros * HSt1.
+  generalize dependent m2'.
+  generalize dependent v2.
+  induction HSt1; intros * HSt2; only 1: auto using ValueStep;
+  inversion HSt2; subst; try NoValue;
+  try (applyH; split; congruence; fail).
+  - (* LStSet *)
+    applyH.
+    (* congruence cannot know that proofs of LValue are unique *)
+    replace v0 with v by auto using LEV2ValEq.
+    split; congruence.
+  - (* LStLet *)
+    specialize (IHHSt1_1 _ _ H2) as [? ?]; subst.
+    specialize (IHHSt1_2 _ _ H3) as [? ?]; subst.
+    injection H1; intros; subst.
+    rewrite <- H5 in H; injection H; intros; subst.
+    specialize (IHHSt1_3 _ _ H8) as [? ?]; subst.
+    split; trivial.
+Qed.
+
 
 
 Lemma L2LirValue : forall e, LValue e -> Value (Lua2Lir e).
@@ -621,6 +690,5 @@ Proof.
         eauto using bigStep, L2LirValue.
       * eauto using subst_WT, LMCqueryF.
 Qed.
-
 
 

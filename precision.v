@@ -486,26 +486,72 @@ Lemma UnboxCongruent: forall Γ d e g,
 Proof. eauto using Precision, TPrecisionRefl. Qed.
 
 
+(* Strip an expression of all its boxes and unboxes *)
+Fixpoint Tbones (e : IRE) : IRE :=
+  match e with
+  | IRENil => e
+  | IRENum n => e
+  | IREPlus e1 e2 => IREPlus (Tbones e1) (Tbones e2)
+  | IRENew => e
+  | IRETAddr a => e
+  | IREFAddr b => e
+  | IREGet t i => IREGet (Tbones t) (Tbones i)
+  | IRESet t i v => IRESet (Tbones t) (Tbones i) (Tbones v)
+  | IREVar v => e
+  | IRELet v t e1 e2 => IRELet v IRTStar (Tbones e1) (Tbones e2)
+  | IREFun v b => IREFun v (Tbones b)
+  | IREApp e1 e2 => IREApp (Tbones e1) (Tbones e2)
+  | IREBox t e => Tbones e
+  | IREUnbox t e => Tbones e
+  end.
+
+
+(* Expressions related by Precision differ only in boxes and unboxes *)
+Lemma EqBones : forall Γ e1 t1 e2 t2,
+  Precision Γ e1 t1 e2 t2 -> Tbones e1 = Tbones e2.
+Proof.
+  intros * HP.
+  induction HP; trivial; simpl; congruence.
+Qed.
+
+
+
 Module Examples.
 
 Definition B10 := (IREBox TgInt (IRENum 10)).
 
 Definition UB10 := IREUnbox TgInt B10.
 
+(* 10 ⊑ unbox[int](box[int](10)) : int ⊑ int *)
 Example example1 : Precision PEmpty (IRENum 10) IRTInt UB10 IRTInt.
   eauto using Precision, TPrecisionRefl.
 Qed.
 
+(* FALSE!  unbox[int](box[int](10)) ⊑ 10 : int ⊑ int *)
 Example example2 : ~ Precision PEmpty UB10 IRTInt (IRENum 10) IRTInt.
   intros HF.
   inversion HF.
 Qed.
 
+(* unbox[int](box[int](10)) ⊑ box[int](10) : int ⊑ * *)
 Example example3 : Precision PEmpty UB10 IRTInt B10 IRTStar.
   eauto using Precision.
 Qed.
 
-Example example4 : exists e1 t1 e2 t2,
+
+(* Nothing is smaller than 10 *)
+Goal forall E T,
+  Precision PEmpty E T (IRENum 10) IRTInt ->
+  E = IRENum 10.
+Proof.
+  intros * HP.
+  induction E; inversion HP; subst; trivial.
+Qed.
+
+
+(* Precision does not preserve values in any direction *)
+
+Goal exists e1 t1 e2 t2,
     Precision PEmpty e1 t1 e2 t2 /\ Value e1 /\ ~Value e2.
   eexists; eexists; eexists; eexists.
   split; try split.
@@ -514,7 +560,7 @@ Example example4 : exists e1 t1 e2 t2,
   - intros Hcontra. inversion Hcontra.
 Qed.
 
-Example example5 : exists e1 t1 e2 t2,
+Goal exists e1 t1 e2 t2,
     Precision PEmpty e1 t1 e2 t2 /\ Value e2 /\ ~Value e1.
   eexists; eexists; eexists; eexists.
   split; try split.
@@ -523,16 +569,73 @@ Example example5 : exists e1 t1 e2 t2,
   - intros Hcontra. inversion Hcontra.
 Qed.
 
+
+(* Types inside precision-related expressions can go astray... *)
+Goal Precision PEmpty (IREBox TgTbl (IREUnbox TgTbl B10)) IRTStar B10 IRTStar.
+Proof.
+  eauto using Precision.
+Qed.
+
+(*
+** ... which breaks some nice properties: although B10 is a maximum
+** for 10 (everything larger than 10 is smaller than B10), 10 is not
+** a minimum for B10...
+*)
+Goal ~ Precision PEmpty (IRENum 10) IRTInt
+                        (IREBox TgTbl (IREUnbox TgTbl B10)) IRTStar.
+Proof.
+  intros H.
+  inversion H; subst.
+  inversion H4; subst.
+  inversion H2.
+Qed.
+
+
+(* a[10] *)
+Definition get10 (a : nat) := IREGet (IRETAddr a) B10.
+
+(* unbox[int](a[10]) ⊑ a[10] *)
+Goal forall a,
+    Precision PEmpty (IREUnbox TgInt (get10 a)) (Tag2Type TgInt)
+                     (get10 a) IRTStar.
+Proof.
+  eauto using Precision.
+Qed.
+
+
+(* box[int](unbox[int](a[10])) ⊑ a[10] *)
+Goal forall a, Precision PEmpty
+    (IREBox TgInt (IREUnbox TgInt (get10 a))) IRTStar
+                     (get10 a) IRTStar.
+Proof.
+  eauto 6 using Precision.
+Qed.
+
+
+(* ~ a[10] ⊑ box[int](unbox[int](a[10])) *)
+Goal forall a, ~ Precision PEmpty
+    (get10 a) IRTStar
+    (IREBox TgInt (IREUnbox TgInt (get10 a))) IRTStar.
+Proof.
+  intros * H.
+  inversion H; subst.
+  inversion H4; subst.
+  inversion H2.
+Qed.
+
+
 (*
 ** Next two examples show that Precision is not a proper order,
 ** but a preorder.
 *)
 Definition BUB10 := IREBox TgInt UB10.
 
+(* box[int](unbox[int](box[int](10))) ⊑ box[int](10) : * ⊑ * *)
 Example e6 : Precision PEmpty BUB10 IRTStar B10 IRTStar.
   eauto using Precision.
 Qed.
 
+(* box[int](10) ⊑ box[int](unbox[int](box[int](10))) : * ⊑ * *)
 Example e7 : Precision PEmpty B10 IRTStar BUB10 IRTStar.
   eauto using Precision, TPrecisionRefl.
 Qed.

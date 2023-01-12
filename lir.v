@@ -179,7 +179,7 @@ where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 (*
 ** Types for Lir expressions are unique
 *)
-Lemma typeUnique : forall Γ e t t',
+Theorem typeUnique : forall Γ e t t',
    (Γ  |= e : t) -> (Γ |= e : t') -> t = t'.
 Proof.
   intros Γ e t t' H1.
@@ -797,7 +797,7 @@ Proof. intuition; eauto using memPreservation,expPreservation. Qed.
 (*
 ** Values cannot be reduced
 *)
-Lemma value_normal : forall m e m' v,
+Theorem value_normal : forall m e m' v,
     m / e --> m' / v ->
     Value e ->
     False.
@@ -810,7 +810,7 @@ Proof.
 Qed.
 
 
-Lemma value_normalF : forall m e,
+Theorem value_normalF : forall m e,
     m / e --> fail ->
     Value e ->
     False.
@@ -832,7 +832,7 @@ Ltac open_value rule :=
 (*
 ** Regular steps and fail steps are excludent.
 *)
-Lemma failNfail : forall e m e' m' T,
+Theorem failNfail : forall e m e' m' T,
     MEmpty |= e : T ->
     m / e --> m' / e' ->
     m / e --> fail ->
@@ -860,7 +860,7 @@ Proof.
 Qed.
 
 
-Lemma DeterministicStep : forall m e m1 e1 m2 e2,
+Theorem DeterministicStep : forall m e m1 e1 m2 e2,
     m / e --> m1 / e1 ->
     m / e --> m2 / e2 ->
     e1 = e2.

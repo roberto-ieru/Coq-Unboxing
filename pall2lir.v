@@ -472,7 +472,7 @@ Proof.
 Qed.
 
 
-Lemma PValueValue : forall e, PValue e -> Value (Pall2Lir MEmpty e).
+Theorem PValueValue : forall e, PValue e -> Value (Pall2Lir MEmpty e).
 Proof.
   intros * PV.
   induction PV; simpl; eauto using Value.
@@ -770,7 +770,7 @@ Proof.
 Qed.
 
 
-Lemma SimPallLir : forall m e T m' e',
+Theorem SimPallLir : forall m e T m' e',
   Pmem_correct m ->
   MEmpty |= e : T ->
   m / e --> m' / e' ->

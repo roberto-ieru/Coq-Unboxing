@@ -780,7 +780,7 @@ Qed.
 (*
 ** Preservation of types for Pallene expressions
 *)
-Lemma PexpPreservation : forall m e t m' e',
+Theorem PexpPreservation : forall m e t m' e',
   Pmem_correct m ->
   MEmpty |= e : t ->
   m / e --> m' / e' ->

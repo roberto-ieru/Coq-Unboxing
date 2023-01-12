@@ -879,7 +879,7 @@ Qed.
 ** Any star value less precise than an expression is equal to the
 ** expression type erasure.
 *)
-Lemma PrecDynEqualVal : forall e1 t1 e2,
+Theorem PrecDynEqualVal : forall e1 t1 e2,
     Value e2 ->
     Precision PEmpty e1 t1 e2 IRTStar ->
     e2 = dyn e1.

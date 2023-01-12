@@ -374,7 +374,7 @@ Qed.
 (*
 ** Obs: reduction uses only unbox(box x); it does not change memory
 *)
-Lemma CatchUp : forall e1 t1 e2 t2 m,
+Theorem CatchUp : forall e1 t1 e2 t2 m,
   Precision PEmpty e1 t1 e2 t2 ->
   Value e1 ->
   exists e2', m / e2 -->* m / e2' /\ Value e2'.
@@ -450,7 +450,7 @@ Ltac doCatchUp :=
 (*
 ** Main simulation lemma
 *)
-Lemma Sim : forall m1 e1 t1 e2 m2 t2 m1' e1',
+Theorem Sim : forall m1 e1 t1 e2 m2 t2 m1' e1',
   Precision PEmpty e1 t1 e2 t2 ->
   m1 / e1 --> m1' / e1'   ->
   m1 <M| m2 ->

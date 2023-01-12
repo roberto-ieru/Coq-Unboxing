@@ -152,7 +152,7 @@ Qed.
 (*
 ** Big steps preserve typing and result in values
 *)
-Lemma BPreservation : forall (m m' : Mem) e e' t,
+Theorem BPreservation : forall (m m' : Mem) e e' t,
   m / e ==> m' / e' ->
   mem_correct m ->
   MEmpty |= e : t ->

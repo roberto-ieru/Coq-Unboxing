@@ -381,7 +381,7 @@ Ltac applyH :=
   end.
 
 
-Lemma LuaDeterminism : forall m e m1' v1 m2' v2,
+Theorem LuaDeterminism : forall m e m1' v1 m2' v2,
     m / e ==> m1' / v1  ->
     m / e ==> m2' / v2  ->
     m1' = m2' /\ v1 = v2.
@@ -408,7 +408,7 @@ Qed.
 
 
 
-Lemma L2LirValue : forall e, LValue e -> Value (Lua2Lir e).
+Theorem L2LirValue : forall e, LValue e -> Value (Lua2Lir e).
 Proof.
   intros e HV.
   inversion HV; simpl; subst; eauto using Value.

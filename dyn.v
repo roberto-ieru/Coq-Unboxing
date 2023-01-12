@@ -84,7 +84,7 @@ Qed.
 (*
 ** 'dyn' preserves well-typeness in the empty environment
 *)
-Lemma dynTypingE : forall e,
+Corollary dynTypingE : forall e,
     MEmpty |= e : IRTStar -> MEmpty |= dyn e : IRTStar.
 Proof.
   intros e H.
@@ -96,7 +96,7 @@ Qed.
 (*
 ** 'dyn' preserves "valueness".
 *)
-Lemma dynValue : forall e, Value e -> Value (dyn e).
+Theorem dynValue : forall e, Value e -> Value (dyn e).
 Proof.
   intros e HV. induction HV; simpl; auto using Value.
 Qed.

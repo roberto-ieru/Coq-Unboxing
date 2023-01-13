@@ -37,9 +37,16 @@ Inductive LE : Set :=
 
 
 (*
+** λ-Lua environments: Variables in Lua must be declared, but they have
+** no types.
+*)
+Definition LEnv := Map unit.
+
+
+(*
 ** A well-formed Lua expression cannot have free variables
 *)
-Inductive LEWT : IREnvironment -> LE -> Prop :=
+Inductive LEWT : LEnv -> LE -> Prop :=
 | WTNil : forall Γ, LEWT Γ LENil
 | WTNum : forall Γ n, LEWT Γ (LENum n)
 | WTPlus : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEPlus e1 e2)
@@ -49,13 +56,13 @@ Inductive LEWT : IREnvironment -> LE -> Prop :=
 | WTGet : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEGet e1 e2)
 | WTSet : forall Γ e1 e2 e3, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ e3 ->
                LEWT Γ (LESet e1 e2 e3)
-| WTVar : forall Γ var, In Γ var = Some IRTStar -> LEWT Γ (LEVar var)
+| WTVar : forall Γ var, In Γ var = Some tt -> LEWT Γ (LEVar var)
 | WTApp : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEApp e1 e2)
-| WTFun : forall Γ var body, LEWT (var |=> IRTStar; Γ) body ->
+| WTFun : forall Γ var body, LEWT (var |=> tt; Γ) body ->
             LEWT Γ (LEFun var body)
 | WFLet : forall Γ var init body,
               LEWT Γ init ->
-              LEWT (var |=> IRTStar; Γ) body ->
+              LEWT (var |=> tt; Γ) body ->
               LEWT Γ(LELet var init body)
 .
 
@@ -422,7 +429,7 @@ Inductive Lmem_correct : LMem -> Prop :=
      Lmem_correct m ->
      Lmem_correct (LUpdateT a idx v m)
 | LMCF : forall a var body m,
-     LEWT (var |=> IRTStar; MEmpty) body ->
+     LEWT (var |=> tt; MEmpty) body ->
      Lmem_correct m ->
      Lmem_correct (LUpdateF a var body m)
 .
@@ -437,7 +444,7 @@ Qed.
 
 
 Lemma mem_correct_freshF : forall m m' free var body,
-  LEWT (var |=> IRTStar; MEmpty) body ->
+  LEWT (var |=> tt; MEmpty) body ->
   Lmem_correct m ->
   (free,m') = LfreshF m var body ->
   Lmem_correct m'.
@@ -459,7 +466,7 @@ Qed.
 Lemma LMCqueryF : forall a m var body,
     (var, body) = LqueryF a m ->
     Lmem_correct m ->
-    LEWT (var |=> IRTStar; MEmpty) body.
+    LEWT (var |=> tt; MEmpty) body.
 Proof.
   intros * Heq HMc. induction m.
   - inversion Heq; subst. auto using LEWT.
@@ -496,7 +503,7 @@ Qed.
 
 
 Lemma subst_WT : forall e2 Γ var e1,
-  LEWT (var |=> IRTStar; Γ) e2 -> LEWT MEmpty e1 -> LEWT Γ ([var := e1] e2).
+  LEWT (var |=> tt; Γ) e2 -> LEWT MEmpty e1 -> LEWT Γ ([var := e1] e2).
 Proof.
   induction e2; intros Γ var e1 HWT2 HWT1; simpl;
   inversion HWT2; subst;
@@ -556,14 +563,38 @@ Fixpoint MLua2Lir (m : LMem) : Mem :=
   end.
 
 
+(*
+** Translates a λ-Lua environment to LIR: All variables have type '*'
+*)
+Fixpoint LEnv2Lir (Γ : LEnv) : IREnvironment :=
+  match Γ with
+  | MEmpty => MEmpty
+  | MCons var _ Γ' => MCons var IRTStar (LEnv2Lir Γ')
+  end.
+
+
+Lemma InLEnv2Lir : forall v v' Γ,
+    In Γ v = Some v' -> In (LEnv2Lir Γ) v = Some IRTStar.
+Proof.
+  induction Γ; intros H.
+  - discriminate.
+  - destruct a; simpl in *. breakStrDec; auto.
+Qed.
+
+
+Lemma ConsLEnv2Lir : forall v Γ,
+  inclusion (LEnv2Lir (v |=> tt; Γ)) (v |=> IRTStar; LEnv2Lir Γ).
+Proof. unfold inclusion. trivial. Qed.
+
+
 Lemma Lua2LirTypeAux : forall Γ e,
-  LEWT Γ e -> Γ |= Lua2Lir e : IRTStar.
+  LEWT Γ e -> LEnv2Lir Γ |= Lua2Lir e : IRTStar.
 Proof.
   intros Γ e.
   generalize dependent Γ.
   induction e; intros Γ HLE; inversion HLE; subst; simpl;
-  eauto 7 using IRTyping, eq_refl, inclusion_typing,
-    inclusion_shadow', InEq.
+  eauto 8 using IRTyping, eq_refl, inclusion_typing,
+    inclusion_shadow', InEq, InLEnv2Lir, ConsLEnv2Lir.
 Qed.
 
 

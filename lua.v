@@ -552,6 +552,7 @@ Corollary luaPreservationWT : forall e m v m',
 Proof. eapply luaPreservation. Qed.
 
 
+(* Translate a memory to LIR, lifting Lua2Lir pointwise. *)
 Fixpoint MLua2Lir (m : LMem) : Mem :=
   match m with
   | LEmptyMem => EmptyMem
@@ -561,6 +562,7 @@ Fixpoint MLua2Lir (m : LMem) : Mem :=
       UpdateF a var
        (IRELet var IRTStar (IREVar var) (Lua2Lir body)) (MLua2Lir m)
   end.
+
 
 
 (*
@@ -601,6 +603,20 @@ Qed.
 Corollary Lua2LirType : forall e,
     LEWT MEmpty e ->  MEmpty |= Lua2Lir e : IRTStar.
 Proof. eapply Lua2LirTypeAux. Qed.
+
+
+Lemma MLua2LirCorrect : forall m, Lmem_correct m -> mem_correct (MLua2Lir m).
+Proof.
+  intros m Hm.
+  induction Hm; simpl.
+  - auto using mem_correct.
+  - destruct v. eauto using mem_correct, Lua2LirType.
+  - eapply MCF; simpl; trivial.
+    apply IRTyLet; auto using IRTyping, InEq.
+    eapply inclusion_typing.
+    2:{ eapply Lua2LirTypeAux. eauto. }
+    simpl. apply inclusion_shadow'.
+Qed.
 
 
 Lemma L2LirQueryT : forall mem a idx,
@@ -678,7 +694,7 @@ Ltac LmemC :=
 ** its translation to Lir results in the
 ** Lir translation of the final value.
 *)
-Theorem SimLua : forall e m v m',
+Lemma SimLuaBig : forall e m v m',
     Lmem_correct m ->
     LEWT MEmpty e ->
     m /e ==> m' / v  ->
@@ -720,6 +736,17 @@ Proof.
       * rewrite L2LirSubst in H1.
         eauto using bigStep, L2LirValue.
       * eauto using subst_WT, LMCqueryF.
+Qed.
+
+
+Theorem SimLua : forall e m v m',
+    Lmem_correct m ->
+    LEWT MEmpty e ->
+    m /e ==> m' / v  ->
+    multistep (MLua2Lir m) (Lua2Lir e)
+            (MLua2Lir m') (Lua2Lir v).
+Proof.
+  eauto using bigSmall, MLua2LirCorrect, Lua2LirType, bigSmall, SimLuaBig.
 Qed.
 
 

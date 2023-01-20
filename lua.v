@@ -14,7 +14,6 @@ Require Import LIR.pallene.
 Require Import LIR.pall2lir.
 Require Import LIR.lir.
 Require Import LIR.dyn.
-Require Import LIR.biglir.
 
 
 (*
@@ -726,67 +725,6 @@ Ltac LmemC :=
     end.
 
 
-(*
-** If a Lua program results in a value,
-** its translation to Lir results in the
-** Lir translation of the final value.
-*)
-Lemma SimLuaBig : forall e m v m',
-    Lmem_correct m ->
-    LEWT MEmpty e ->
-    m /e ==> m' / v  ->
-    bigStep (MLua2Lir m) (Lua2Lir e)
-            (MLua2Lir m') (Lua2Lir v).
-Proof.
-  intros e m v m' HMC HWT HSt.
-  induction HSt; inversion HWT; subst;
-  LmemC;
-  eauto 7 using bigStep, L2LirValue, L2LirFreshT, L2LirQueryT.
-
-  - simpl. rewrite LuaIndex.
-    destruct v.
-    eapply BStBox.
-    eapply BStSet; eauto.
-    eapply BStUnbox.
-    replace (IREBox TgTbl (IRETAddr a)) with (Lua2Lir (LETAddr a))
-      by trivial. eauto.
-
-  - simpl. eapply BStBox. eapply BStFun.
-    unfold freshF. unfold LfreshF in H.
-    inversion H; subst.
-    f_equal. apply L2LirFreshaux.
-    simpl.
-    f_equal. apply L2LirFreshaux.
-
-  - simpl. eapply BStLet.
-    eauto. rewrite <- L2LirSubst.
-    eauto using subst_WT, luaPreservationWT.
-
-  - specialize (L2LirQueryF _ _ _ _ H) as ?.
-    simpl. eapply BStApp; eauto using bigStep.
-    simpl. destruct (string_dec var var); try easy.
-    specialize (luaPreservation _ _ _ _ HSt2 H0 H4) as [? [? ?]].
-    eapply BStLet.
-    + eauto using bigStep, L2LirValue.
-    + simpl. destruct (string_dec var var); try easy.
-      eapply IHHSt3 in H1.
-      * rewrite L2LirSubst in H1.
-        eauto using bigStep, L2LirValue.
-      * eauto using subst_WT, LMCqueryF.
-Qed.
-
-
-Theorem SimLua : forall e m v m',
-    Lmem_correct m ->
-    LEWT MEmpty e ->
-    m /e ==> m' / v  ->
-    multistep (MLua2Lir m) (Lua2Lir e)
-            (MLua2Lir m') (Lua2Lir v).
-Proof.
-  eauto using bigSmall, MLua2LirCorrect, Lua2LirType, bigSmall, SimLuaBig.
-Qed.
-
-
 Ltac instHI :=
     match goal with
     | [ HI: Lmem_correct ?M -> LEWT MEmpty ?E -> _,
@@ -800,7 +738,7 @@ Ltac instHI :=
 ** If a Lua program results in a value, its translation to Lir results
 ** in the Lir translation of the final value.
 *)
-Theorem SimLua' : forall e m v m',
+Theorem SimLua : forall e m v m',
     Lmem_correct m ->
     LEWT MEmpty e ->
     m /e ==> m' / v  ->

@@ -658,8 +658,8 @@ Qed.
 
 Lemma L2LirQueryF : forall var body a m,
   (var, body) = LqueryF a m ->
-  queryF a (MLua2Lir m) =
-        (var, IRELet var IRTStar (IREVar var) (Lua2Lir body)).
+  (var, IRELet var IRTStar (IREVar var) (Lua2Lir body)) =
+         queryF a (MLua2Lir m).
 Proof.
   intros * HQ.
   induction m.
@@ -744,7 +744,14 @@ Theorem SimLua : forall e m v m',
     m /e ==> m' / v  ->
     multistep (MLua2Lir m) (Lua2Lir e)
             (MLua2Lir m') (Lua2Lir v).
-Proof.
+Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
+                   CongGet1, CongGet2, CongSet1, CongSet2, CongSet3,
+                   CongLet, CongApp1, CongApp2,
+                   multiTrans, multistep1, step, Value, stepValue,
+                   L2LirQueryT, L2LirValue, L2LirFreshT, L2LirFreshF,
+                   L2LirQueryF,
+                   subst_WT, luaPreservationWT, LMCqueryF.
+
   intros * HMC HWT HSt.
   induction HSt.
 
@@ -755,12 +762,10 @@ Proof.
     inversion HWT; subst.
     LmemC.
     repeat instHI.
-    simpl.
-    eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
-                   multiTrans, multistep1, step, Value.
+    simpl...
 
   - (* LStNew *)
-    eauto using CongBox, multistep1, step, L2LirFreshT.
+    simpl...
 
   - (* LStGet *)
     inversion HWT; subst.
@@ -769,12 +774,8 @@ Proof.
     simpl.
     (* reduce e1 and e2 *)
     eapply multiTrans with (m1 := MLua2Lir m'')
-      (e1 := IREGet (IRETAddr a)  (Lua2Lir idx)).
-    { eauto 8 using CongBox, CongUnbox, CongGet1, CongGet2,
-                    multiTrans, multistep1, step, Value. }
-    eapply multistep1.
-    rewrite L2LirQueryT.
-    eauto using L2LirQueryT, step, L2LirValue, stepValue.
+      (e1 := IREGet (IRETAddr a)  (Lua2Lir idx))...
+    rewrite L2LirQueryT...
 
   - (* LStSet *)
     inversion HWT; subst.
@@ -784,16 +785,11 @@ Proof.
     simpl in *.
     (* reduce e1,  e2, and e3 *)
     eapply multiTrans with (m1 := MLua2Lir m''')
-      (e1 := IREBox TgNil (IRESet (IRETAddr a) (Lua2Lir idx) (Lua2Lir e))).
-    { eauto 14 using CongBox, CongUnbox, CongSet1, CongSet2, CongSet3,
-                     multiTrans, multistep1,  Value, L2LirQueryT, step,
-                     L2LirValue, stepValue. }
-    rewrite LuaIndex.
-    eauto 10 using CongBox, multistep1, L2LirQueryT, step,
-                   L2LirValue, stepValue.
+      (e1 := IREBox TgNil (IRESet (IRETAddr a) (Lua2Lir idx) (Lua2Lir e)))...
+    rewrite LuaIndex...
 
   - (* LStFun *)
-    eauto using CongBox, multistep1, step, L2LirFreshF.
+    simpl...
 
   - (* LStLet *)
     inversion HWT; subst.
@@ -801,12 +797,9 @@ Proof.
     repeat instHI.
     simpl.
     eapply multiTrans with (m1 := MLua2Lir m')
-      (e1 := IRELet var IRTStar (Lua2Lir vinit) (Lua2Lir body)).
-    { eauto using CongLet. }
-    eapply MStMStep.
-    { eauto using StLet, L2LirValue, stepValue. }
-    rewrite <- L2LirSubst.
-    eauto using subst_WT, luaPreservationWT.
+      (e1 := IRELet var IRTStar (Lua2Lir vinit) (Lua2Lir body))...
+    eapply MStMStep...  (* StLet *)
+    rewrite <- L2LirSubst...
 
   - (* LStApp *)
     inversion HWT; subst.
@@ -815,21 +808,12 @@ Proof.
     simpl.
     (* reduce e1 and e2 *)
     eapply multiTrans with (m1 := MLua2Lir m'')
-      (e1 := IREApp (IREFAddr a) (Lua2Lir v)).
-    { eauto 14 using CongBox, CongUnbox, CongApp1, CongApp2, multiTrans,
-                  multistep1,  Value, step, L2LirValue, stepValue. }
-    eapply MStMStep.
-    { eapply StApp.
-      - eauto using L2LirValue, stepValue.
-      - symmetry.
-        eauto using L2LirQueryF. }
-    eapply MStMStep.
-    { eapply StLet. eauto using L2LirValue, stepValue. }
+      (e1 := IREApp (IREFAddr a) (Lua2Lir v))...
+    eapply MStMStep...  (* StApp *)
+    eapply MStMStep...  (* StLet *)
     simpl.
     destruct (string_dec var var); try easy.
-    eapply MStMStep.
-    { eapply StLet. eauto using L2LirValue, stepValue. }
-    rewrite <- L2LirSubst.
-    eauto using subst_WT, LMCqueryF, luaPreservationWT.
+    eapply MStMStep...  (* StLet *)
+    rewrite <- L2LirSubst...
 Qed.
 

@@ -305,7 +305,7 @@ Inductive Lstep : LMem -> LE -> LMem -> LE -> Prop :=
     m / e1 ==> m' / (LENum n1) ->
     m' / e2 ==> m'' / (LENum n2) ->
     m / LEPlus e1 e2 ==> m'' / LENum (n1 + n2)
-| LStCstr : forall m m' free,
+| LStNew : forall m m' free,
     (free, m') = LfreshT m ->
     m / LENew ==> m' / LETAddr free
 | LStGet : forall m e1 m' a e2 m'' idx,
@@ -544,6 +544,14 @@ Proof.
 Qed.
 
 
+Corollary luaPreservationMem : forall e m v m',
+  m / e ==> m' / v ->
+  Lmem_correct m ->
+  LEWT MEmpty e ->
+  Lmem_correct m'.
+Proof. eapply luaPreservation. Qed.
+
+
 Corollary luaPreservationWT : forall e m v m',
   m / e ==> m' / v ->
   Lmem_correct m ->
@@ -551,6 +559,24 @@ Corollary luaPreservationWT : forall e m v m',
   LEWT MEmpty v.
 Proof. eapply luaPreservation. Qed.
 
+
+Lemma stepValue : forall e m v m',
+  m / e ==> m' / v ->
+  Lmem_correct m ->
+  LEWT MEmpty e ->
+  LValue v.
+Proof.
+  intros * HSt HM HWT.
+  induction HSt; inversion HWT; subst;
+  eauto 10 using LValue, LMCqueryT, LMCqueryF, luaPreservationMem,
+                 luaPreservationWT, subst_WT.
+Qed.
+
+
+
+(*
+** Correspondence between λ-Lua reduction and LIR reduction.
+*)
 
 (* Translate a memory to LIR, lifting Lua2Lir pointwise. *)
 Fixpoint MLua2Lir (m : LMem) : Mem :=
@@ -658,12 +684,23 @@ Lemma L2LirFreshT : forall free m m',
   (free, m') = LfreshT m -> (free, MLua2Lir m') = freshT (MLua2Lir m).
 Proof.
   intros free m m' H.
-  unfold LfreshT in H. inversion H; subst.
+  unfold LfreshT in H. injection H; intros; subst.
   unfold freshT.
   simpl. f_equal. apply L2LirFreshaux.
   simpl. f_equal. apply L2LirFreshaux.
 Qed.
 
+
+Lemma L2LirFreshF : forall free m m' v b,
+  (free, m') = LfreshF m v b ->
+  (free, MLua2Lir m') = freshF (MLua2Lir m) v (IRELet v IRTStar (IREVar v) (Lua2Lir b)).
+Proof.
+  intros * H.
+  unfold LfreshF in H. injection H; intros; subst.
+  unfold freshF.
+  simpl. f_equal. apply L2LirFreshaux.
+  simpl. f_equal. apply L2LirFreshaux.
+Qed.
 
 
 Lemma L2LirSubst : forall e1 var e2,
@@ -679,7 +716,7 @@ Qed.
 
 (* Propagate 'Lmem_correct' to all memories *)
 Ltac LmemC :=
-  match goal with
+  repeat match goal with
     | [ M : LMem |- _] =>  (* for all memories *)
       match goal with
       | [ H : Lmem_correct M |- _] => fail 1  (* already done *)
@@ -703,7 +740,7 @@ Lemma SimLuaBig : forall e m v m',
 Proof.
   intros e m v m' HMC HWT HSt.
   induction HSt; inversion HWT; subst;
-  repeat LmemC;
+  LmemC;
   eauto 7 using bigStep, L2LirValue, L2LirFreshT, L2LirQueryT.
 
   - simpl. rewrite LuaIndex.
@@ -749,4 +786,112 @@ Proof.
   eauto using bigSmall, MLua2LirCorrect, Lua2LirType, bigSmall, SimLuaBig.
 Qed.
 
+
+Ltac instHI :=
+    match goal with
+    | [ HI: Lmem_correct ?M -> LEWT MEmpty ?E -> _,
+        HM: Lmem_correct ?M,
+        HWT: LEWT MEmpty ?E |- _] =>
+      specialize (HI HM HWT)
+    end.
+
+
+(*
+** If a Lua program results in a value, its translation to Lir results
+** in the Lir translation of the final value.
+*)
+Theorem SimLua' : forall e m v m',
+    Lmem_correct m ->
+    LEWT MEmpty e ->
+    m /e ==> m' / v  ->
+    multistep (MLua2Lir m) (Lua2Lir e)
+            (MLua2Lir m') (Lua2Lir v).
+Proof.
+  intros * HMC HWT HSt.
+  induction HSt.
+
+  - (* LStValue *)
+    eauto using multistep.
+
+  - (* LStPlus *)
+    inversion HWT; subst.
+    LmemC.
+    repeat instHI.
+    simpl.
+    eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
+                   multiTrans, multistep1, step, Value.
+
+  - (* LStNew *)
+    eauto using CongBox, multistep1, step, L2LirFreshT.
+
+  - (* LStGet *)
+    inversion HWT; subst.
+    LmemC.
+    repeat instHI.
+    simpl.
+    (* reduce e1 and e2 *)
+    eapply multiTrans with (m1 := MLua2Lir m'')
+      (e1 := IREGet (IRETAddr a)  (Lua2Lir idx)).
+    { eauto 8 using CongBox, CongUnbox, CongGet1, CongGet2,
+                    multiTrans, multistep1, step, Value. }
+    eapply multistep1.
+    rewrite L2LirQueryT.
+    eauto using L2LirQueryT, step, L2LirValue, stepValue.
+
+  - (* LStSet *)
+    inversion HWT; subst.
+    LmemC.
+    repeat instHI.
+    destruct v.
+    simpl in *.
+    (* reduce e1,  e2, and e3 *)
+    eapply multiTrans with (m1 := MLua2Lir m''')
+      (e1 := IREBox TgNil (IRESet (IRETAddr a) (Lua2Lir idx) (Lua2Lir e))).
+    { eauto 14 using CongBox, CongUnbox, CongSet1, CongSet2, CongSet3,
+                     multiTrans, multistep1,  Value, L2LirQueryT, step,
+                     L2LirValue, stepValue. }
+    rewrite LuaIndex.
+    eauto 10 using CongBox, multistep1, L2LirQueryT, step,
+                   L2LirValue, stepValue.
+
+  - (* LStFun *)
+    eauto using CongBox, multistep1, step, L2LirFreshF.
+
+  - (* LStLet *)
+    inversion HWT; subst.
+    LmemC.
+    repeat instHI.
+    simpl.
+    eapply multiTrans with (m1 := MLua2Lir m')
+      (e1 := IRELet var IRTStar (Lua2Lir vinit) (Lua2Lir body)).
+    { eauto using CongLet. }
+    eapply MStMStep.
+    { eauto using StLet, L2LirValue, stepValue. }
+    rewrite <- L2LirSubst.
+    eauto using subst_WT, luaPreservationWT.
+
+  - (* LStApp *)
+    inversion HWT; subst.
+    LmemC.
+    repeat instHI.
+    simpl.
+    (* reduce e1 and e2 *)
+    eapply multiTrans with (m1 := MLua2Lir m'')
+      (e1 := IREApp (IREFAddr a) (Lua2Lir v)).
+    { eauto 14 using CongBox, CongUnbox, CongApp1, CongApp2, multiTrans,
+                  multistep1,  Value, step, L2LirValue, stepValue. }
+    eapply MStMStep.
+    { eapply StApp.
+      - eauto using L2LirValue, stepValue.
+      - symmetry.
+        eauto using L2LirQueryF. }
+    eapply MStMStep.
+    { eapply StLet. eauto using L2LirValue, stepValue. }
+    simpl.
+    destruct (string_dec var var); try easy.
+    eapply MStMStep.
+    { eapply StLet. eauto using L2LirValue, stepValue. }
+    rewrite <- L2LirSubst.
+    eauto using subst_WT, LMCqueryF, luaPreservationWT.
+Qed.
 

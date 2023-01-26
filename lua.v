@@ -725,8 +725,9 @@ Ltac LmemC :=
     end.
 
 
+(* Instanciate induction hypotheses *)
 Ltac instHI :=
-    match goal with
+    repeat match goal with
     | [ HI: Lmem_correct ?M -> LEWT MEmpty ?E -> _,
         HM: Lmem_correct ?M,
         HWT: LEWT MEmpty ?E |- _] =>
@@ -759,9 +760,8 @@ Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
     eauto using multistep.
 
   - (* LStPlus *)
-    inversion HWT; subst.
-    LmemC.
-    repeat instHI.
+    inversion HWT; subst;
+    LmemC; instHI;
     simpl...
 
   - (* LStNew *)
@@ -769,22 +769,19 @@ Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
 
   - (* LStGet *)
     inversion HWT; subst.
-    LmemC.
-    repeat instHI.
+    LmemC. instHI.
     simpl.
     (* reduce e1 and e2 *)
-    eapply multiTrans with (m1 := MLua2Lir m'')
-      (e1 := IREGet (IRETAddr a)  (Lua2Lir idx))...
+    eapply multiTrans with (e1 := IREGet (IRETAddr a)  (Lua2Lir idx))...
     rewrite L2LirQueryT...
 
   - (* LStSet *)
     inversion HWT; subst.
-    LmemC.
-    repeat instHI.
+    LmemC. instHI.
     destruct v.
     simpl in *.
     (* reduce e1,  e2, and e3 *)
-    eapply multiTrans with (m1 := MLua2Lir m''')
+    eapply multiTrans with
       (e1 := IREBox TgNil (IRESet (IRETAddr a) (Lua2Lir idx) (Lua2Lir e)))...
     rewrite LuaIndex...
 
@@ -793,22 +790,19 @@ Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
 
   - (* LStLet *)
     inversion HWT; subst.
-    LmemC.
-    repeat instHI.
+    LmemC. instHI.
     simpl.
-    eapply multiTrans with (m1 := MLua2Lir m')
+    eapply multiTrans with
       (e1 := IRELet var IRTStar (Lua2Lir vinit) (Lua2Lir body))...
     eapply MStMStep...  (* StLet *)
     rewrite <- L2LirSubst...
 
   - (* LStApp *)
     inversion HWT; subst.
-    LmemC.
-    repeat instHI.
+    LmemC. instHI.
     simpl.
     (* reduce e1 and e2 *)
-    eapply multiTrans with (m1 := MLua2Lir m'')
-      (e1 := IREApp (IREFAddr a) (Lua2Lir v))...
+    eapply multiTrans with (e1 := IREApp (IREFAddr a) (Lua2Lir v))...
     eapply MStMStep...  (* StApp *)
     eapply MStMStep...  (* StLet *)
     simpl.

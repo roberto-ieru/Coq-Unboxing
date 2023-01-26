@@ -506,6 +506,25 @@ Fixpoint Tbones (e : IRE) : IRE :=
   end.
 
 
+(* Equal bones is the same as equal 'dyn' *)
+Lemma DynBones : forall e1 e2, dyn e1 = dyn e2 <-> Tbones e1 = Tbones e2.
+Proof.
+  split; generalize dependent e2; induction e1; intros * H;
+  induction e2;
+  try (discriminate H);  (* elliminate cases with different structures *)
+  try (injection H; intros; subst);  (* extract equality of fields *)
+  eauto;  (* solve cases that don't need 'f_equal' *)
+  (* break equalities up to 'dyn' or 'Tbones' *)
+  simpl;
+  repeat match goal with
+    |[ |- dyn _ = dyn _] => idtac
+    |[ |- Tbones _ = Tbones _] => idtac
+    |[ |- _ _ = _ _] => f_equal
+  end;
+  eauto.  (* solve the subcases *)
+Qed.
+
+
 (* Expressions related by Precision differ only in boxes and unboxes *)
 Lemma EqBones : forall Γ e1 t1 e2 t2,
   Precision Γ e1 t1 e2 t2 -> Tbones e1 = Tbones e2.
@@ -513,7 +532,6 @@ Proof.
   intros * HP.
   induction HP; trivial; simpl; congruence.
 Qed.
-
 
 
 Module Examples.

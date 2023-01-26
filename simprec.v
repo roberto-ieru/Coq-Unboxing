@@ -402,7 +402,7 @@ Proof.
   try (eapply GroundType in H; only 2: (simpl; trivial);
     apply valBoxVal in H1;
     exists x0; split;
-    eauto using multiTrans, CongUnbox, step, multistep).
+    eauto using multiTrans, CongUnbox, StUnbox, multistep).
 Qed.
 
 

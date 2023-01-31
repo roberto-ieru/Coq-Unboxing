@@ -574,10 +574,8 @@ Proof.
   induction HMC; intros * HEq.
   - simpl in HEq. subst. trivial.
   - destruct v.
-    breakIndexDec; subst; simpl;
-    breakIndexDec; subst; simpl;
-      auto;
-      exfalso; auto.
+    subst. simpl.
+    breakIndexDec; subst; auto.
   - simpl. inversion HMC; subst; auto.
 Qed.
 

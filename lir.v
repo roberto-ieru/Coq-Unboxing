@@ -31,7 +31,7 @@ Inductive IRType : Set :=
 .
 
 
-(* Tape equality is decidable and computable *)
+(* Type equality is decidable and computable *)
 Lemma dec_IRType : forall (t1 t2 : IRType), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. auto using dec_Tag. Defined.
 

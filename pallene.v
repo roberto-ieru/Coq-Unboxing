@@ -22,7 +22,7 @@ Inductive PType : Set :=
 
 
 Lemma dec_TP : forall (t1 t2 : PType), {t1 = t2} + {t1 <> t2}.
-Proof. decide equality. Qed.
+Proof. decide equality. Defined.
 
 
 (* Type environment for Pallene *)
@@ -681,7 +681,7 @@ Lemma PMCValue : forall m a n, PValue (PqueryT a n m).
 Proof.
   intros.
   induction m; eauto using PValue.
-  destruct p. simpl.
+  destruct p. unfold PqueryT.
   lir.breakIndexDec; trivial.
 Qed.
 
@@ -696,7 +696,7 @@ Lemma PMCTy : forall m a n Γ,
 Proof.
   intros * H.
   induction H; eauto using PTyping.
-  simpl. lir.breakIndexDec; subst; eauto using Ptyping_empty.
+  unfold PqueryT. lir.breakIndexDec; subst; eauto using Ptyping_empty.
 Qed.
 
 

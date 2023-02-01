@@ -329,7 +329,7 @@ Fixpoint ToIndex (e : IRE) : Index :=
 Lemma Index_dec : forall (i1 i2 : Index), {i1 = i2} + {i1 <> i2}.
 Proof.
   decide equality; auto using Nat.eq_dec, dec_Tag.
-Qed.
+Defined.
 
 
 Ltac breakIndexDec :=

@@ -75,13 +75,10 @@ Proof with eauto 10 using pstep, PValue.
   eapply MStMStep...  (* Let *)
   eapply MStMStep...  (* Get *)
   simpl.
-  destruct (lir.Index_dec (PToIndex 1) (PToIndex 2)); try easy.
-  destruct (lir.Index_dec (PToIndex 1) (PToIndex 1)); try easy.
   eapply MStMStep.
   { eapply PStGet1. eapply PStCast; auto using PValue; easy. }
   eapply MStMStep...  (* Get *)
   simpl.
-  destruct (lir.Index_dec (PToIndex 2) (PToIndex 2)); try easy.
   eapply MStMStep.
   { eapply PStCast; auto using PValue; easy. }
   eauto using multistep.

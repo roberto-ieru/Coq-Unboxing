@@ -563,6 +563,8 @@ Proof.
 Qed.
 
 
+Opaque Index_dec.
+
 Lemma PqueryT2 : forall {m a idx v},
   Pmem_correct m ->
   PqueryT a idx m = v ->

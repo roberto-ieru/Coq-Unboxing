@@ -4,7 +4,6 @@ Require Import Coq.Strings.String.
 Require Import Ascii.
 Require Import Bool.
 Require Import Nat.
-Require Import Lia.
 
 Require Import LIR.maps.
 Require Import LIR.lir.

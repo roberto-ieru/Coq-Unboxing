@@ -4,7 +4,6 @@ Require Import Coq.Strings.String.
 Require Import Ascii.
 Require Import Bool.
 Require Import Nat.
-Require Import Lia.
 
 Require Import LIR.maps.
 
@@ -51,47 +50,47 @@ Inductive PE : Set :=
 (*
 ** Typing rules for λ-Pallene
 *)
-Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
+Reserved Notation "Γ '|p=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
 
 Inductive PTyping : PEnvironment -> PE -> PType -> Prop :=
-| PTyNil : forall Γ, Γ |= PENil : PTNil
-| PTyInt : forall Γ n, Γ |= PENum n : PTInt
+| PTyNil : forall Γ, Γ |p= PENil : PTNil
+| PTyInt : forall Γ n, Γ |p= PENum n : PTInt
 | PTyVal : forall Γ var T,
     In Γ var = Some T ->
-    Γ |= PEVar var : T
+    Γ |p= PEVar var : T
 | PTyPlus : forall Γ e1 e2,
-    Γ |= e1 : PTInt ->
-    Γ |= e2 : PTInt ->
-    Γ |= PEPlus e1 e2 : PTInt
-| PTyNew : forall Γ T, Γ |= PENew T : PTArr T
-| PTyTAddr : forall Γ a T, Γ |= PETAddr a T : PTArr T
-| PTyFAddr : forall Γ a T1 T2, Γ |= PEFAddr a T1 T2 : PTFun T1 T2
+    Γ |p= e1 : PTInt ->
+    Γ |p= e2 : PTInt ->
+    Γ |p= PEPlus e1 e2 : PTInt
+| PTyNew : forall Γ T, Γ |p= PENew T : PTArr T
+| PTyTAddr : forall Γ a T, Γ |p= PETAddr a T : PTArr T
+| PTyFAddr : forall Γ a T1 T2, Γ |p= PEFAddr a T1 T2 : PTFun T1 T2
 | PTyGet : forall Γ e1 T e2,
-    Γ |= e1 : PTArr T ->
-    Γ |= e2 : PTInt ->
-    Γ |= PEGet e1 e2 : T
+    Γ |p= e1 : PTArr T ->
+    Γ |p= e2 : PTInt ->
+    Γ |p= PEGet e1 e2 : T
 | PTySet : forall Γ e1 T e2 e3,
-    Γ |= e1 : PTArr T ->
-    Γ |= e2 : PTInt ->
-    Γ |= e3 : T ->
-    Γ |= PESet e1 e2 e3 : PTNil
+    Γ |p= e1 : PTArr T ->
+    Γ |p= e2 : PTInt ->
+    Γ |p= e3 : T ->
+    Γ |p= PESet e1 e2 e3 : PTNil
 | PTyFun : forall Γ var Tvar body Tbody,
-    var |=> Tvar; Γ |= body : Tbody ->
-    Γ |= PEFun var Tvar body Tbody : PTFun Tvar Tbody
+    (var |=> Tvar; Γ) |p= body : Tbody ->
+    Γ |p= PEFun var Tvar body Tbody : PTFun Tvar Tbody
 | PTyLet : forall Γ var Tvar init body Tbody,
-    Γ |= init : Tvar ->
-    var |=> Tvar; Γ |= body : Tbody ->
-    Γ |= PELet var Tvar init body : Tbody
+    Γ |p= init : Tvar ->
+    (var |=> Tvar; Γ) |p= body : Tbody ->
+    Γ |p= PELet var Tvar init body : Tbody
 | PTyApp : forall Γ e1 e2 T1 T2,
-    Γ |= e1 : PTFun T1 T2 ->
-    Γ |= e2 : T1 ->
-    Γ |= PEApp e1 e2 : T2
+    Γ |p= e1 : PTFun T1 T2 ->
+    Γ |p= e2 : T1 ->
+    Γ |p= PEApp e1 e2 : T2
 | PTyCast : forall Γ e T1 T2,
-    Γ |= e : T1 ->
-    Γ |= PECast e T2 : T2
+    Γ |p= e : T1 ->
+    Γ |p= PECast e T2 : T2
 
-where "Γ '|=' e ':' t" := (PTyping Γ e t)
+where "Γ '|p=' e ':' t" := (PTyping Γ e t)
 .
 
 
@@ -150,7 +149,7 @@ Fixpoint typeOf Γ e : option PType :=
 (*
 ** 'typeOf' is correct (part 1)
 *)
-Lemma typeOfCorrect' : forall Γ e T, Γ |= e : T -> typeOf Γ e = Some T.
+Lemma typeOfCorrect' : forall Γ e T, Γ |p= e : T -> typeOf Γ e = Some T.
 Proof.
   intros Γ e T Hty.
   induction Hty; try easy;
@@ -163,17 +162,17 @@ Qed.
 
 
 Ltac destTOf Γ e :=
-    destruct (typeOf Γ e) as [[ | | | ? | ? ?] | ?] eqn:?; try easy.
+    destruct (typeOf Γ e) as [[ | | | ? | ? ?] | _] eqn:?; try easy.
 
 (*
 ** 'typeOf' is correct (part 2)
 *)
-Lemma typeOfCorrect'' : forall Γ e T, typeOf Γ e = Some T -> Γ |= e : T.
+Lemma typeOfCorrect'' : forall Γ e T, typeOf Γ e = Some T -> Γ |p= e : T.
 Proof.
   intros Γ e T Heq.
   generalize dependent Γ.
   generalize dependent T.
-  induction e; intros T Γ Heq; subst;
+  induction e; intros * Heq; subst;
   simpl in Heq; inversion Heq; subst; eauto using PTyping;
   try (destTOf Γ e1; destTOf Γ e2;
     inversion Heq; subst; eauto using PTyping; fail).
@@ -207,7 +206,7 @@ Qed.
 (*
 ** Rules and algorithm agree
 *)
-Lemma typeOfCorrect : forall Γ e T, typeOf Γ e = Some T <-> Γ |= e : T.
+Lemma typeOfCorrect : forall Γ e T, typeOf Γ e = Some T <-> Γ |p= e : T.
 Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 
 
@@ -215,7 +214,7 @@ Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 ** Pallene types are unique
 *)
 Lemma PTypeUnique : forall Γ e t1 t2,
-    Γ |= e : t1 -> Γ |= e : t2 -> t1 = t2.
+    Γ |p= e : t1 -> Γ |p= e : t2 -> t1 = t2.
 Proof.
   intros Γ e t1 t2 H1 H2.
   apply typeOfCorrect in H1.
@@ -225,9 +224,9 @@ Qed.
 
 
 Lemma PinclusionType : forall Γ Γ' e T,
-  Γ |= e : T ->
+  Γ |p= e : T ->
   inclusion Γ Γ' ->
-  Γ' |= e : T.
+  Γ' |p= e : T.
 Proof.
   intros * HTy HIn.
   generalize dependent Γ'.
@@ -236,8 +235,8 @@ Qed.
 
 
 Lemma PinclusionEmpty : forall Γ e T,
-  MEmpty |= e : T ->
-  Γ |= e : T.
+  MEmpty |p= e : T ->
+  Γ |p= e : T.
 Proof.
   eauto using PinclusionType, inclusion_empty.
 Qed.
@@ -259,7 +258,7 @@ Inductive PValue : PE -> Prop :=
 
 Lemma ValStar : forall v,
   PValue v ->
-  MEmpty |= v : PTStar ->
+  MEmpty |p= v : PTStar ->
   exists v', v = PECast v' PTStar /\ PValue v'.
 Proof.
   intros * HV HT. inversion HT; subst; inversion HV; subst; eauto.
@@ -267,7 +266,7 @@ Qed.
 
 Lemma ValNil : forall v,
   PValue v ->
-  MEmpty |= v : PTNil ->
+  MEmpty |p= v : PTNil ->
   v = PENil.
 Proof.
   intros * HV HT. inversion HT; subst; inversion HV; subst; eauto.
@@ -275,7 +274,7 @@ Qed.
 
 Lemma ValInt : forall v,
   PValue v ->
-  MEmpty |= v : PTInt ->
+  MEmpty |p= v : PTInt ->
   exists n, v = PENum n.
 Proof.
   intros * HV HT. inversion HT; subst; inversion HV; subst; eauto.
@@ -283,7 +282,7 @@ Qed.
 
 Lemma ValArr : forall v T,
   PValue v ->
-  MEmpty |= v : PTArr T ->
+  MEmpty |p= v : PTArr T ->
   exists a, v = PETAddr a T.
 Proof.
   intros * HV HT. inversion HT; subst; inversion HV; subst; eauto.
@@ -291,7 +290,7 @@ Qed.
 
 Lemma ValFun : forall v T1 T2,
   PValue v ->
-  MEmpty |= v : PTFun T1 T2 ->
+  MEmpty |p= v : PTFun T1 T2 ->
   exists a, v = PEFAddr a T1 T2.
 Proof.
   intros * HV HT. inversion HT; subst; inversion HV; subst; eauto.
@@ -334,9 +333,9 @@ Qed.
 *)
 Lemma CastEqType : forall e T1 T2 v,
   PValue e ->
-  MEmpty |= e : T1 ->
+  MEmpty |p= e : T1 ->
   PCast e T2 = Some v ->
-  MEmpty |= v : T2.
+  MEmpty |p= v : T2.
 Proof.
   intros * HV HT HC.
   remember MEmpty as Gamma eqn:HEq.
@@ -351,7 +350,7 @@ Qed.
 *)
 Lemma CastToItsType : forall T v,
   PValue v ->
-  MEmpty |= v : T ->
+  MEmpty |p= v : T ->
   PCast v T = Some v.
 Proof.
   intros * HV HT.
@@ -437,30 +436,30 @@ Definition PfreshF (m : PMem) (v : string) (t : PType) (b : PE) :
     (f, PUpdateF f v t (PECast b PTStar) m).
 
 
-Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
+Reserved Notation "'[' x ':=' s ']p' t" (at level 20, x constr).
 
 
 Fixpoint substitution (var : string) (y : PE)  (e : PE) : PE :=
  match e with
  | PENil => e
  | PENum n => e
- | PEPlus e1 e2 => PEPlus ([var := y] e1) ([var := y] e2)
+ | PEPlus e1 e2 => PEPlus ([var := y]p e1) ([var := y]p e2)
  | PENew _ => e
  | PETAddr a _ => e
  | PEFAddr a _ _ => e
- | PEGet e1 e2 => PEGet ([var := y] e1) ([var := y] e2)
- | PESet e1 e2 e3 => PESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
+ | PEGet e1 e2 => PEGet ([var := y]p e1) ([var := y]p e2)
+ | PESet e1 e2 e3 => PESet ([var := y]p e1) ([var := y]p e2) ([var := y]p e3)
  | PEVar var' => if string_dec var var' then y else e
  | PEFun var' T1 body T2 => if string_dec var var' then e
-                          else PEFun var' T1 ([var := y] body) T2
+                          else PEFun var' T1 ([var := y]p body) T2
  | PELet var' Tvar init body =>
      if string_dec var var'
-       then PELet var' Tvar ([var := y] init) body
-       else PELet var' Tvar ([var := y] init) ([var := y] body)
- | PEApp e1 e2 => PEApp ([var := y] e1) ([var := y] e2)
- | PECast e T => PECast ([var := y] e) T
+       then PELet var' Tvar ([var := y]p init) body
+       else PELet var' Tvar ([var := y]p init) ([var := y]p body)
+ | PEApp e1 e2 => PEApp ([var := y]p e1) ([var := y]p e2)
+ | PECast e T => PECast ([var := y]p e) T
 end
-where "'[' x ':=' s ']' t" := (substitution x s t)
+where "'[' x ':=' s ']p' t" := (substitution x s t)
 .
 
 
@@ -468,7 +467,7 @@ where "'[' x ':=' s ']' t" := (substitution x s t)
 ** Extending an environment preserves typing
 *)
 Lemma Pinclusion_typing : forall Γ Γ' e te,
-  inclusion Γ Γ' -> Γ |= e : te -> Γ' |= e : te.
+  inclusion Γ Γ' -> Γ |p= e : te -> Γ' |p= e : te.
 Proof.
   intros Γ Γ' e te Hin Hty.
   generalize dependent Γ'.
@@ -479,7 +478,7 @@ Qed.
 (*
 ** Particular case when extending the empty environment
 *)
-Lemma Ptyping_empty : forall Γ e te, MEmpty |= e : te -> Γ |= e : te.
+Lemma Ptyping_empty : forall Γ e te, MEmpty |p= e : te -> Γ |p= e : te.
 Proof.
   eauto using Pinclusion_typing, inclusion_empty.
 Qed.
@@ -489,9 +488,9 @@ Qed.
 ** Substitution preserves typing
 *)
 Lemma Psubst_typing : forall e2 Γ var tv te e1,
-  (var |=> tv; Γ) |= e2 : te ->
-  MEmpty |= e1 : tv ->
-       Γ |= ([var := e1] e2) : te.
+  (var |=> tv; Γ) |p= e2 : te ->
+  MEmpty |p= e1 : tv ->
+       Γ |p= ([var := e1]p e2) : te.
 Proof.
   induction e2; intros Γ var tv te e1 HT2 HT1;
   simpl; inversion HT2; subst;
@@ -511,79 +510,79 @@ Definition setTable (m : PMem) (a : lir.address) (idx : nat) (v : PE)
 (*
 ** Evaluation steps for Lir expressions
 *)
-Reserved Notation "m '/' e --> m1 '/' e1"
+Reserved Notation "m '/' e '-p->' m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
-Reserved Notation "m '/' e --> 'fail'"
+Reserved Notation "m '/' e '-p->' 'fail'"
 (at level 40, e at level 39).
 
 
 Inductive pstep : PMem -> PE -> PMem -> PE -> Prop :=
 | PStPlus1 : forall m e1 e2 m' e1',
-    m / e1 --> m' / e1' ->
-    m / PEPlus e1 e2 --> m' / PEPlus e1' e2
+    m / e1 -p-> m' / e1' ->
+    m / PEPlus e1 e2 -p-> m' / PEPlus e1' e2
 | PStPlus2 : forall m e1 e2 m' e2',
     PValue e1 ->
-    m / e2 --> m' / e2' ->
-    m /  PEPlus e1 e2 --> m' /  PEPlus e1 e2'
+    m / e2 -p-> m' / e2' ->
+    m /  PEPlus e1 e2 -p-> m' /  PEPlus e1 e2'
 | PStPlus : forall m n1 n2,
-    m /  PEPlus (PENum n1) (PENum n2) --> m /  PENum (n1 + n2)
+    m /  PEPlus (PENum n1) (PENum n2) -p-> m /  PENum (n1 + n2)
 | PStNew : forall m m' free T,
     (free, m') = PfreshT m ->
-    m / PENew T --> m' / PETAddr free T
+    m / PENew T -p-> m' / PETAddr free T
 | PStGet1 : forall m e1 e2 m' e1',
-    m /e1 --> m' /e1' ->
-    m / PEGet e1 e2 --> m' / PEGet e1' e2
+    m /e1 -p-> m' /e1' ->
+    m / PEGet e1 e2 -p-> m' / PEGet e1' e2
 | PStGet2 : forall m e1 e2 m' e2',
     PValue e1 ->
-    m /e2 --> m' /e2' ->
-    m / PEGet e1 e2 --> m' / PEGet e1 e2'
+    m /e2 -p-> m' /e2' ->
+    m / PEGet e1 e2 -p-> m' / PEGet e1 e2'
 | PStGet : forall m a idx T,
-    m / PEGet (PETAddr a T) (PENum idx) --> m / PECast (PqueryT a idx m) T
+    m / PEGet (PETAddr a T) (PENum idx) -p-> m / PECast (PqueryT a idx m) T
 | PStSet1 : forall m e1 e2 e3 m' e1',
-    m / e1 --> m' / e1' ->
-    m / PESet e1 e2 e3 --> m' / PESet e1' e2 e3
+    m / e1 -p-> m' / e1' ->
+    m / PESet e1 e2 e3 -p-> m' / PESet e1' e2 e3
 | PStSet2 : forall m e1 e2 e3 m' e2',
     PValue e1 ->
-    m / e2 --> m' / e2' ->
-    m / PESet e1 e2 e3 --> m' / PESet e1 e2' e3
+    m / e2 -p-> m' / e2' ->
+    m / PESet e1 e2 e3 -p-> m' / PESet e1 e2' e3
 | PStSet3 : forall m e1 e2 e3 m' e3',
     PValue e1 -> PValue e2 ->
-    m / e3 --> m' / e3' ->
-    m / PESet e1 e2 e3 --> m' / PESet e1 e2 e3'
+    m / e3 -p-> m' / e3' ->
+    m / PESet e1 e2 e3 -p-> m' / PESet e1 e2 e3'
 | PStSet : forall m a idx v T (Vv : PValue v),
     PValue v ->  (* shouldn't be necessary, but otherwise it is shelved *)
-    m / PESet (PETAddr a T) (PENum idx) v --> setTable m a idx v Vv / PENil
+    m / PESet (PETAddr a T) (PENum idx) v -p-> setTable m a idx v Vv / PENil
 | PStFun : forall m m' v b free T1 T2,
     (free, m') = PfreshF m v T1 b ->
-    m / PEFun v T1 b T2 --> m' / PEFAddr free T1 T2
+    m / PEFun v T1 b T2 -p-> m' / PEFAddr free T1 T2
 | PStLet1 : forall m m' init init' body var TV,
-    m / init --> m' / init' ->
-    m / PELet var TV init body --> m' / PELet var TV init' body
+    m / init -p-> m' / init' ->
+    m / PELet var TV init body -p-> m' / PELet var TV init' body
 | PStLet : forall m init body var TV,
   PValue init ->
-  m / PELet var TV init body --> m / ([var := init] body)
+  m / PELet var TV init body -p-> m / ([var := init]p body)
 | PStApp1 : forall m e1 e2 m' e1',
-    m / e1 --> m' / e1' ->
-    m / PEApp e1 e2 --> m' / PEApp e1' e2
+    m / e1 -p-> m' / e1' ->
+    m / PEApp e1 e2 -p-> m' / PEApp e1' e2
 | PStApp2 : forall m e1 e2 m' e2',
     PValue e1 ->
-    m / e2 --> m' / e2' ->
-    m / PEApp e1 e2 --> m' / PEApp e1 e2'
+    m / e2 -p-> m' / e2' ->
+    m / PEApp e1 e2 -p-> m' / PEApp e1 e2'
 | PStApp : forall m a var type body v T1 T2,
     PValue v ->
     (var, type, body) = PqueryF a m ->
-    m / PEApp (PEFAddr a T1 T2) v -->
+    m / PEApp (PEFAddr a T1 T2) v -p->
           m / PECast (PELet var type (PECast v type) body) T2
 | PStCast1 : forall m e m' e' T,
-    m / e --> m' / e' ->
-    m / PECast e T --> m' / PECast e' T
+    m / e -p-> m' / e' ->
+    m / PECast e T -p-> m' / PECast e' T
 | PStCast : forall m T v v',
     PValue v ->
     T <> PTStar ->
     PCast v T = Some v' ->
-    m / PECast v T --> m / v'
+    m / PECast v T -p-> m / v'
 
-where "m / e --> m1 / e1" := (pstep m e m1 e1).
+where "m / e -p-> m1 / e1" := (pstep m e m1 e1).
 
 
 (*
@@ -591,55 +590,55 @@ where "m / e --> m1 / e1" := (pstep m e m1 e1).
 *)
 Inductive pstepF : PMem -> PE -> Prop :=
 | PStPlus1F : forall m e1 e2,
-    m / e1 --> fail ->
-    m / PEPlus e1 e2 --> fail
+    m / e1 -p-> fail ->
+    m / PEPlus e1 e2 -p-> fail
 | PStPlus2F : forall m e1 e2,
     PValue e1 ->
-    m / e2 --> fail ->
-    m /  PEPlus e1 e2 --> fail
+    m / e2 -p-> fail ->
+    m /  PEPlus e1 e2 -p-> fail
 | PStGet1F : forall m e1 e2,
-    m /e1 --> fail ->
-    m / PEGet e1 e2 --> fail
+    m /e1 -p-> fail ->
+    m / PEGet e1 e2 -p-> fail
 | PStGet2F : forall m e1 e2,
     PValue e1 ->
-    m /e2 --> fail ->
-    m / PEGet e1 e2 --> fail
+    m /e2 -p-> fail ->
+    m / PEGet e1 e2 -p-> fail
 | PStSet1F : forall m e1 e2 e3,
-    m / e1 --> fail ->
-    m / PESet e1 e2 e3 --> fail
+    m / e1 -p-> fail ->
+    m / PESet e1 e2 e3 -p-> fail
 | PStSet2F : forall m e1 e2 e3,
     PValue e1 ->
-    m / e2 --> fail ->
-    m / PESet e1 e2 e3 --> fail
+    m / e2 -p-> fail ->
+    m / PESet e1 e2 e3 -p-> fail
 | PStSet3F : forall m e1 e2 e3,
     PValue e1 -> PValue e2 ->
-    m / e3 --> fail ->
-    m / PESet e1 e2 e3 --> fail
+    m / e3 -p-> fail ->
+    m / PESet e1 e2 e3 -p-> fail
 | PStLet1F : forall m init body var TV,
-    m / init --> fail ->
-    m / PELet var TV init body --> fail
+    m / init -p-> fail ->
+    m / PELet var TV init body -p-> fail
 | PStApp1F : forall m e1 e2,
-    m / e1 --> fail ->
-    m / PEApp e1 e2 --> fail
+    m / e1 -p-> fail ->
+    m / PEApp e1 e2 -p-> fail
 | PStApp2F : forall m e1 e2,
     PValue e1 ->
-    m / e2 --> fail ->
-    m / PEApp e1 e2 --> fail
+    m / e2 -p-> fail ->
+    m / PEApp e1 e2 -p-> fail
 | PStCast1F : forall m t e,
-    m / e --> fail ->
-    m / PECast e t --> fail
+    m / e -p-> fail ->
+    m / PECast e t -p-> fail
 | PStCastF : forall m T v,
     PValue v ->
     PCast v T = None ->
-    m / PECast v T --> fail
+    m / PECast v T -p-> fail
 
- where "m / e --> 'fail'" := (pstepF m e)
+ where "m / e -p-> 'fail'" := (pstepF m e)
 .
 
 
 Lemma ValueNormal : forall v m,
   PValue v ->
-  ~exists e' m', m / v --> m' / e'.
+  ~exists e' m', m / v -p-> m' / e'.
 Proof.
   intros * HV [e' [m' H]].
   induction H; inversion HV; subst; eauto.
@@ -647,7 +646,7 @@ Qed.
 
 Lemma ValueNormalF : forall v m,
   PValue v ->
-  ~m / v --> fail.
+  ~m / v -p-> fail.
 Proof.
   intros * HV HF.
   induction HF; inversion HV; subst; eauto.
@@ -664,11 +663,11 @@ Qed.
 Inductive Pmem_correct : PMem -> Prop :=
 | PMCE : Pmem_correct PEmptyMem
 | PMCT : forall a idx v m,
-     MEmpty |= PEV2Val v : PTStar ->
+     MEmpty |p= PEV2Val v : PTStar ->
      Pmem_correct m ->
      Pmem_correct (PUpdateT a idx v m)
 | PMCF : forall a var type body m,
-     var |=> type; MEmpty |= body : PTStar ->
+     (var |=> type; MEmpty) |p= body : PTStar ->
      Pmem_correct m ->
      Pmem_correct (PUpdateF a var type body m)
 .
@@ -692,7 +691,7 @@ Qed.
 *)
 Lemma PMCTy : forall m a n Γ,
     Pmem_correct m ->
-    Γ |= (PqueryT a n m) : PTStar.
+    Γ |p= (PqueryT a n m) : PTStar.
 Proof.
   intros * H.
   induction H; eauto using PTyping.
@@ -706,7 +705,7 @@ Qed.
 Lemma PMCTyF : forall m a var type body Γ,
     (var, type,  body) = PqueryF a m ->
     Pmem_correct m ->
-    var |=> type; Γ |= body : PTStar.
+    (var |=> type; Γ) |p= body : PTStar.
 Proof.
   intros * HEq HMC.
   induction HMC; eauto.
@@ -733,7 +732,7 @@ Qed.
 ** Function allocation preserves memory correctness
 *)
 Lemma Pmem_correct_freshF : forall m m' var T1 T2 body free,
-  var |=> T1; MEmpty |= body : T2 ->
+  (var |=> T1; MEmpty) |p= body : T2 ->
   Pmem_correct m ->
   (free,m') = PfreshF m var T1 body ->
   Pmem_correct m'.
@@ -746,7 +745,7 @@ Qed.
 
 
 Lemma memCorrectSet : forall a idx v (Vv: PValue v) T m,
-  MEmpty |= v : T ->
+  MEmpty |p= v : T ->
   Pmem_correct m ->
   Pmem_correct (setTable m a idx v Vv).
 Proof.
@@ -763,8 +762,8 @@ Qed.
 *)
 Lemma PmemPreservation : forall (m m' : PMem) e e' t,
   Pmem_correct m ->
-  MEmpty |= e : t ->
-  m / e --> m' / e' ->
+  MEmpty |p= e : t ->
+  m / e -p-> m' / e' ->
   Pmem_correct m'.
 Proof.
   intros m m' e e' t HMC HTy Hst.
@@ -782,9 +781,9 @@ Qed.
 *)
 Theorem PexpPreservation : forall m e t m' e',
   Pmem_correct m ->
-  MEmpty |= e : t ->
-  m / e --> m' / e' ->
-  MEmpty |= e' : t.
+  MEmpty |p= e : t ->
+  m / e -p-> m' / e' ->
+  MEmpty |p= e' : t.
 Proof.
   intros m e t m' e' Hmc HT.
   generalize dependent m'.
@@ -805,8 +804,8 @@ Qed.
 *)
 Lemma PexpPreservTypeOf : forall m e t m' e',
   Pmem_correct m ->
-  MEmpty |= e : t ->
-  m / e --> m' / e' ->
+  MEmpty |p= e : t ->
+  m / e -p-> m' / e' ->
   typeOf MEmpty e = typeOf MEmpty e'.
 Proof.
   intros * PM PTy PSt.
@@ -818,7 +817,7 @@ Qed.
 
 Ltac openCanonicValue rule :=
   repeat match goal with
-    | [ Ht : MEmpty |= ?e : _,
+    | [ Ht : MEmpty |p= ?e : _,
         Hv : PValue ?e |- _] =>
           eapply rule in Ht; trivial; decompose [ex or and] Ht; clear Ht
     end.
@@ -831,9 +830,9 @@ Ltac dostep :=
 ** Progress for Pallene terms
 *)
 Theorem Progress : forall m e t,
-    MEmpty |= e : t  ->
+    MEmpty |p= e : t  ->
     PValue e \/
-    (m / e --> fail \/ exists m' e', m / e --> m' / e').
+    (m / e -p-> fail \/ exists m' e', m / e -p-> m' / e').
 Proof.
   intros m e t Hty.
   remember MEmpty as Γ eqn:Heq.

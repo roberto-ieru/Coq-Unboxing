@@ -4,7 +4,6 @@ Require Import Coq.Strings.String.
 Require Import Ascii.
 Require Import Bool.
 Require Import Nat.
-Require Import Lia.
 
 Require Import LIR.maps.
 
@@ -67,8 +66,7 @@ Notation "'<' t1 '<=' t2 '>' e" := (Cast t1 t2 e)
 
 
 Lemma SubstCast : forall var e1 e2 T T',
-  lir.substitution var e1 (<T <= T'> e2) =
-  <T <= T'> lir.substitution var e1 e2.
+  [var := e1] (<T <= T'> e2) = (<T <= T'> [var := e1] e2).
 Proof.
   intros.
   destruct T; destruct T'; simpl; trivial.
@@ -77,7 +75,8 @@ Qed.
 
 
 Lemma StCastF : forall m e T T',
-  stepF m e -> stepF m (<T <= T'> e).
+  m / e --> fail  ->
+  m / (<T <= T'> e) --> fail.
 Proof.
   intros.
   destruct T; destruct T'; simpl; eauto using stepF.
@@ -86,8 +85,8 @@ Qed.
 
 
 Lemma CastStep : forall t1 t2 e m e' m',
-  step m e m' e' ->
-  step m (<t1 <= t2> e) m' (<t1 <= t2> e').
+  m / e --> m' / e' ->
+  m / (<t1 <= t2> e) --> m' / (<t1 <= t2> e').
 Proof.
   intros * HSt.
   unfold Cast.
@@ -97,8 +96,8 @@ Qed.
 
 
 Lemma CastStepF : forall t1 t2 e m,
-  stepF m e ->
-  stepF m (<t1 <= t2> e).
+  m / e --> fail ->
+  m / (<t1 <= t2> e) --> fail.
 Proof.
   intros * HSt.
   unfold Cast.
@@ -108,8 +107,8 @@ Qed.
 
 
 Lemma CongCast : forall t1 t2 e m e' m',
-  multistep m e m' e' ->
-  multistep m (<t1 <= t2> e) m' (<t1 <= t2> e').
+  m / e -->* m' / e' ->
+  m / (<t1 <= t2> e) -->* m' / (<t1 <= t2> e').
 Proof.
   intros * HSt.
   induction HSt; eauto using multistep, CastStep.
@@ -133,7 +132,7 @@ Lemma GtypeOfT : forall Γ e T, typeOf Γ e = Some T -> GtypeOf Γ e = PT2IRT T.
 Proof. intros. unfold GtypeOf. rewrite H. trivial. Qed.
 
 
-Lemma GtypeOfT' : forall Γ e T, Γ |= e : T -> GtypeOf Γ e = PT2IRT T.
+Lemma GtypeOfT' : forall Γ e T, Γ |p= e : T -> GtypeOf Γ e = PT2IRT T.
 Proof. eauto using GtypeOfT, typeOfCorrect'. Qed.
 
 
@@ -262,14 +261,14 @@ Qed.
 ** Compilation of well-typed programs results in well-typed code
 *)
 Theorem Pall2LirWellTyped : forall Γ Γ' (e : PE) T T',
-    Γ |= e : T ->
+    Γ |p= e : T ->
     TP2TGamma Γ = Γ' ->
     PT2IRT T = T' ->
-    IRTyping Γ' (Pall2Lir Γ e) T'.
+    Γ' |= (Pall2Lir Γ e) : T'.
 Proof with eauto using IRTyping.
   intros * H Eq1 Eq2. subst.
   induction H; simpl in *;
-  eauto using IRTyping,TP2TGammaIn;
+  eauto using IRTyping, TP2TGammaIn;
   repeat match goal with
   | [H: PTyping ?G ?E ?T |- _] =>
       apply typeOfCorrect in H
@@ -346,8 +345,8 @@ Qed.
 
 
 Lemma typeOfEq : forall Γ1 e1 Γ2 e2 T,
-  Γ1 |= e1 : T ->
-  Γ2 |= e2 : T ->
+  Γ1 |p= e1 : T ->
+  Γ2 |p= e2 : T ->
   typeOf Γ1 e1 = typeOf Γ2 e2.
 Proof.
   intros * HTy1 HTy2.
@@ -356,8 +355,8 @@ Proof.
 Qed.
 
 Lemma GtypeOfEq : forall Γ1 e1 Γ2 e2 T,
-  Γ1 |= e1 : T ->
-  Γ2 |= e2 : T ->
+  Γ1 |p= e1 : T ->
+  Γ2 |p= e2 : T ->
   GtypeOf Γ1 e1 = GtypeOf Γ2 e2.
 Proof.
   intros * HTy1 HTy2.
@@ -375,7 +374,7 @@ Ltac GtypeOf2T :=
 
 
 Lemma Pall2LirEEnv : forall Γ Γ' e T,
-  Γ |= e : T ->
+  Γ |p= e : T ->
   inclusion Γ Γ' ->
   Pall2Lir Γ e = Pall2Lir Γ' e.
 Proof.
@@ -393,10 +392,10 @@ Qed.
 
 
 Lemma Psubst : forall Γ var Tvar e1 e2 te,
-  (var |=> Tvar; Γ) |= e2 : te ->
-  MEmpty |= e1 : Tvar ->
-  Pall2Lir Γ ([var := e1] e2) =
-    lir.substitution var (Pall2Lir MEmpty e1) (Pall2Lir (var |=> Tvar; Γ) e2).
+  (var |=> Tvar; Γ) |p= e2 : te ->
+  MEmpty |p= e1 : Tvar ->
+  Pall2Lir Γ ([var := e1]p e2) =
+    [var := (Pall2Lir MEmpty e1)] (Pall2Lir (var |=> Tvar; Γ) e2).
 Proof.
   intros * HTy2 HTy1.
   generalize dependent te.
@@ -531,7 +530,7 @@ Qed.
 
 
 Lemma TagFromType : forall e T,
-  MEmpty |= e : T ->
+  MEmpty |p= e : T ->
   GtypeOf MEmpty e = PT2IRT T.
 Proof.
   unfold GtypeOf. intros * HTy.
@@ -542,8 +541,8 @@ Qed.
 
 Lemma PreserveTagOf' : forall m e T m' e',
   Pmem_correct m ->
-  m / e --> m' / e' ->
-  MEmpty |= e : T ->
+  m / e -p-> m' / e' ->
+  MEmpty |p= e : T ->
   GtypeOf MEmpty e' = PT2IRT T.
 Proof.
   intros * HM HSt HTy.
@@ -553,8 +552,8 @@ Qed.
 
 Lemma PreserveTagOf : forall m e t m' e',
   Pmem_correct m ->
-  MEmpty |= e : t ->
-  m / e --> m' / e' ->
+  MEmpty |p= e : t ->
+  m / e -p-> m' / e' ->
   GtypeOf MEmpty e = GtypeOf MEmpty e'.
 Proof.
   unfold GtypeOf. intros * HM HTy Hst.
@@ -627,7 +626,7 @@ Qed.
 
 
 Lemma PCastBox : forall v T v' t,
-  MEmpty |= v : PTStar ->
+  MEmpty |p= v : PTStar ->
   PValue v ->
   PCast v T = Some v' ->
   PT2IRT T = Tag2Type t ->
@@ -669,7 +668,7 @@ Qed.
 
 
 Lemma subsCast : forall var e T,
-  lir.substitution var e (< T <= IRTStar > IREVar var) =
+  [var := e] (< T <= IRTStar > IREVar var) =
   < T <= IRTStar > e.
 Proof.
   intros.
@@ -679,7 +678,7 @@ Qed.
 
 Lemma PCast2Star : forall {v v' T tg},
   PValue v ->
-  MEmpty |= v : T ->
+  MEmpty |p= v : T ->
   PT2IRT T = Tag2Type tg ->
   PCast v PTStar = Some v' ->
   Pall2Lir MEmpty v' = IREBox tg (Pall2Lir MEmpty v).
@@ -702,7 +701,7 @@ Lemma PCast2NStar : forall {v v' tg1 T1 tg2 T2},
   PValue v ->
   PT2IRT T1 = Tag2Type tg1 ->
   PT2IRT T2 = Tag2Type tg2 ->
-  MEmpty |= v : T1 ->
+  MEmpty |p= v : T1 ->
   PCast v T2 = Some v' ->
   tg1 = tg2.
 Proof.
@@ -716,7 +715,7 @@ Qed.
 
 Lemma castTags : forall v v' T1 T2 t,
   PValue v ->
-  MEmpty |= v : T1 ->
+  MEmpty |p= v : T1 ->
   PCast v T2 = Some v' ->
   PT2IRT T1 = Tag2Type t ->
   PT2IRT T2 = Tag2Type t ->
@@ -732,7 +731,7 @@ Qed.
 
 Lemma castStar : forall v v' T t,
   PValue v ->
-  MEmpty |= v : T ->
+  MEmpty |p= v : T ->
   PCast v PTStar = Some v' ->
   PT2IRT T = Tag2Type t ->
   IREBox t (Pall2Lir MEmpty v) = Pall2Lir MEmpty v'.
@@ -746,7 +745,7 @@ Qed.
 
 Lemma castFStar : forall v v' T t,
   PValue v ->
-  MEmpty |= v : PTStar ->
+  MEmpty |p= v : PTStar ->
   PCast v T = Some v' ->
   PT2IRT T = Tag2Type t ->
   (Pall2Lir MEmpty v) = IREBox t (Pall2Lir MEmpty v').
@@ -770,8 +769,8 @@ Qed.
 
 Theorem SimPallLir : forall m e T m' e',
   Pmem_correct m ->
-  MEmpty |= e : T ->
-  m / e --> m' / e' ->
+  MEmpty |p= e : T ->
+  m / e -p-> m' / e' ->
   multistep (MPall2Lir m) (Pall2Lir MEmpty e)
             (MPall2Lir m') (Pall2Lir MEmpty e').
 Proof.
@@ -894,7 +893,7 @@ Qed.
 *)
 Lemma CastToItsIRType : forall v T T',
   PCast v T' = None ->
-  MEmpty |= v : T ->
+  MEmpty |p= v : T ->
   PValue v ->
   PT2IRT T = PT2IRT T'->
   False.
@@ -926,9 +925,9 @@ end.
 *)
 Lemma CastFail : forall {v} m {T T'},
   PValue v ->
-  MEmpty |= v : T ->
+  MEmpty |p= v : T ->
   PCast v T' = None ->
-  stepF (MPall2Lir m)  (< PT2IRT T' <= PT2IRT T > Pall2Lir MEmpty v).
+  (MPall2Lir m) / (< PT2IRT T' <= PT2IRT T > Pall2Lir MEmpty v) --> fail.
 Proof.
   intros * HV HTy HC.
   induction HV; inversion HTy; subst;
@@ -954,10 +953,10 @@ Proof.
 *)
 Lemma CastFailStar : forall v m t T,
   PValue v ->
-  MEmpty |= v : PTStar ->
+  MEmpty |p= v : PTStar ->
   PCast v T = None ->
   PT2IRT T = Tag2Type t ->
-  stepF (MPall2Lir m)  (IREUnbox t (Pall2Lir MEmpty v)).
+  (MPall2Lir m) /  (IREUnbox t (Pall2Lir MEmpty v)) --> fail.
 Proof.
   intros * HV HTy HCst Heq.
   specialize (CastFail m HV HTy HCst) as ?.
@@ -972,9 +971,9 @@ Qed.
 Lemma DoubleCastFail : forall v m T T',
   PCast v T' = None ->
   PValue v ->
-  MEmpty |= v : T  ->
-  stepF (MPall2Lir m)
-    (<PT2IRT T' <= IRTStar> (<IRTStar <= PT2IRT T> Pall2Lir MEmpty v)).
+  MEmpty |p= v : T  ->
+  (MPall2Lir m) /
+    (<PT2IRT T' <= IRTStar> (<IRTStar <= PT2IRT T> Pall2Lir MEmpty v)) --> fail.
 Proof.
   intros * HCst HV HTy.
   destruct (PT2IRT T') eqn:?; T2Star.
@@ -1005,7 +1004,7 @@ Proof.
   specialize (PMCTy m a idx MEmpty HM) as ?.
   specialize (PMCValue m a idx) as ?.
   remember (PqueryT a idx m) as v.
-  assert (IRTyping MEmpty (Pall2Lir MEmpty v) IRTStar)
+  assert (MEmpty |= (Pall2Lir MEmpty v) : IRTStar)
     by eauto using Pall2LirWellTyped.
   assert (Value (Pall2Lir MEmpty v)) by eauto using PValueValue.
   specialize (valbox MEmpty (Pall2Lir MEmpty v) H1 H2)
@@ -1016,8 +1015,8 @@ Qed.
 
 Lemma SimPallLirF : forall m e T,
   Pmem_correct m ->
-  MEmpty |= e : T ->
-  m / e --> fail ->
+  MEmpty |p= e : T ->
+  m / e -p-> fail ->
   multistepF (MPall2Lir m) (Pall2Lir MEmpty e).
 Proof.
   intros * HM HTy HSt.

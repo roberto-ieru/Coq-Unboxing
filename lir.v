@@ -5,7 +5,6 @@ Require Import Coq.Strings.String.
 Require Import Ascii.
 Require Import Bool.
 Require Import Nat.
-Require Import Lia.
 Require Import Coq.Program.Equality.
 
 Require Import LIR.maps.

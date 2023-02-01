@@ -1,7 +1,14 @@
+Require Import Coq.Logic.Decidable.
+Require Import PeanoNat.
 Require Import Coq.Strings.String.
+Require Import Ascii.
+Require Import Bool.
+Require Import Nat.
+Require Import Coq.Program.Equality.
 
 Require Import LIR.maps.
 Require Import LIR.pallene.
+Require Import LIR.lir.
 
 (*
   A nice example of λ-Pallene code:
@@ -10,6 +17,7 @@ Require Import LIR.pallene.
   let B:tbl[int] = (A as tbl[int]) in
     A[1] = B; B[2] = 10; A[1][2]
 *)
+
 
 Definition example :=
     PELet ("A":string) (PTArr (PTArr PTInt)) (PENew (PTArr PTInt))
@@ -30,23 +38,23 @@ Proof. trivial. Qed.
 (*
 ** Multistep
 *)
-Reserved Notation "m '/' e -->* m1 '/' e1"
+Reserved Notation "m '/' e '-p->*' m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
-Reserved Notation "m '/' e -->* 'fail'"
+Reserved Notation "m '/' e '-p->*' 'fail'"
 (at level 40, e at level 39).
 
 Inductive multistep : PMem -> PE -> PMem -> PE -> Prop :=
-| MStRefl : forall m e, m / e -->* m / e
+| MStRefl : forall m e, m / e -p->* m / e
 | MStMStep : forall m e m' e' m'' e'',
-    m / e --> m' / e' ->
-    m' / e' -->* m'' / e'' ->
-    m / e -->* m'' / e''
+    m / e -p-> m' / e' ->
+    m' / e' -p->* m'' / e'' ->
+    m / e -p->* m'' / e''
 
-where "m / e -->* m1 / e1" := (multistep m e m1 e1)
+where "m / e -p->* m1 / e1" := (multistep m e m1 e1)
 .
 
 (* example evaluates to 10 *)
-Lemma run : exists m, PEmptyMem / example -->* m / (PENum 10).
+Lemma run : exists m, PEmptyMem / example -p->* m / (PENum 10).
 Proof with eauto 10 using pstep, PValue.
   eexists.
   unfold example.

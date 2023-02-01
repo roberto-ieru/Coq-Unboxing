@@ -4,7 +4,6 @@ Require Import Coq.Strings.String.
 Require Import Ascii.
 Require Import Bool.
 Require Import Nat.
-Require Import Lia.
 Require Import Coq.Program.Equality.
 
 Require Import LIR.maps.
@@ -45,24 +44,30 @@ Definition LEnv := Map unit.
 (*
 ** A well-formed Lua expression cannot have free variables
 *)
+
+Reserved Notation "Γ '|l=' e"  (at level 40, no associativity,
+                                     e at next level).
+
 Inductive LEWT : LEnv -> LE -> Prop :=
-| WTNil : forall Γ, LEWT Γ LENil
-| WTNum : forall Γ n, LEWT Γ (LENum n)
-| WTPlus : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEPlus e1 e2)
-| WTNew : forall Γ, LEWT Γ LENew
-| WTTAddr : forall Γ a, LEWT Γ (LETAddr a)
-| WTFAddr : forall Γ a, LEWT Γ (LEFAddr a)
-| WTGet : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEGet e1 e2)
-| WTSet : forall Γ e1 e2 e3, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ e3 ->
-               LEWT Γ (LESet e1 e2 e3)
-| WTVar : forall Γ var, In Γ var = Some tt -> LEWT Γ (LEVar var)
-| WTApp : forall Γ e1 e2, LEWT Γ e1 -> LEWT Γ e2 -> LEWT Γ (LEApp e1 e2)
-| WTFun : forall Γ var body, LEWT (var |=> tt; Γ) body ->
-            LEWT Γ (LEFun var body)
+| WTNil : forall Γ, Γ |l= LENil
+| WTNum : forall Γ n, Γ |l= (LENum n)
+| WTPlus : forall Γ e1 e2, Γ |l= e1 -> Γ |l= e2 -> Γ |l= (LEPlus e1 e2)
+| WTNew : forall Γ, Γ |l= LENew
+| WTTAddr : forall Γ a, Γ |l= (LETAddr a)
+| WTFAddr : forall Γ a, Γ |l= (LEFAddr a)
+| WTGet : forall Γ e1 e2, Γ |l= e1 -> Γ |l= e2 -> Γ |l= (LEGet e1 e2)
+| WTSet : forall Γ e1 e2 e3, Γ |l= e1 -> Γ |l= e2 -> Γ |l= e3 ->
+               Γ |l= (LESet e1 e2 e3)
+| WTVar : forall Γ var, In Γ var = Some tt -> Γ |l= (LEVar var)
+| WTApp : forall Γ e1 e2, Γ |l= e1 -> Γ |l= e2 -> Γ |l= (LEApp e1 e2)
+| WTFun : forall Γ var body, (var |=> tt; Γ) |l= body ->
+            Γ |l= (LEFun var body)
 | WFLet : forall Γ var init body,
-              LEWT Γ init ->
-              LEWT (var |=> tt; Γ) body ->
-              LEWT Γ(LELet var init body)
+              Γ |l= init ->
+              (var |=> tt; Γ) |l= body ->
+              Γ |l= (LELet var init body)
+
+where "Γ '|l=' e" := (LEWT Γ e)
 .
 
 
@@ -266,29 +271,29 @@ Definition LfreshF (m : LMem) (v : string) (b : LE) : (address * LMem) :=
     (f, LUpdateF f v b m).
 
 
-Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
+Reserved Notation "'[' x ':=' s ']l' t" (at level 20, x constr).
 
 
 Fixpoint substitution (var : string) (y : LE)  (e : LE) : LE :=
  match e with
  | LENil => e
  | LENum n => e
- | LEPlus e1 e2 => LEPlus ([var := y] e1) ([var := y] e2)
+ | LEPlus e1 e2 => LEPlus ([var := y]l e1) ([var := y]l e2)
  | LENew => e
  | LETAddr a => e
  | LEFAddr a => e
- | LEGet e1 e2 => LEGet ([var := y] e1) ([var := y] e2)
- | LESet e1 e2 e3 => LESet ([var := y] e1) ([var := y] e2) ([var := y] e3)
+ | LEGet e1 e2 => LEGet ([var := y]l e1) ([var := y]l e2)
+ | LESet e1 e2 e3 => LESet ([var := y]l e1) ([var := y]l e2) ([var := y]l e3)
  | LEVar var' => if string_dec var var' then y else e
  | LEFun var' body => if string_dec var var' then e
-                       else LEFun var' ([var := y] body)
+                       else LEFun var' ([var := y]l body)
  | LELet var' init body =>
       if string_dec var var'
-         then LELet var' ([var := y] init) body
-         else LELet var' ([var := y] init) ([var := y] body)
- | LEApp e1 e2 => LEApp ([var := y] e1) ([var := y] e2)
+         then LELet var' ([var := y]l init) body
+         else LELet var' ([var := y]l init) ([var := y]l body)
+ | LEApp e1 e2 => LEApp ([var := y]l e1) ([var := y]l e2)
 end
-where "'[' x ':=' s ']' t" := (substitution x s t)
+where "'[' x ':=' s ']l' t" := (substitution x s t)
 .
 
 
@@ -321,13 +326,13 @@ Inductive Lstep : LMem -> LE -> LMem -> LE -> Prop :=
     m / LEFun v b ==> m' / LEFAddr free
 | LStLet : forall init vinit var body res m m' m'',
     m / init ==> m' / vinit ->
-    m' / ([var := vinit] body) ==> m'' / res ->
+    m' / ([var := vinit]l body) ==> m'' / res ->
     m / LELet var init body ==> m'' / res
 | LStApp : forall m e1 a var body e2 m' m'' v m''' res,
      m / e1 ==> m' / LEFAddr a ->
      m' / e2 ==> m'' / v ->
      (var, body) = LqueryF a m'' ->
-     m'' / ([var := v] body) ==> m''' / res ->
+     m'' / ([var := v]l body) ==> m''' / res ->
      m / LEApp e1 e2 ==> m''' / res
 
 where "m / e ==> m1 / e1" := (Lstep m e m1 e1)
@@ -336,7 +341,7 @@ where "m / e ==> m1 / e1" := (Lstep m e m1 e1)
 Example L1 : LEmptyMem / LEPlus (LENum 3) (LENum 5) ==>
              LEmptyMem / LENum 8.
 Proof.
-  replace 8 with (3 + 5) by lia.
+  replace 8 with (3 + 5) by trivial.
   eauto using Lstep, LValue.
 Qed.
 
@@ -424,11 +429,11 @@ Defined.
 Inductive Lmem_correct : LMem -> Prop :=
 | LMCE : Lmem_correct LEmptyMem
 | LMCU : forall a idx v m,
-     LEWT MEmpty (LEV2Val v) ->
+     MEmpty |l= (LEV2Val v) ->
      Lmem_correct m ->
      Lmem_correct (LUpdateT a idx v m)
 | LMCF : forall a var body m,
-     LEWT (var |=> tt; MEmpty) body ->
+     (var |=> tt; MEmpty) |l= body ->
      Lmem_correct m ->
      Lmem_correct (LUpdateF a var body m)
 .
@@ -438,12 +443,12 @@ Lemma mem_correct_freshT : forall m m' free,
   Lmem_correct m -> (free,m') = LfreshT m -> Lmem_correct m'.
 Proof.
   unfold LfreshT. intros m m' free Hmc Heq. inversion Heq.
-  eauto using Lmem_correct,LEWT.
+  eauto using Lmem_correct, LEWT.
 Qed.
 
 
 Lemma mem_correct_freshF : forall m m' free var body,
-  LEWT (var |=> tt; MEmpty) body ->
+  (var |=> tt; MEmpty) |l= body ->
   Lmem_correct m ->
   (free,m') = LfreshF m var body ->
   Lmem_correct m'.
@@ -465,7 +470,7 @@ Qed.
 Lemma LMCqueryF : forall a m var body,
     (var, body) = LqueryF a m ->
     Lmem_correct m ->
-    LEWT (var |=> tt; MEmpty) body.
+    (var |=> tt; MEmpty) |l= body.
 Proof.
   intros * Heq HMc. induction m.
   - inversion Heq; subst. auto using LEWT.
@@ -478,7 +483,7 @@ Proof.
 Qed.
 
 
-Lemma LMCWT : forall a v m, Lmem_correct m -> LEWT MEmpty (LqueryT a v m).
+Lemma LMCWT : forall a v m, Lmem_correct m -> MEmpty |l= (LqueryT a v m).
 Proof.
   intros a v m H.
   induction H; eauto using LEWT.
@@ -487,7 +492,7 @@ Qed.
 
 
 Lemma inclusion_WT : forall Γ Γ' e,
-  inclusion Γ Γ' -> LEWT Γ e -> LEWT Γ' e.
+  inclusion Γ Γ' -> Γ |l= e -> Γ' |l= e.
 Proof.
   intros Γ Γ' e Hin Hty.
   generalize dependent Γ'.
@@ -495,14 +500,14 @@ Proof.
 Qed.
 
 
-Corollary WT_empty : forall Γ e, LEWT MEmpty e -> LEWT Γ e.
+Corollary WT_empty : forall Γ e, MEmpty |l= e -> Γ |l= e.
 Proof.
   eauto using inclusion_WT, inclusion_empty.
 Qed.
 
 
 Lemma subst_WT : forall e2 Γ var e1,
-  LEWT (var |=> tt; Γ) e2 -> LEWT MEmpty e1 -> LEWT Γ ([var := e1] e2).
+  (var |=> tt; Γ) |l= e2 -> MEmpty |l= e1 -> Γ |l= ([var := e1]l e2).
 Proof.
   induction e2; intros Γ var e1 HWT2 HWT1; simpl;
   inversion HWT2; subst;
@@ -515,8 +520,8 @@ Qed.
 Lemma luaPreservation : forall e m v m',
   m / e ==> m' / v ->
   Lmem_correct m ->
-  LEWT MEmpty e ->
-  Lmem_correct m' /\ LValue v /\ LEWT MEmpty v.
+  MEmpty |l= e ->
+  Lmem_correct m' /\ LValue v /\ MEmpty |l= v.
 Proof.
   intros e m v m' HSt HM HWT.
   induction HSt; inversion HWT; subst;
@@ -546,7 +551,7 @@ Qed.
 Corollary luaPreservationMem : forall e m v m',
   m / e ==> m' / v ->
   Lmem_correct m ->
-  LEWT MEmpty e ->
+  MEmpty |l= e ->
   Lmem_correct m'.
 Proof. eapply luaPreservation. Qed.
 
@@ -554,15 +559,15 @@ Proof. eapply luaPreservation. Qed.
 Corollary luaPreservationWT : forall e m v m',
   m / e ==> m' / v ->
   Lmem_correct m ->
-  LEWT MEmpty e ->
-  LEWT MEmpty v.
+  MEmpty |l= e ->
+  MEmpty |l= v.
 Proof. eapply luaPreservation. Qed.
 
 
 Lemma stepValue : forall e m v m',
   m / e ==> m' / v ->
   Lmem_correct m ->
-  LEWT MEmpty e ->
+  MEmpty |l= e ->
   LValue v.
 Proof.
   intros * HSt HM HWT.
@@ -615,7 +620,7 @@ Proof. unfold inclusion. trivial. Qed.
 
 
 Lemma Lua2LirTypeAux : forall Γ e,
-  LEWT Γ e -> LEnv2Lir Γ |= Lua2Lir e : IRTStar.
+  Γ |l= e -> LEnv2Lir Γ |= Lua2Lir e : IRTStar.
 Proof.
   intros Γ e.
   generalize dependent Γ.
@@ -626,7 +631,7 @@ Qed.
 
 
 Corollary Lua2LirType : forall e,
-    LEWT MEmpty e ->  MEmpty |= Lua2Lir e : IRTStar.
+    MEmpty |l= e ->  MEmpty |= Lua2Lir e : IRTStar.
 Proof. eapply Lua2LirTypeAux. Qed.
 
 
@@ -703,8 +708,8 @@ Qed.
 
 
 Lemma L2LirSubst : forall e1 var e2,
-  Lua2Lir (substitution var e1 e2) =
-  lir.substitution var (Lua2Lir e1) (Lua2Lir e2).
+  Lua2Lir ([var := e1]l e2) =
+  [var := (Lua2Lir e1)] (Lua2Lir e2).
 Proof.
   intros e1 var e2.
   induction e2; simpl;
@@ -741,10 +746,9 @@ Ltac instHI :=
 *)
 Theorem SimLua : forall e m v m',
     Lmem_correct m ->
-    LEWT MEmpty e ->
+    MEmpty |l= e ->
     m /e ==> m' / v  ->
-    multistep (MLua2Lir m) (Lua2Lir e)
-            (MLua2Lir m') (Lua2Lir v).
+    (MLua2Lir m) / (Lua2Lir e) -->* (MLua2Lir m') / (Lua2Lir v).
 Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
                    CongGet1, CongGet2, CongSet1, CongSet2, CongSet3,
                    CongLet, CongApp1, CongApp2,

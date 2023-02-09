@@ -555,6 +555,27 @@ Example example3 : Precision PEmpty UB10 IRTInt B10 IRTStar.
   eauto using Precision.
 Qed.
 
+(*
+  let x : int = 10 in x + 1
+  let x : * = box 10 in unbox x + 1
+*)
+Definition X := "x":string.
+
+Goal Precision PEmpty
+  (IRELet X IRTInt (IRENum 10)
+     (IREPlus (IREVar X) (IRENum 1)))  IRTInt
+  (IRELet X IRTStar (IREBox TgInt(IRENum 10))
+     (IREPlus (IREUnbox TgInt (IREVar X)) (IRENum 1))) IRTInt.
+Proof.
+  unfold IRTInt.
+  eapply PLet.
+  - eapply PPlus; unfold IRTInt; eauto using Precision, TPrecision.
+  - eauto using Precision.
+  Unshelve. auto using TPrecision.
+Qed.
+
+
+
 
 (* Nothing is smaller than 10 *)
 Goal forall E T,

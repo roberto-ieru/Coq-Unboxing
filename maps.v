@@ -133,12 +133,72 @@ Qed.
 Definition map_eq {A} (M M' : Map A) := forall var, In M var = In M' var.
 
 
-Lemma eq_shadow : forall A (M : Map A) var t1 t2,
-   map_eq (var |=> t1; M) (var |=> t1; (var |=> t2; M)).
+Lemma map_eq_In : forall {A} (M M': Map A) var v v',
+    In M' var = Some v ->
+    map_eq (var |=> v'; M) M' ->
+    v = v'.
 Proof.
-  intros A M var t1 t2.
+  intros * HI HEq.
+  assert (In M' var = Some v').
+  { specialize (HEq var). rewrite InEq in HEq. congruence. }
+  congruence.
+Qed.
+
+
+Lemma map_eq_incl : forall {A} (M M': Map A),
+    map_eq M M' -> inclusion M M'.
+Proof.
+  unfold inclusion.
+  intros.
+  unfold map_eq in *.
+  congruence.
+Qed.
+
+
+(* map_eq is an equivalence relation *)
+
+Lemma map_eq_refl : forall A (M : Map A), map_eq M M.
+Proof. unfold map_eq. trivial. Qed.
+
+Lemma map_eq_sym : forall A (M M': Map A), map_eq M M' -> map_eq M' M.
+Proof. unfold map_eq. auto. Qed.
+
+Lemma map_eq_trans : forall A (M M' M'': Map A),
+    map_eq M M' ->
+    map_eq M' M'' ->
+    map_eq M M''.
+Proof. unfold map_eq. intros. congruence. Qed.
+
+
+Lemma eqeq_shadow : forall A (M M' : Map A) var v v',
+   map_eq (var |=> v'; M) M' ->
+   map_eq (var |=> v; M) (var |=> v; M').
+Proof.
+  intros * H1.
   intros var'.
   simpl.
+  breakStrDec.
+  specialize (H1 var').
+  rewrite InNotEq' in H1; trivial.
+Qed.
+
+
+Lemma eq_shadow : forall A (M : Map A) var v v',
+   map_eq (var |=> v; M) (var |=> v; (var |=> v'; M)).
+Proof.
+  intros.
+  eauto using eqeq_shadow, map_eq_refl.
+Qed.
+
+
+Lemma eqeq_permute : forall A (M M' : Map A) var var' v v',
+   map_eq (var |=> v; M) M' ->
+   var <> var' ->
+   map_eq (var |=> v; (var' |=> v'; M)) (var' |=> v'; M').
+Proof.
+  unfold map_eq.
+  intros.
+  specialize (H var0).
   breakStrDec.
 Qed.
 

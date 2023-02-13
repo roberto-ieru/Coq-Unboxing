@@ -20,11 +20,11 @@ Set Implicit Arguments.
 Inductive PrecMem : Mem -> Mem -> Prop :=
 | PrecMemE : PrecMem EmptyMem EmptyMem
 | PrecMemUD : forall addr idx v1 v2 m1 m2,
-    Precision PEmpty (EV2Val v1) IRTStar (EV2Val v2) IRTStar ->
+    Precision MEmpty (EV2Val v1) IRTStar MEmpty (EV2Val v2) IRTStar ->
     PrecMem m1 m2 ->
     PrecMem (UpdateT addr idx v1 m1) (UpdateT addr idx v2 m2)
 | PrecMemUDF : forall addr var b1 b2 m1 m2,
-    Precision (Env2P  (var |=> IRTStar; MEmpty)) b1 IRTStar b2 IRTStar ->
+    Precision (var |=> IRTStar; MEmpty) b1 IRTStar (var |=> IRTStar; MEmpty)b2 IRTStar ->
     PrecMem m1 m2 ->
     PrecMem (UpdateF addr var b1 m1) (UpdateF addr var b2 m2)
 .
@@ -52,9 +52,7 @@ Lemma PrecCorrect1 : forall m1 m2, m1 <M| m2 -> mem_correct m1.
 Proof.
   intros * H.
   induction H; intros *; simpl;
-  eauto using mem_correct, PrecisionType1Empty.
-  eapply PrecisionType1 in H. simpl in H.
-  eauto using mem_correct, PrecisionType1Empty.
+  eauto using mem_correct, PrecisionType1.
 Qed.
 
 
@@ -65,9 +63,7 @@ Lemma PrecCorrect2 : forall m1 m2, m1 <M| m2 -> mem_correct m2.
 Proof.
   intros * H.
   induction H; intros *; simpl;
-  eauto using mem_correct, PrecisionType2Empty.
-  eapply PrecisionType2 in H. simpl in H.
-  eauto using mem_correct, PrecisionType2Empty.
+  eauto using mem_correct, PrecisionType2.
 Qed.
 
 
@@ -75,7 +71,7 @@ Qed.
 ** Expressions equal "up to precision" generate the same indices
 *)
 Lemma PrecIndex : forall e1 e2,
-    Precision PEmpty e1 IRTStar e2 IRTStar ->
+    Precision MEmpty e1 IRTStar MEmpty e2 IRTStar ->
     ToIndex e1 = ToIndex e2.
 Proof. intros * HP. induction HP; eauto. Qed.
 
@@ -105,7 +101,7 @@ Proof.
   injection HF; intros; subst; clear HF.
   replace (freshaux m2) with (freshaux m1) by auto using PrecFreshaux.
   eexists. split; only 2: trivial;
-  eauto using PrecMem, Precision.
+  eauto using PrecMem, Precision, EnvCompRefl.
 Qed.
 
 
@@ -116,8 +112,8 @@ Qed.
 Lemma PrecFreshF : forall m1 m2 var d1 d2 free m1',
     m1 <M| m2 ->
     Precision
-       (ExpandPEnv PEmpty var IRTStar IRTStar (TPrecisionRefl IRTStar)) d1
-       IRTStar d2 IRTStar ->
+       (var |=> IRTStar; MEmpty) d1 IRTStar
+       (var |=> IRTStar; MEmpty) d2 IRTStar ->
     (free, m1') = freshF m1 var d1 ->
     exists m2', m1' <M| m2' /\ (free, m2') = freshF m2 var d2.
 Proof.
@@ -125,21 +121,19 @@ Proof.
   intros * HOM HP HF.
   injection HF; intros; subst; clear HF.
   replace (freshaux m2) with (freshaux m1) by auto using PrecFreshaux.
-  replace PEmpty with (Env2P MEmpty) in HP by trivial.
-  eexists;
-  eauto using PrecMemUDF, PrecisionIrrel, PEquivSym, Expand2P.
+  eexists; eauto using PrecMemUDF.
 Qed.
 
 
 Lemma PrecQueryT : forall m1 m2 a i1 i2,
     m1 <M| m2 ->
-    Precision PEmpty i1 IRTStar i2 IRTStar ->
-    Precision PEmpty (queryT a i1 m1) IRTStar (queryT a i2 m2) IRTStar.
+    Precision MEmpty i1 IRTStar MEmpty i2 IRTStar ->
+    Precision MEmpty (queryT a i1 m1) IRTStar MEmpty (queryT a i2 m2) IRTStar.
 Proof.
   intros * HOM HP.
-  induction HOM; simpl; eauto using Precision.
-  rewrite <- (PrecIndex HP).
-  breakIndexDec; trivial.
+  induction HOM; simpl; eauto using Precision, EnvCompRefl.
+  replace (ToIndex i2) with (ToIndex i1) by eauto using PrecIndex.
+  breakIndexDec; subst. trivial.
 Qed.
 
 
@@ -149,28 +143,25 @@ Lemma PrecQueryF : forall m1 m2 a var var' body body',
     (var', body') = queryF a m2 ->
     var = var' /\
       Precision
-         (ExpandPEnv PEmpty var IRTStar IRTStar (TPrecisionRefl IRTStar))
-          body IRTStar body' IRTStar.
+         (var |=> IRTStar; MEmpty) body IRTStar
+         (var |=> IRTStar; MEmpty) body' IRTStar.
 Proof.
   intros * HM HEq1 HEq2.
   induction HM; simpl; eauto.
   - inversion HEq1; inversion HEq2; subst.
-    unshelve (split; eauto using Precision, PrecisionIrrel);
-      eauto using TPrecision.
+    split; eauto 6 using Precision, EnvCompRefl.
   - simpl in *.
     breakIndexDec; eauto.
     injection HEq1; injection HEq2; intros; subst.
     clear HEq1 HEq2. split; trivial.
-    eapply PrecisionIrrel; eauto.
-    eapply Expand2P.
 Qed.
 
 
 Lemma PrecUpdate : forall m1 m2 a i1 i2 v1 v2,
     m1 <M| m2 ->
     forall (vv1 : Value v1) (vv2 : Value v2),
-    Precision PEmpty i1 IRTStar i2 IRTStar ->
-    Precision PEmpty v1 IRTStar v2 IRTStar ->
+    Precision MEmpty i1 IRTStar MEmpty i2 IRTStar ->
+    Precision MEmpty v1 IRTStar MEmpty v2 IRTStar ->
     UpdateT a (ToIndex i1) (EV v1 vv1) m1 <M|
     UpdateT a (ToIndex i2) (EV v2 vv2) m2.
 Proof.
@@ -183,50 +174,54 @@ Qed.
 (*
 ** Substitution preserves precision
 *)
-Lemma PrecSubs : forall body Γ Γ' var  body' v1 v2 t1 t2 t1' t2'
-                        (H12: t1 <| t2),
-    Precision PEmpty v1 t1 v2 t2 ->
-    PEquiv (ExpandPEnv Γ var t1 t2 H12) Γ' ->
-    Precision Γ' body t1' body' t2' ->
-    Precision Γ ([var := v1] body) t1' ([var := v2] body') t2'.
+Lemma PrecSubs : forall body Γ Γ' Δ Δ' var  body' v1 v2 t1 t2 t1' t2',
+    Precision MEmpty v1 t1 MEmpty v2 t2 ->
+    map_eq (var |=> t1; Γ) Γ' ->
+    map_eq (var |=> t2; Δ) Δ' ->
+    Γ <E| Δ ->
+    Precision Γ' body t1' Δ' body' t2' ->
+    Precision Γ ([var := v1] body) t1' Δ ([var := v2] body') t2'.
 Proof.
-  intros * HPV HPE HPB.
+  intros * HPV HE1 HE2 HPE HPB.
+  generalize dependent Δ.
   generalize dependent Γ.
-  induction HPB; intros ? HPE; eauto using Precision;
-  try ( simpl;
-    breakStrDec;
-      unshelve (econstructor;
-      eauto using PrecisionIrrel, PEquivTrans, PEquivShadow, PEquivPermute,
-                  ExpandEquiv, PEquivSym);
-      auto using TPrecisionRefl; fail).
+  induction HPB; intros; eauto using Precision, EnvCompRefl;
+     simpl.
 
   - (* variable *)
-    simpl.
-    destruct HPE.
-    specialize (H1 var0).
-    specialize (H2 var0).
-    rewrite Expand1 in H1.
-    rewrite Expand2 in H2.
     breakStrDec.
-    + replace t0 with t1 by congruence.
-      replace t3 with t2 by congruence.
-      eauto using PrecisionInclusion, PinclusionEmpty.
-    + apply PVar; congruence.
+    + replace t1 with t0 in * by eauto using map_eq_In.
+      replace t2 with t3 in * by eauto using map_eq_In.
+      auto using PrecisionInclusionE.
+    + eapply PVar; trivial.
+      * eapply InNotEq with (var := var0) in HE1; congruence.
+      * eapply InNotEq with (var := var0) in HE2; congruence.
+
+  - (* let *)
+    breakStrDec;
+      eauto 12 using Precision, PrecisionInclusion, map_eq_incl, map_eq_sym, eqeq_shadow,
+                       EnvCompExt, extend2Types, eqeq_permute.
+
+  - (* fun *)
+    breakStrDec;
+      eauto 12 using Precision, PrecisionInclusion, map_eq_incl, map_eq_sym, eqeq_shadow,
+                       EnvCompExt, extend2Types, eqeq_permute.
 Qed.
+
 
 
 (*
 ** Substitution applied to function bodies
 *)
 Lemma PrecSubs' : forall var body body' v1 v2,
-    Precision PEmpty (IREFun var body) IRTFun
-                     (IREFun var body') IRTFun ->
-    Precision PEmpty v1 IRTStar v2 IRTStar ->
-    Precision PEmpty ([var := v1] body) IRTStar ([var := v2] body') IRTStar.
+    Precision MEmpty (IREFun var body) IRTFun
+              MEmpty (IREFun var body') IRTFun ->
+    Precision MEmpty v1 IRTStar MEmpty v2 IRTStar ->
+    Precision MEmpty ([var := v1] body) IRTStar MEmpty ([var := v2] body') IRTStar.
 Proof.
   intros * HPF HPV.
   inversion HPF; subst.
-  eauto using PrecSubs, ExpandEquiv, PEquivRefl.
+  eauto using PrecSubs, map_eq_refl.
 Qed.
 
 
@@ -273,12 +268,12 @@ Qed.
 ** Catch-up steps do not change the memory
 *)
 Lemma stepValueMem : forall e1 e2 e2' t1 t2 m m',
-    Precision PEmpty e1 t1 e2 t2 ->
+    Precision MEmpty e1 t1 MEmpty e2 t2 ->
     Value e1 ->
     m / e2 --> m' / e2' -> m = m'.
 Proof.
   intros * HP HV HStep.
-  remember PEmpty as Γ.
+  remember MEmpty as Γ.
   generalize dependent m'.
   generalize dependent m.
   generalize dependent e2'.
@@ -287,28 +282,33 @@ Proof.
 Qed.
 
 
+Ltac ForceΓEmpty Γ :=
+    replace Γ with (@MEmpty IRType) in *
+      by (symmetry; eauto using PPE, EnvCompEmpty).
+
+
 (*
 ** Catch-up steps preserve precision
 *)
 Lemma PrecisionPreservation : forall e1 e2 e2' t1 t2 m m',
-    Precision PEmpty e1 t1 e2 t2 ->
+    Precision MEmpty e1 t1 MEmpty e2 t2 ->
     Value e1 ->
     m / e2 --> m' / e2' ->
-    Precision PEmpty e1 t1 e2' t2.
+    Precision MEmpty e1 t1 MEmpty e2' t2.
 Proof.
   intros * HP HV HStep.
-  remember PEmpty as Γ.
+  remember MEmpty as Γ.
   generalize dependent m'.
   generalize dependent m.
   generalize dependent e2'.
-  induction HP; intros * HStep; inversion HV; subst;
+  induction HP; subst; intros * HStep; inversion HV; subst;
+  ForceΓEmpty Γ;
   inversion HStep; subst; eauto using Precision;
-  inversion HStep; subst;
-  try (inversion H5;
-       inversion HP; subst; trivial).
-  - inversion H6.
-  - inversion HP; subst; trivial.
-    ContraTags.
+  try (inversion HP; subst; trivial; fail).
+
+  exfalso.
+  apply PrecisionType1 in HP. inversion HP; subst.
+  apply NoneBiggerThanStar in H. discriminate.
 Qed.
 
 
@@ -316,10 +316,10 @@ Qed.
 ** Catch-up multi-steps preserve precision
 *)
 Lemma PrecisionPreservationMult : forall e1 e2 e2' t1 t2 m m',
-    Precision PEmpty e1 t1 e2 t2 ->
+    Precision MEmpty e1 t1 MEmpty e2 t2 ->
     Value e1 ->
     m / e2 -->* m' / e2' ->
-    Precision PEmpty e1 t1 e2' t2.
+    Precision MEmpty e1 t1 MEmpty e2' t2.
 Proof.
   intros * HP HV HStep.
   induction HStep; eauto using PrecisionPreservation.
@@ -332,9 +332,9 @@ Qed.
 *)
 Lemma BoxPreservePrecision : forall e m m' b tg v t,
   m / IREBox tg e -->* m' / b ->
-  Precision PEmpty v t (IREBox tg e) IRTStar ->
+  Precision MEmpty v t MEmpty (IREBox tg e) IRTStar ->
   Value v ->
-  exists o, b = IREBox tg o /\ Precision PEmpty v t b IRTStar.
+  exists o, b = IREBox tg o /\ Precision MEmpty v t MEmpty b IRTStar.
 Proof.
   intros * Hst.
   remember (IREBox tg e) as E.
@@ -352,13 +352,13 @@ Qed.
 ** If the term "catching-up" has type '*', it converges to a box.
 *)
 Lemma ValueStarP : forall tg t v e m e',
-    Precision PEmpty v t e IRTStar ->
+    Precision MEmpty v t MEmpty e IRTStar ->
     t <| Tag2Type tg ->
     Value v ->
     m / e -->* m / e' ->
     Value e' ->
       exists o,
-        e' = IREBox tg o /\ Precision PEmpty v t e' IRTStar.
+        e' = IREBox tg o /\ Precision MEmpty v t MEmpty e' IRTStar.
 Proof.
   intros * HP HSty HVP HStep HV.
   inversion HP; subst; try (inversion HVP; fail);
@@ -374,13 +374,13 @@ Qed.
 ** Obs: reduction uses only unbox(box x); it does not change memory
 *)
 Theorem CatchUp : forall e1 t1 e2 t2 m,
-  Precision PEmpty e1 t1 e2 t2 ->
+  Precision MEmpty e1 t1 MEmpty e2 t2 ->
   Value e1 ->
   exists e2', m / e2 -->* m / e2' /\ Value e2'.
 Proof.
   intros * HP HV.
-  remember PEmpty as Γ eqn:Heq.
-  induction HP; subst Γ; inversion HV; subst;
+  remember MEmpty as Γ eqn:Heq.
+  induction HP; subst; inversion HV; subst;
   (* instanciate and break induction hypothesis *)
   try match goal with
   [IH: _ -> Value ?E -> _ ,
@@ -394,6 +394,7 @@ Proof.
   apply PrecisionType1 in HP';
   inversion HP'; subst; clear HP';
   ContraTags;
+  ForceΓEmpty Γ;
 
   specialize (ValueStarP HP H HV H0 H1) as [? [? _]];
       subst;
@@ -435,7 +436,7 @@ Ltac NoValueUnbox :=
    that E is a value. If so, instantiate CatchUp. *)
 Ltac doCatchUp :=
   match goal with
-  [ HP: Precision _ ?E _ ?E' _ |- context [?M / _ -->* _ / _] ] =>
+  [ HP: Precision _ ?E _ _ ?E' _ |- context [?M / _ -->* _ / _] ] =>
       match goal with
       | [ H: _ / E' -->* _ / _  |- _ ] => fail 1  (* already done *)
       | [ |- _ ] =>  (* otherwise *)
@@ -450,44 +451,43 @@ Ltac doCatchUp :=
 ** Main simulation lemma
 *)
 Theorem Sim : forall m1 e1 t1 e2 m2 t2 m1' e1',
-  Precision PEmpty e1 t1 e2 t2 ->
+  Precision MEmpty e1 t1 MEmpty e2 t2 ->
   m1 / e1 --> m1' / e1'   ->
   m1 <M| m2 ->
   exists e2' m2',
-    m2 / e2 -->* m2' / e2' /\ m1' <M| m2' /\ Precision PEmpty e1' t1 e2' t2.
+    m2 / e2 -->* m2' / e2' /\ m1' <M| m2' /\ Precision MEmpty e1' t1 MEmpty e2' t2.
 Proof.
   intros * HP.
   generalize dependent m2.
   generalize dependent e1'.
   generalize dependent m1'.
   generalize dependent m1.
-  remember PEmpty as Γ.
+  remember MEmpty as Γ.
   induction HP; intros * Hstep HM;
 
   (* Handle BoxR and UnboxR, which should not invert step *)
   try (subst; BreakIH;
     eexists; eexists; split; try split;
-    eauto using Precision, CongBox, CongUnbox;
+    eauto using Precision, EnvCompRefl, CongBox, CongUnbox;
     fail);
 
   inversion Hstep; subst; repeat BreakIH;
+  try ForceΓEmpty Γ;
   (* Handle all "first" cases *)
   try (eexists; eexists; split; try split;
-    eauto using Precision, CongPlus1, CongGet1, CongSet1, CongLet,
+    eauto using Precision, EnvCompRefl, CongPlus1, CongGet1, CongSet1, CongLet,
                 CongApp1;
     fail);
 
     repeat doCatchUp.
 
   - (* StPlus2 *)
-    clear IHHP1.
     eexists; exists x0; split; try split;
       eauto using multiTrans, CongPlus1, CongPlus2,
                   Precision, PrecisionPreservationMult.
 
-  - (* StPlus *)
-    clear IHHP1 IHHP2.
 
+  - (* StPlus *)
     assert (N1: x = IRENum n1). {
       specialize (PrecisionPreservationMult HP1 (Vnum n1) H) as NH1.
       inversion NH1; subst; trivial; NoValueUnbox.
@@ -500,12 +500,12 @@ Proof.
 
     subst.
     exists (IRENum (n1 + n2)). exists m2. split; try split;
-    eauto 7 using multiTrans, CongPlus1, CongPlus2, multistep1, step,
-         Precision.
+    eauto 8 using multiTrans, CongPlus1, CongPlus2, multistep1, step,
+         Precision, EnvCompRefl.
 
 
   - (* StCstr *)
-    specialize (PrecFreshT HM H) as [? [? ?]].
+    specialize (PrecFreshT HM H0) as [? [? ?]].
     eexists; eexists; split; try split;
     eauto using multistep1, step, Precision.
 
@@ -550,17 +550,17 @@ Proof.
     split; try split;
       eauto 9 using multiTrans, CongSet1, CongSet2, CongSet3,
         multistep1, step, Precision, PrecQueryT, PrecisionPreservationMult,
-        PrecUpdate.
+        PrecUpdate, EnvCompRefl.
 
   - (* StLet *)
     clear IHHP1 IHHP2.
     eexists ([var := x] b2); exists m2; split; try split;
       eauto using multiTrans, CongLet, multistep1, step,
-                  PrecSubs, PrecisionPreservationMult, PEquivRefl.
+                  PrecSubs, PrecisionPreservationMult, EnvCompRefl, map_eq_refl.
 
   - (* StFun *)
     clear IHHP.
-    specialize (PrecFreshF HM HP H4) as [? [? ?]].
+    specialize (PrecFreshF HM HP H5) as [? [? ?]].
     eexists. eexists. repeat split;
     eauto using multistep1, step, Precision.
 
@@ -603,11 +603,11 @@ Qed.
 Theorem SimMult : forall m1 e1 t1 e2 m2 t2 m1' e1',
   m1 / e1 -->* m1' / e1'   ->
   Value e1' ->
-  Precision PEmpty e1 t1 e2 t2 ->
+  Precision MEmpty e1 t1 MEmpty e2 t2 ->
   m1 <M| m2 ->
   exists e2' m2',
     m2 / e2 -->* m2' / e2' /\
-    Precision PEmpty e1' t1 e2' t2 /\
+    Precision MEmpty e1' t1 MEmpty e2' t2 /\
     m1' <M| m2' /\
     Value e2'.
 Proof.
@@ -640,11 +640,12 @@ Corollary SimDyn : forall m1 e1 t1 m1' e1',
     Value e2'.
 Proof.
   intros * HSt Hty HM HV.
-  assert(Precision PEmpty e1 t1 (dyn e1) IRTStar) by
-    eauto using PrecisionIrrel, Env2DynEmpty, DynLessPrecise.
+  assert(Precision MEmpty e1 t1 MEmpty (dyn e1) IRTStar)
+    by (eapply DynLessPrecise; trivial).
   assert (m1 <M| m1) by auto using PrecMemRefl.
   specialize (SimMult HSt HV H H0) as [? [? [? [? [? ?]]]]].
   eexists x. eexists. repeat split;
   eauto using PrecDynEqualVal.
 Qed.
+
 

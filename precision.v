@@ -608,7 +608,7 @@ Lemma PrecisionInclusionE : forall Γ Δ e1 t1 e2 t2,
 Proof.
   intros; eauto using PrecisionInclusion, inclusion_empty.
 Qed.
-  
+
 
 (*
 ** Precision subsumes typing for its first expression
@@ -742,6 +742,46 @@ Proof.
 Qed.
 
 
+(*
+** For 'PrecTrans': generalize the term in the second Precision hypothesis
+** and does an induction in that Precision.
+*)
+Ltac ind2 Γ3 e3 t3 :=
+  match goal with
+    |[H: Precision _ ?E _ Γ3 e3 t3 |- _] =>
+      remember E as E' eqn:Heq;
+      induction H; intros; inversion Heq; subst;
+      eauto using Precision, EnvCompTrans
+  end.
+
+
+(*
+** A few cases need only this change of 't3' to succeed.
+*)
+Ltac changet3 t3 :=
+  match goal with
+    |[H: Precision _ _ IRTStar _ _ t3 |- _] =>
+       replace t3 with IRTStar in * by (eauto using NoneBiggerThanStar, PPT);
+       eauto using Precision
+  end.
+
+
+Ltac GroundFlat :=
+  match goal with
+  |[H: ?t <| Tag2Type ?g |- _] =>
+    replace t with (Tag2Type g) in * by (symmetry; eauto using GroundFlat); subst
+end.
+
+
+Ltac NoneBiggerThanStar :=
+  try match goal with
+    |[H: Precision _ _ IRTStar _ _ (Tag2Type _) |- _] => apply PPT in H
+  end;
+  try match goal with
+    |[H: IRTStar <| Tag2Type _ |- _] => apply NoneBiggerThanStar in H; discriminate
+   end.
+
+
 Lemma PrecTrans : forall e2 Γ1 Γ2 Γ3 e1 e3 t1 t2 t3,
     Precision Γ1 e1 t1 Γ2 e2 t2 ->
     Precision Γ2 e2 t2 Γ3 e3 t3 ->
@@ -753,99 +793,19 @@ Proof.
   generalize dependent e3.
   generalize dependent Γ3.
   induction HP1; intros * HP2;
-    try (inversion HP2; subst; eauto using Precision, EnvCompTrans, PrecEnvL1, IRTyping;
-         fail).
-
-  - (* Plus *)
-    remember (IREPlus e1 e2) as E eqn:Heq1.
-    remember IRTInt as TI eqn:Heq2.
-    generalize dependent e2.
-    generalize dependent d2.
-    generalize dependent e1.
-    generalize dependent d1.
-    induction HP2; intros; inversion Heq1; inversion Heq2; subst; try discriminate;
-      eauto using Precision.
-
-  - (* PGet *)
-    remember (IREGet d2 i2) as E eqn:Heq1.
-    remember IRTStar as TI eqn:Heq2.
-    generalize dependent i2.
-    generalize dependent d2.
-    generalize dependent i1.
-    generalize dependent d1.
-    induction HP2; intros; inversion Heq1; inversion Heq2; subst; try discriminate;
-      eauto using Precision.
-
-  - (* PSet *)
-    remember (IRESet d2 i2 v2) as E eqn:Heq1.
-    remember IRTStar as TI eqn:Heq2.
-    remember IRTNil as TN eqn:Heq3.
-    generalize dependent v2.
-    generalize dependent v1.
-    generalize dependent i2.
-    generalize dependent i1.
-    generalize dependent d2.
-    generalize dependent d1.
-    induction HP2; intros; inversion Heq1; inversion Heq2; inversion Heq3;
-       subst; try discriminate; eauto using Precision.
+    try GroundFlat;
+    (* some cases can be solved by inversion on HP2 *)
+    try (inversion HP2; subst;
+         eauto using Precision, EnvCompTrans, PrecEnvL1, IRTyping; NoneBiggerThanStar;
+         fail);
+    (* most cases need induction on HP2 *)
+    try (ind2 Γ3 e3 t3; fail);
+    try (changet3 t3).
 
   - (* PLet *)
-    remember (IRELet var t2 d2 b2) as E eqn:Heq.
-    generalize dependent b2.
-    generalize dependent t1'.
-    generalize dependent b1.
-    generalize dependent t2.
-    generalize dependent d2.
-    generalize dependent t1.
-    generalize dependent d1.
-    induction HP2; intros; inversion Heq;
-       subst; try discriminate; eauto using Precision.
-    eapply GroundFlat in H; subst.
-    clear H1.
+    ind2 Γ3 e3 t3.
+    GroundFlat.
     eauto using Precision, PPT.
-
-  - (* PFun *)
-    remember (IREFun var d2) as E eqn:Heq1.
-    remember IRTFun as TI eqn:Heq2.
-    generalize dependent d2.
-    generalize dependent d1.
-    induction HP2; intros; inversion Heq1; inversion Heq2; subst; try discriminate;
-      eauto using Precision, EnvCompTrans.
-
-  - (* PApp *)
-    remember (IREApp f2 v2) as E eqn:Heq1.
-    remember IRTStar as TI eqn:Heq2.
-    generalize dependent v2.
-    generalize dependent f2.
-    generalize dependent v1.
-    generalize dependent f1.
-    induction HP2; intros; inversion Heq1; inversion Heq2; subst; try discriminate;
-      eauto using Precision, EnvCompTrans.
-
-  - (* PBoxR *)
-    inversion HP2; subst; eauto.
-    + apply PPT in H. apply NoneBiggerThanStar in H. discriminate.
-    + apply NoneBiggerThanStar in H. discriminate.
-
-  - (* PBoxL *)
-    replace t3 with IRTStar in * by (eauto using NoneBiggerThanStar, PPT).
-    eauto using Precision.
-
-  - (* PUnboxL *)
-    apply IHHP1 in HP2.
-    replace t3 with IRTStar in * by (eauto using NoneBiggerThanStar, PPT).
-    eauto using Precision.
-
-  - (* PUnboxR *)
-    replace t with (Tag2Type g) in * by (symmetry; eauto using GroundFlat).
-    subst. clear H.
-    remember (IREUnbox g e) as E eqn:Heq1.
-    remember (Tag2Type g) as TI eqn:Heq2.
-    generalize dependent t.
-    generalize dependent e.
-    generalize dependent d.
-    induction HP2; intros; inversion Heq1; inversion Heq2; subst; try discriminate;
-      eauto using Precision, EnvCompTrans.
 
 Qed.
 

@@ -447,6 +447,21 @@ Ltac doCatchUp :=
   end.
 
 
+Ltac applyRules := repeat split;
+  eauto 9 using EnvCompRefl, CongBox, CongUnbox,
+    multiTrans, EnvCompRefl,
+    CongPlus1, CongPlus2, CongGet1, CongGet2,
+    CongApp1, CongApp2, CongSet1, CongSet2, CongSet3, CongLet,
+    PrecQueryT, PrecUpdate, PrecSubs, map_eq_refl,
+    Precision, PrecisionPreservationMult, multiTrans, multistep1, step
+.
+
+Ltac solveSim2 := eexists; eexists; applyRules.
+
+Ltac solveSim1 m := eexists; exists m; applyRules.
+
+Ltac solveSim e m := exists e; exists m; applyRules.
+
 (*
 ** Main simulation lemma
 *)
@@ -466,25 +481,16 @@ Proof.
   induction HP; intros * Hstep HM;
 
   (* Handle BoxR and UnboxR, which should not invert step *)
-  try (subst; BreakIH;
-    eexists; eexists; split; try split;
-    eauto using Precision, EnvCompRefl, CongBox, CongUnbox;
+  try (subst; BreakIH; solveSim2;
     fail);
 
   inversion Hstep; subst; repeat BreakIH;
   try ForceΓEmpty Γ;
-  (* Handle all "first" cases *)
-  try (eexists; eexists; split; try split;
-    eauto using Precision, EnvCompRefl, CongPlus1, CongGet1, CongSet1, CongLet,
-                CongApp1;
-    fail);
 
-    repeat doCatchUp.
+  repeat doCatchUp;
 
-  - (* StPlus2 *)
-    eexists; exists x0; split; try split;
-      eauto using multiTrans, CongPlus1, CongPlus2,
-                  Precision, PrecisionPreservationMult.
+  (* Handle all "congruence" cases *)
+  try (solveSim1 x0; fail).
 
 
   - (* StPlus *)
@@ -499,21 +505,11 @@ Proof.
     }
 
     subst.
-    exists (IRENum (n1 + n2)). exists m2. split; try split;
-    eauto 8 using multiTrans, CongPlus1, CongPlus2, multistep1, step,
-         Precision, EnvCompRefl.
-
+    solveSim (IRENum (n1 + n2)) m2.
 
   - (* StCstr *)
     specialize (PrecFreshT HM H0) as [? [? ?]].
-    eexists; eexists; split; try split;
-    eauto using multistep1, step, Precision.
-
-
-  - (* StGet2 *)
-    eexists; exists x0; split; try split;
-      eauto using multiTrans, CongGet1, CongGet2,
-                  Precision, PrecisionPreservationMult.
+    solveSim2.
 
   - (* StGet *)
     clear IHHP1 IHHP2.
@@ -523,20 +519,7 @@ Proof.
       inversion NH1; subst; trivial; NoValueUnbox.
     } subst.
 
-    exists (queryT a x0 m2). exists m2. split; try split;
-      eauto 7 using multiTrans, CongGet1, CongGet2, multistep1, step,
-         Precision, PrecQueryT, PrecisionPreservationMult.
-
-  - (* StSet2 *)
-    eexists; exists x0; split; try split;
-      eauto using multiTrans, CongSet1, CongSet2,
-                  Precision, PrecisionPreservationMult.
-
-  - (* StSet3 *)
-   clear IHHP1 IHHP2.
-    eexists; exists x0; split; try split;
-      eauto 6 using multiTrans, CongSet1, CongSet2, CongSet3,
-                  Precision, PrecisionPreservationMult.
+    solveSim (queryT a x0 m2) m2.
 
   - (* StSet *)
     clear IHHP1 IHHP2 IHHP3.
@@ -547,27 +530,16 @@ Proof.
     } subst.
 
     exists IRENil. eexists (UpdateT _ _ (EV x1 H4) _).
-    split; try split;
-      eauto 9 using multiTrans, CongSet1, CongSet2, CongSet3,
-        multistep1, step, Precision, PrecQueryT, PrecisionPreservationMult,
-        PrecUpdate, EnvCompRefl.
+    applyRules.
 
   - (* StLet *)
     clear IHHP1 IHHP2.
-    eexists ([var := x] b2); exists m2; split; try split;
-      eauto using multiTrans, CongLet, multistep1, step,
-                  PrecSubs, PrecisionPreservationMult, EnvCompRefl, map_eq_refl.
+    solveSim ([var := x] b2) m2.
 
   - (* StFun *)
     clear IHHP.
     specialize (PrecFreshF HM HP H5) as [? [? ?]].
-    eexists. eexists. repeat split;
-    eauto using multistep1, step, Precision.
-
-  - (* StApp2 *)
-    eexists; exists x0; split; try split;
-      eauto using multiTrans, CongApp1, CongApp2,
-                  Precision, PrecisionPreservationMult.
+    solveSim2.
 
   - (* StApp *)
     clear IHHP1 IHHP2.
@@ -580,10 +552,7 @@ Proof.
 
     destruct (queryF a m2) as [var' body'] eqn:HEq2. symmetry in HEq2.
     specialize (PrecQueryF _ HM H5 HEq2) as [? ?]; subst.
-    exists (IRELet var' IRTStar x body').
-    exists m2. repeat split;
-    eauto 7 using multiTrans, CongApp1, CongApp2, multistep1, step,
-         Precision, PrecisionPreservationMult.
+    solveSim (IRELet var' IRTStar x body') m2.
 
   - (* StUnbox *)
     clear IHHP.
@@ -592,7 +561,7 @@ Proof.
     * specialize (ValueStarP H3 (TPrecisionRefl (Tag2Type g))
         H5 H H0) as [? [? ?]].
       subst.
-      eexists; eexists; split; try split; eauto.
+      solveSim2.
 
 Qed.
 

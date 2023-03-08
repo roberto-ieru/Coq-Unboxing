@@ -28,7 +28,7 @@ Inductive TPrecision : IRType -> IRType -> Prop :=
 ** Type precision is reflexive
 *)
 Lemma TPrecisionRefl: forall t, t <| t.
-Proof. intros t. destruct t; auto using TPrecision. Qed.
+Proof. destruct t; auto using TPrecision. Qed.
 
 
 (*
@@ -49,7 +49,7 @@ Qed.
 Lemma TPrecisionAsym : forall t1 t2,
   t1 <| t2 -> t2 <| t1 -> t1 = t2.
 Proof.
-  intros t1 t2 H12.
+  intros * H12.
   destruct H12; intros H21; trivial; inversion H21; subst; auto.
 Qed.
 
@@ -63,13 +63,20 @@ Proof.
   intros * H. inversion H; trivial.
 Qed.
 
+Ltac GroundFlat :=
+  repeat match goal with [H: ?T1 <| Tag2Type ?T2 |- _] =>
+    match goal with
+    | [H: T1 = Tag2Type T2 |- _] => fail 1
+    | [ |- _] => specialize (GroundFlat _ _ H) as ?
+    end
+  end.
+
+
 
 Lemma GroundTop : forall t g1 g2,
   t <| Tag2Type g1 -> t <| Tag2Type g2 -> g1 = g2.
 Proof.
-  intros * H1 H2.
-  apply GroundFlat in H1.
-  apply GroundFlat in H2. subst. injection H2; trivial.
+  intros. GroundFlat. congruence.
 Qed.
 
 
@@ -78,8 +85,7 @@ Qed.
 *)
 Lemma NoneBiggerThanStar : forall t, IRTStar <| t -> IRTStar = t.
 Proof.
-  intros t H.
-  destruct t; inversion H; trivial.
+  destruct t; inversion 1; trivial.
 Qed.
 
 
@@ -116,9 +122,9 @@ Qed.
 (* Nothing is smaller than the empty environment *)
 Lemma EnvCompEmpty : forall Γ, Γ <E| MEmpty -> Γ = MEmpty.
 Proof.
-  destruct Γ; trivial.
-  intros H.
-  specialize (H s).
+  intros [ | var ? ?] H; trivial.
+  exfalso.
+  specialize (H var).
   erewrite InEq in H.
   inversion H.
 Qed.
@@ -131,7 +137,7 @@ Lemma EnvCompTrans : forall Γ1 Γ2 Γ3,
     Γ1 <E| Γ2 -> Γ2 <E| Γ3 -> Γ1 <E| Γ3.
 Proof.
   unfold EnvComp.
-  intros Γ1 Γ2 Γ3 H12 H23 var.
+  intros * H12 H23 var.
   specialize (H12 var).
   specialize (H23 var).
   destruct (In Γ1 var);
@@ -140,8 +146,7 @@ Proof.
       [H: _ = In _ _ |- _] => rewrite <- H in *
     end;
   inversion H23; subst;
-  constructor;
-  eauto using TPrecisionTrans.
+  eauto using TPrecOption, TPrecisionTrans.
 Qed.
 
 
@@ -155,8 +160,7 @@ Lemma EnvCompExt : forall Γ1 Γ2 var t1 t2,
 Proof.
   unfold EnvComp.
   intros.
-  simpl.
-  destruct (string_dec var0 var); subst;
+  breakStrDec;
   auto using TPrecOption, TPrecisionRefl.
 Qed.
 
@@ -182,9 +186,8 @@ Lemma LELT : forall Γ1 Γ2 e t1 t2,
     t1 <| t2.
 Proof.
   intros * HT1.
-  generalize dependent t2.
   generalize dependent Γ2.
-  induction HT1; intros * HT2 HP; inversion HT2; subst;
+  induction HT1; inversion 1; subst;
     eauto using TPrecisionRefl, PEnvIn, EnvCompExt.
 Qed.
 
@@ -365,15 +368,15 @@ Lemma DynBones : forall e1 e2, dyn e1 = dyn e2 <-> Tbones e1 = Tbones e2.
 Proof.
   split; generalize dependent e2; induction e1; intros * H;
   induction e2;
-  try (discriminate H);  (* elliminate cases with different structures *)
+  try (discriminate H);  (* eliminate cases with different structures *)
   try (injection H; intros; subst);  (* extract equality of fields *)
   eauto;  (* solve cases that don't need 'f_equal' *)
-  (* break equalities up to 'dyn' or 'Tbones' *)
   simpl;
+  (* break equalities up to 'dyn' or 'Tbones' *)
   repeat match goal with
-    |[ |- dyn _ = dyn _] => idtac
-    |[ |- Tbones _ = Tbones _] => idtac
-    |[ |- _ _ = _ _] => f_equal
+    |[ |- dyn _ = dyn _] => idtac  (* ignore *)
+    |[ |- Tbones _ = Tbones _] => idtac  (* ignore *)
+    |[ |- _ _ = _ _] => f_equal  (* apply f_equal to all other equalities *)
   end;
   eauto.  (* solve the subcases *)
 Qed.
@@ -383,8 +386,7 @@ Qed.
 Lemma EqBones : forall Γ Δ e1 t1 e2 t2,
   Precision Γ e1 t1 Δ e2 t2 -> Tbones e1 = Tbones e2.
 Proof.
-  intros * HP.
-  induction HP; trivial; simpl; congruence.
+  induction 1; trivial; simpl; congruence.
 Qed.
 
 
@@ -401,8 +403,7 @@ Qed.
 
 (* FALSE!  unbox[int](box[int](10)) ⊑ 10 : int ⊑ int *)
 Example example2 : ~ Precision MEmpty UB10 IRTInt MEmpty (IRENum 10) IRTInt.
-  intros HF.
-  inversion HF.
+  inversion 1.
 Qed.
 
 (* unbox[int](box[int](10)) ⊑ box[int](10) : int ⊑ * *)
@@ -425,7 +426,7 @@ Goal Precision MEmpty
 Proof.
   unfold IRTInt.
   eapply PLet.
-  - eapply PPlus; unfold IRTInt;
+  - eapply PPlus;
     eauto using Precision, TPrecision, EnvCompRefl, EnvCompExt.
   - eauto using Precision, EnvCompRefl.
 Qed.
@@ -437,8 +438,7 @@ Goal forall E T,
   Precision MEmpty E T MEmpty (IRENum 10) IRTInt ->
   E = IRENum 10.
 Proof.
-  intros * HP.
-  induction E; inversion HP; subst; trivial.
+  induction E; inversion 1; subst; trivial.
 Qed.
 
 
@@ -447,7 +447,7 @@ Qed.
 Goal exists e1 t1 e2 t2,
     Precision MEmpty e1 t1 MEmpty e2 t2 /\ Value e1 /\ ~Value e2.
   eexists; eexists; eexists; eexists.
-  split; try split.
+  repeat split.
   - apply example1.
   - eauto using Value.
   - intros Hcontra. inversion Hcontra.
@@ -456,10 +456,10 @@ Qed.
 Goal exists e1 t1 e2 t2,
     Precision MEmpty e1 t1 MEmpty e2 t2 /\ Value e2 /\ ~Value e1.
   eexists; eexists; eexists; eexists.
-  split; try split.
+  repeat split.
   - apply example3.
   - eauto using Value.
-  - intros Hcontra. inversion Hcontra.
+  - inversion 1.
 Qed.
 
 
@@ -477,10 +477,11 @@ Qed.
 Goal ~ Precision MEmpty (IRENum 10) IRTInt
                  MEmpty (IREBox TgTbl (IREUnbox TgTbl B10)) IRTStar.
 Proof.
-  intros H.
-  inversion H; subst.
-  inversion H5; subst.
-  inversion H2.
+  intro.
+  repeat match goal with
+  |[H: Precision _ _ _ _ _ _ |- _] => inversion H; subst; clear H
+  |[H: _ <| Tag2Type _ |- _] => inversion H; subst; clear H
+  end.
 Qed.
 
 
@@ -510,10 +511,11 @@ Goal forall a, ~ Precision
                    MEmpty (get10 a) IRTStar
                    MEmpty (IREBox TgInt (IREUnbox TgInt (get10 a))) IRTStar.
 Proof.
-  intros * H.
-  inversion H; subst.
-  inversion H5; subst.
-  inversion H2.
+  intros * ?.
+  repeat match goal with
+  |[H: Precision _ _ _ _ _ _ |- _] => inversion H; subst; clear H
+  |[H: _ <| Tag2Type _ |- _] => inversion H; subst; clear H
+  end.
 Qed.
 
 
@@ -541,7 +543,6 @@ End Examples.
 Lemma PinclusionEquiv : forall (Γ Γ' : IREnvironment),
     map_eq Γ Γ' -> inclusion Γ Γ'.
 Proof.
-  intros * H.
   intuition congruence.
 Qed.
 
@@ -553,9 +554,7 @@ Qed.
 Lemma PPE : forall Γ Δ e1 t1 e2 t2,
     Precision Γ e1 t1 Δ e2 t2 -> Γ <E| Δ.
 Proof.
-  intros * HP.
-  induction HP; subst; eauto using TPrecision, TPrecisionRefl,
-    PEnvIn.
+  induction 1; eauto using TPrecision, TPrecisionRefl, PEnvIn.
 Qed.
 
 
@@ -566,9 +565,7 @@ Qed.
 Lemma PPT : forall Γ Δ e1 t1 e2 t2,
     Precision Γ e1 t1 Δ e2 t2 -> t1 <| t2.
 Proof.
-  intros * HP.
-  induction HP; subst; eauto using TPrecision, TPrecisionRefl,
-    PEnvIn.
+  induction 1; subst; eauto using TPrecision, TPrecisionRefl, PEnvIn.
 Qed.
 
 
@@ -596,7 +593,7 @@ Proof.
   intros * HP.
   generalize dependent Γ2.
   generalize dependent Δ2.
-  induction HP; intros * HI1 HI2 HE;
+  induction HP;
     eauto 8 using Precision, inclusion_update, EnvCompExt, PPT.
 Qed.
 
@@ -616,8 +613,7 @@ Qed.
 Lemma PrecisionType1: forall Γ Δ e1 t1 e2 t2,
   Precision Γ e1 t1 Δ e2 t2 -> Γ |= e1 : t1.
 Proof.
-  intros * HP.
-  induction HP; eauto using IRTyping.
+  induction 1; eauto using IRTyping.
 Qed.
 
 
@@ -627,8 +623,7 @@ Qed.
 Lemma PrecisionType2: forall Γ Δ e1 t1 e2 t2,
   Precision Γ e1 t1 Δ e2 t2 -> Δ |= e2 : t2.
 Proof.
-  intros * HP.
-  induction HP; eauto using IRTyping.
+  induction 1; eauto using IRTyping.
 Qed.
 
 
@@ -638,14 +633,13 @@ Qed.
 Lemma PrecisionRefl: forall Γ e t,
     Γ |= e : t ->  Precision Γ e t Γ e t.
 Proof.
-  intros * Hty.
-  induction Hty; subst; eauto using Precision, UnboxCongruent, EnvCompRefl.
+  induction 1; subst; eauto using Precision, UnboxCongruent, EnvCompRefl.
 Qed.
 
 
 Lemma PEnvDyn : forall Γ, Γ <E| dynGamma Γ.
 Proof.
-  unfold EnvComp. intros.
+  intros Γ var.
   destruct (In Γ var) eqn:?.
   - rewrite TP2TGammaIn with (T := i); auto using TPrecOption, TPrecision.
   - rewrite NTP2TGammaIn; auto using TPrecOption.
@@ -659,8 +653,7 @@ Qed.
 Theorem DynLessPrecise : forall Γ e t,
   Γ |= e : t -> Precision Γ e t (dynGamma Γ) (dyn e) IRTStar.
 Proof.
-  intros * H.
-  induction H; simpl; eauto using Precision, TPrecision, TP2TGammaIn, PEnvDyn.
+  induction 1; simpl; eauto using Precision, TPrecision, TP2TGammaIn, PEnvDyn.
 Qed.
 
 
@@ -671,7 +664,7 @@ Qed.
 Theorem PrecDynEqual : forall Γ Δ e1 t1 e2 t2,
     Precision Γ e1 t1 Δ e2 t2 -> dyn e2 = dyn e1.
 Proof.
-  intros * HP. induction HP; simpl; congruence.
+  induction 1; simpl; congruence.
 Qed.
 
 
@@ -685,9 +678,8 @@ Theorem PrecDynEqualVal : forall e1 t1 e2,
     e2 = dyn e1.
 Proof.
   intros.
-  replace e2 with (dyn e2). eauto using PrecDynEqual.
-  symmetry.
-  eauto using PrecisionType2, ValueStar.
+  replace e2 with (dyn e2);
+  eauto using PrecDynEqual, PrecisionType2, ValueStar, eq_sym.
 Qed.
 
 
@@ -714,11 +706,10 @@ Proof.
   intros * HP1.
   generalize dependent t1'.
   generalize dependent Γ1'.
-  induction HP1; intros * HPE HT;
-    try (inversion HT; subst;
-         eauto using Precision, EnvCompTrans, EnvCompExt, TPrecisionRefl; fail).
-  - apply GroundFlat in H; subst.
-    eauto using Precision, LELT, PrecisionType1.
+  induction HP1; intros * HPE HT; GroundFlat;
+    inversion HT; subst;
+    eauto using Precision, EnvCompTrans, EnvCompExt, TPrecisionRefl,
+                LELT, PrecisionType1.
 Qed.
 
 
@@ -732,13 +723,19 @@ Proof.
   generalize dependent t2'.
   generalize dependent Γ2'.
   induction HP1; intros * HPE HT;
-    try (inversion HT; subst;
-         eauto using Precision, EnvCompTrans, EnvCompExt, TPrecisionRefl; fail);
 
-    assert (IRTStar = t2') by
-      (eauto using NoneBiggerThanStar, LELT, PrecisionType2);
-    subst;
-    eauto using Precision.
+  (* Get cases when t2' must be '*' *)
+  try match goal with
+  [H1: Precision _ _ _ ?E1 ?e IRTStar,
+   H2: ?E2 |= ?e : ?T,
+   H3: ?E1 <E| ?E2 |- _] =>
+     assert (IRTStar = T) by
+       (eauto using NoneBiggerThanStar, LELT, PrecisionType2);
+     subst
+  end;
+
+  inversion HT; subst;
+    eauto using Precision, EnvCompTrans, EnvCompExt, TPrecisionRefl.
 Qed.
 
 
@@ -750,27 +747,20 @@ Ltac ind2 Γ3 e3 t3 :=
   match goal with
     |[H: Precision _ ?E _ Γ3 e3 t3 |- _] =>
       remember E as E' eqn:Heq;
-      induction H; intros; inversion Heq; subst;
-      eauto using Precision, EnvCompTrans
+      induction H; intros; GroundFlat; inversion Heq; subst;
+      eauto using Precision, EnvCompTrans, PPT
   end.
 
 
 (*
-** A few cases need only this change of 't3' to succeed.
+** A few cases need only this change of type to succeed.
 *)
-Ltac changet3 t3 :=
+Ltac changeT T :=
   match goal with
-    |[H: Precision _ _ IRTStar _ _ t3 |- _] =>
-       replace t3 with IRTStar in * by (eauto using NoneBiggerThanStar, PPT);
+    |[H: Precision _ _ IRTStar _ _ T |- _] =>
+       replace T with IRTStar in * by (eauto using NoneBiggerThanStar, PPT);
        eauto using Precision
   end.
-
-
-Ltac GroundFlat :=
-  match goal with
-  |[H: ?t <| Tag2Type ?g |- _] =>
-    replace t with (Tag2Type g) in * by (symmetry; eauto using GroundFlat); subst
-end.
 
 
 Ltac NoneBiggerThanStar :=
@@ -793,19 +783,18 @@ Proof.
   generalize dependent e3.
   generalize dependent Γ3.
   induction HP1; intros * HP2;
-    try GroundFlat;
-    (* some cases can be solved by inversion on HP2 *)
-    try (inversion HP2; subst;
-         eauto using Precision, EnvCompTrans, PrecEnvL1, IRTyping; NoneBiggerThanStar;
-         fail);
-    (* most cases need induction on HP2 *)
-    try (ind2 Γ3 e3 t3; fail);
-    try (changet3 t3).
+    GroundFlat; subst;
 
-  - (* PLet *)
+    try (changeT t3);
+
+    (* most cases can be solved by inversion on HP2 *)
+    try (inversion HP2; subst;
+         eauto using Precision, EnvCompTrans, PrecEnvL1, IRTyping;
+         NoneBiggerThanStar;
+         fail);
+
+    (* some cases need induction on HP2 *)
     ind2 Γ3 e3 t3.
-    GroundFlat.
-    eauto using Precision, PPT.
 
 Qed.
 

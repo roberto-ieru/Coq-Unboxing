@@ -124,10 +124,11 @@ Fixpoint Pall2Lua (e : PE) : LE :=
 Lemma dynCast : forall (t1 t2 : IRType) (e : IRE),
     dyn (Cast t1 t2 e) = dyn e.
 Proof.
-  intros t1 t2 e.
   unfold Cast.
-  destruct t1; destruct t2; simpl; trivial.
-  destruct (dec_Tag t t0); simpl; trivial.
+  intros.
+  destruct t1; destruct t2; simpl;
+  try match goal with t1:Tag, t2:Tag |- _ => destruct (dec_Tag t1 t2) end;
+  trivial.
 Qed.
 
 
@@ -139,19 +140,19 @@ Theorem PallLua : forall Γ e t,
 Proof.
   intros Γ e.
   generalize dependent Γ.
-  induction e; intros Γ t Hty; inversion Hty; subst;
+  induction e; intros * Hty; inversion Hty; subst;
   trivial;
   (* instantiate induction hypotheses *)
   repeat match goal with
-  [IH: _ -> _ -> PTyping _ ?E _ -> _,
-   HTy: PTyping _ ?E _ |- _ ] =>
-    specialize (IH _ _ HTy)
+    IH: _ -> _ -> PTyping _ ?E _ -> _,
+    HTy: PTyping _ ?E _ |- _ =>
+     specialize (IH _ _ HTy)
   end;
   (* eliminate casts *)
   simpl;
   repeat rewrite dynCast;
   (* break if's from casts *)
-  repeat match goal with [ |- context [GtypeOf ?G ?E] ] =>
+  repeat match goal with |- context [GtypeOf ?G ?E] =>
     destruct (GtypeOf G E) end;
   simpl;
   congruence.
@@ -354,8 +355,7 @@ Proof.
   intros * Hf Hq.
   unfold LfreshF in Hf. inversion Hf; subst.
   simpl in Hq.
-  destruct (Nat.eq_dec (Lfreshaux m) (Lfreshaux m)); try easy.
-  intuition; congruence.
+  breakIndexDec; intuition; congruence.
 Qed.
 
 
@@ -363,8 +363,8 @@ Example L2 : exists m,
     LEmptyMem / LEApp (LEFun "x" (LEVar "x")) (LENum 10) ==>
     m / LENum 10.
 Proof.
-  destruct (LfreshF LEmptyMem "x" (LEVar "x")) eqn:Heq.
-  destruct (LqueryF a l) eqn:Heq'.
+  destruct (LfreshF LEmptyMem "x" (LEVar "x")) as [a m'] eqn:Heq.
+  destruct (LqueryF a m') eqn:Heq'.
   specialize (auxmem _ _ _ _ _ _ _ Heq Heq') as [? ?]; subst.
   eexists.
   eauto using Lstep, LValue.
@@ -382,13 +382,19 @@ Qed.
 
 
 Ltac NoValue :=
-  match goal with |[H: LValue _ |- _] => inversion H end.
+  match goal with H: LValue _ |- _ => inversion H end.
 
 Ltac applyH :=
   repeat match goal with
-      |[H: forall _ _, (Lstep ?M ?E _ _) -> _,
-        H1: Lstep ?M ?E _ _ |- _] =>
+      H: forall _ _, (Lstep ?M ?E _ _) -> _,
+        H1: Lstep ?M ?E _ _ |- _ =>
               specialize (H _ _ H1) as [? ?]; subst
+  end.
+
+Ltac LEV2ValEq :=
+  match goal with
+    H: LEV2Val ?v = LEV2Val ?v' |- _ =>
+      replace v' with v in * by auto using LEV2ValEq
   end.
 
 
@@ -402,27 +408,34 @@ Proof.
   generalize dependent v2.
   induction HSt1; intros * HSt2; only 1: auto using ValueStep;
   inversion HSt2; subst; try NoValue;
-  try (applyH; split; congruence; fail).
-  - (* LStSet *)
-    applyH.
-    (* congruence cannot know that proofs of LValue are unique *)
-    replace v0 with v by auto using LEV2ValEq.
-    split; congruence.
+  try (applyH; try LEV2ValEq; split; congruence; fail).
+
   - (* LStLet *)
-    specialize (IHHSt1_1 _ _ H2) as [? ?]; subst.
-    specialize (IHHSt1_2 _ _ H3) as [? ?]; subst.
-    injection H1; intros; subst.
-    rewrite <- H5 in H; injection H; intros; subst.
-    specialize (IHHSt1_3 _ _ H8) as [? ?]; subst.
-    split; trivial.
+    repeat match goal with
+      |[IH: forall _ _ , ?M / ?E ==> _ / _ -> _,
+        H1: ?M / ?E ==> _ / _,
+        H2: ?M / ?E ==> _ / _ |- _] =>
+          specialize (IH _ _ H2) as [? ?]; subst
+    end.
+    eapply IHHSt1_3.
+    match goal with 
+      H: LEFAddr ?a = LEFAddr ?a' |- _ =>
+        replace a' with a in * by congruence
+    end.
+    match goal with 
+      H1: (?e1, ?e1') = ?E, 
+      H2: (?e2, ?e2') = ?E |- _ =>
+         replace e1 with e2 by congruence;
+         replace e1' with e2' by congruence
+    end.
+   trivial.
 Qed.
 
 
 
 Theorem L2LirValue : forall e, LValue e -> Value (Lua2Lir e).
 Proof.
-  intros e HV.
-  inversion HV; simpl; subst; eauto using Value.
+  inversion 1; simpl; subst; eauto using Value.
 Defined.
 
 
@@ -442,7 +455,7 @@ Inductive Lmem_correct : LMem -> Prop :=
 Lemma mem_correct_freshT : forall m m' free,
   Lmem_correct m -> (free,m') = LfreshT m -> Lmem_correct m'.
 Proof.
-  unfold LfreshT. intros m m' free Hmc Heq. inversion Heq.
+  unfold LfreshT. inversion 2.
   eauto using Lmem_correct, LEWT.
 Qed.
 
@@ -453,16 +466,19 @@ Lemma mem_correct_freshF : forall m m' free var body,
   (free,m') = LfreshF m var body ->
   Lmem_correct m'.
 Proof.
-  unfold LfreshF. intros * HWT Hmc Heq. inversion Heq. subst.
+  unfold LfreshF. inversion 3. subst.
   apply LMCF; trivial.
 Qed.
 
+
+Ltac DExpValue :=
+  match goal with L: LExpValue |- _ => destruct L end.
 
 Lemma LMCqueryT : forall a v m, LValue (LqueryT a v m).
 Proof.
   intros.
   induction m; eauto using LValue.
-  destruct l. simpl.
+  DExpValue. simpl.
   breakIndexDec; trivial.
 Qed.
 
@@ -485,8 +501,7 @@ Qed.
 
 Lemma LMCWT : forall a v m, Lmem_correct m -> MEmpty |l= (LqueryT a v m).
 Proof.
-  intros a v m H.
-  induction H; eauto using LEWT.
+  induction 1; eauto using LEWT.
   simpl. breakIndexDec; auto.
 Qed.
 
@@ -494,7 +509,7 @@ Qed.
 Lemma inclusion_WT : forall Γ Γ' e,
   inclusion Γ Γ' -> Γ |l= e -> Γ' |l= e.
 Proof.
-  intros Γ Γ' e Hin Hty.
+  intros * Hin Hty.
   generalize dependent Γ'.
   induction Hty; eauto using LEWT, inclusion_update.
 Qed.
@@ -509,7 +524,7 @@ Qed.
 Lemma subst_WT : forall e2 Γ var e1,
   (var |=> tt; Γ) |l= e2 -> MEmpty |l= e1 -> Γ |l= ([var := e1]l e2).
 Proof.
-  induction e2; intros Γ var e1 HWT2 HWT1; simpl;
+  induction e2; intros * HWT2 HWT1; simpl;
   inversion HWT2; subst;
   breakStrDec;
   eauto 6 using LEWT, WT_empty, InNotEq, inclusion_WT, inclusion_shadow,
@@ -528,19 +543,19 @@ Proof.
   try (repeat split; try apply HM; eauto using LValue; fail);
   (* instantiate and split induction hyphoteses *)
   repeat match goal with
-  | [ HM: Lmem_correct ?M,
+    HM: Lmem_correct ?M,
     HWT: LEWT MEmpty ?E,
-    IH: Lmem_correct ?M -> LEWT MEmpty ?E -> _ |- _ ] =>
+    IH: Lmem_correct ?M -> LEWT MEmpty ?E -> _ |- _ =>
      specialize (IH HM HWT) as [? [? ?]]
   end;
   eauto using LValue, LEWT;
   try match goal with
-  | [ HM: Lmem_correct ?M,
-      HFr: _ = LfreshT ?M |- _ ] =>
+  |   HM: Lmem_correct ?M,
+      HFr: _ = LfreshT ?M |- _ =>
      specialize (mem_correct_freshT _ _ _ HM HFr); clear HFr; intros
-  | [ HM: Lmem_correct ?M,
+  |   HM: Lmem_correct ?M,
       HFr: _ = LfreshF ?M _ ?b,
-      HTy: LEWT _ ?b |- _ ] =>
+      HTy: LEWT _ ?b |- _ =>
      specialize (mem_correct_freshF _ _ _ _ _ HTy HM HFr); intros
   end;
   eauto using LValue, LEWT,Lmem_correct, LMCqueryT, LMCqueryF, LMCWT,
@@ -637,15 +652,10 @@ Proof. eapply Lua2LirTypeAux. Qed.
 
 Lemma MLua2LirCorrect : forall m, Lmem_correct m -> mem_correct (MLua2Lir m).
 Proof.
-  intros m Hm.
-  induction Hm; simpl.
-  - auto using mem_correct.
-  - destruct v. eauto using mem_correct, Lua2LirType.
+  induction 1; simpl; try DExpValue; eauto using mem_correct, Lua2LirType.
   - eapply MCF; simpl; trivial.
-    apply IRTyLet; auto using IRTyping, InEq.
-    eapply inclusion_typing.
-    2:{ eapply Lua2LirTypeAux. eauto. }
-    simpl. apply inclusion_shadow'.
+    eauto using IRTyping, InEq,
+       inclusion_typing, Lua2LirTypeAux, inclusion_shadow'.
 Qed.
 
 
@@ -655,9 +665,10 @@ Lemma L2LirQueryT : forall mem a idx,
 Proof.
   intros mem a idx.
   induction mem; trivial.
-  destruct l. simpl. destruct (Nat.eq_dec a a0); subst; trivial.
+  DExpValue. simpl.
+  destruct (Nat.eq_dec a a0); subst; trivial.
   rewrite <- LuaIndex.
-  destruct (Index_dec (LToIndex idx) i); subst; trivial.
+  breakIndexDec; subst; trivial.
 Qed.
 
 
@@ -667,29 +678,23 @@ Lemma L2LirQueryF : forall var body a m,
          queryF a (MLua2Lir m).
 Proof.
   intros * HQ.
-  induction m.
-  - inversion HQ; subst. trivial.
-  - destruct l. eauto.
-  - simpl. simpl in HQ.
-    breakIndexDec; eauto.
-    congruence.
+  induction m; simpl in *; inversion HQ; subst; try DExpValue; breakIndexDec; eauto.
+  congruence.
 Qed.
 
 
 Lemma L2LirFreshaux : forall m, Lfreshaux m = freshaux (MLua2Lir m).
 Proof.
-  induction m; trivial.
-  - destruct l. simpl. congruence.
-  -simpl. congruence.
+  induction m; trivial; try DExpValue; simpl; congruence.
 Qed.
 
 
 Lemma L2LirFreshT : forall free m m',
   (free, m') = LfreshT m -> (free, MLua2Lir m') = freshT (MLua2Lir m).
 Proof.
-  intros free m m' H.
-  unfold LfreshT in H. injection H; intros; subst.
-  unfold freshT.
+  unfold LfreshT,  freshT.
+  intros * H.
+  injection H; intros; subst.
   simpl. f_equal. apply L2LirFreshaux.
   simpl. f_equal. apply L2LirFreshaux.
 Qed.
@@ -699,9 +704,9 @@ Lemma L2LirFreshF : forall free m m' v b,
   (free, m') = LfreshF m v b ->
   (free, MLua2Lir m') = freshF (MLua2Lir m) v (IRELet v IRTStar (IREVar v) (Lua2Lir b)).
 Proof.
+  unfold LfreshF,  freshF.
   intros * H.
-  unfold LfreshF in H. injection H; intros; subst.
-  unfold freshF.
+  injection H; intros; subst.
   simpl. f_equal. apply L2LirFreshaux.
   simpl. f_equal. apply L2LirFreshaux.
 Qed.
@@ -711,7 +716,6 @@ Lemma L2LirSubst : forall e1 var e2,
   Lua2Lir ([var := e1]l e2) =
   [var := (Lua2Lir e1)] (Lua2Lir e2).
 Proof.
-  intros e1 var e2.
   induction e2; simpl;
   breakStrDec;
   simpl; try congruence.
@@ -721,7 +725,7 @@ Qed.
 (* Propagate 'Lmem_correct' to all memories *)
 Ltac LmemC :=
   repeat match goal with
-    | [ M : LMem |- _] =>  (* for all memories *)
+      [ M : LMem |- _] =>  (* for all memories *)
       match goal with
       | [ H : Lmem_correct M |- _] => fail 1  (* already done *)
       | [ HSt: Lstep _ ?E M _ |- _] =>  (* else *)
@@ -733,10 +737,10 @@ Ltac LmemC :=
 (* Instanciate induction hypotheses *)
 Ltac instHI :=
     repeat match goal with
-    | [ HI: Lmem_correct ?M -> LEWT MEmpty ?E -> _,
-        HM: Lmem_correct ?M,
-        HWT: LEWT MEmpty ?E |- _] =>
-      specialize (HI HM HWT)
+      HI: Lmem_correct ?M -> LEWT MEmpty ?E -> _,
+      HM: Lmem_correct ?M,
+      HWT: LEWT MEmpty ?E |- _ =>
+        specialize (HI HM HWT)
     end.
 
 
@@ -758,17 +762,11 @@ Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
                    subst_WT, luaPreservationWT, LMCqueryF.
 
   intros * HMC HWT HSt.
-  induction HSt.
-
-  - (* LStValue *)
-    eauto using multistep.
+  induction HSt; eauto using multistep...
 
   - (* LStPlus *)
     inversion HWT; subst;
     LmemC; instHI;
-    simpl...
-
-  - (* LStNew *)
     simpl...
 
   - (* LStGet *)
@@ -788,9 +786,6 @@ Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
     eapply multiTrans with
       (e1 := IREBox TgNil (IRESet (IRETAddr a) (Lua2Lir idx) (Lua2Lir e)))...
     rewrite LuaIndex...
-
-  - (* LStFun *)
-    simpl...
 
   - (* LStLet *)
     inversion HWT; subst.

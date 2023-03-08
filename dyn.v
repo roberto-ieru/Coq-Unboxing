@@ -51,21 +51,14 @@ Fixpoint dynGamma (Γ : IREnvironment) : IREnvironment :=
 Lemma TP2TGammaIn : forall Γ var T,
     In Γ var = Some T -> In (dynGamma Γ) var = Some IRTStar.
 Proof.
-  induction Γ; intros var T H; simpl in *; breakStrDec.
-  - easy.
-  - eauto.
+  induction Γ; intros; breakStrDec; try easy; eauto.
 Qed.
 
 
 Lemma NTP2TGammaIn : forall Γ var,
     In Γ var = None -> In (dynGamma Γ) var = None.
 Proof.
-  intros.
-  induction Γ; try easy.
-  simpl in H.
-  destruct (string_dec var s); subst; simpl.
-  - destruct (string_dec s s); easy.
-  - destruct (string_dec var s); try easy; auto.
+  intros. induction Γ; breakStrDec; subst; auto.
 Qed.
 
 
@@ -75,8 +68,7 @@ Qed.
 Theorem dynTyping : forall Γ e T,
     Γ |= e : T -> dynGamma Γ |= (dyn e) : IRTStar.
 Proof with apply IRTyUnbox; trivial.
-  intros Γ e T Hty.
-  induction Hty; simpl; eauto using IRTyping, TP2TGammaIn.
+  induction 1; eauto using IRTyping, TP2TGammaIn.
 Qed.
 
 
@@ -86,7 +78,6 @@ Qed.
 Corollary dynTypingE : forall e,
     MEmpty |= e : IRTStar -> MEmpty |= dyn e : IRTStar.
 Proof.
-  intros e H.
   replace MEmpty with (dynGamma MEmpty) by trivial.
   eauto using dynTyping.
 Qed.
@@ -97,7 +88,7 @@ Qed.
 *)
 Theorem dynValue : forall e, Value e -> Value (dyn e).
 Proof.
-  intros e HV. induction HV; simpl; auto using Value.
+  induction 1; simpl; auto using Value.
 Qed.
 
 
@@ -107,7 +98,6 @@ Qed.
 Lemma dynSubst : forall var e1 e2,
     ([var := dyn e1](dyn e2)) = dyn ([var := e1]e2).
 Proof.
-  intros var e1 e2.
   induction e2;
   simpl; breakStrDec;
   simpl; congruence.
@@ -131,14 +121,14 @@ Fixpoint dynMem (m : Mem) : Mem :=
 *)
 Lemma dynMemCorrect : forall m, mem_correct m -> mem_correct (dynMem m).
 Proof.
-  intros * HM.
-  induction HM.
-  - auto using mem_correct.
-  - destruct v. eauto using mem_correct, dynTypingE.
-  - constructor; eauto.
-    replace (var |=> IRTStar; MEmpty) with
-            (dynGamma (var |=> IRTStar; MEmpty)) by trivial.
-    eauto using dynTyping.
+  induction 1;
+  try match goal with
+  [V: ExpValue |- _] => destruct V
+  end; eauto using mem_correct, dynTypingE.
+  constructor; eauto.
+  replace (var |=> IRTStar; MEmpty) with
+           (dynGamma (var |=> IRTStar; MEmpty)) by trivial.
+  eauto using dynTyping.
 Qed.
 
 
@@ -158,8 +148,7 @@ Lemma DynIndexEq : forall e1 e2,
     (ToIndex e1 = ToIndex e2 <-> dyn e1 = dyn e2).
 Proof.
   intros * HV1 HV2. split.
-  - generalize dependent e2.
-    induction e1; intros; induction e2; try easy; eauto using valBoxVal;
+  - induction e1; intros; induction e2; try easy; eauto using valBoxVal;
     simpl in *; congruence.
   - rewrite DynIndex. rewrite (DynIndex e2). congruence.
 Qed.
@@ -171,8 +160,7 @@ Qed.
 Lemma ValueTag : forall e tg,
     Value e -> MEmpty |= e : Tag2Type tg -> dyn e = IREBox tg e.
 Proof.
-  destruct tg; intros HV Hty;
-  inversion HV; subst; inversion Hty; trivial.
+  destruct tg; inversion 1; inversion 1; trivial.
 Qed.
 
 
@@ -182,9 +170,8 @@ Qed.
 Lemma ValueStar : forall e,
     Value e -> MEmpty |= e : IRTStar -> e = dyn e.
 Proof.
-  intros * HV HTy.
-  induction HV; inversion HTy; subst.
-  simpl. rewrite (ValueTag v gt); trivial.
+  induction 1; inversion 1; subst.
+  simpl. erewrite ValueTag; trivial.
 Qed.
 
 

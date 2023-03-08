@@ -151,8 +151,7 @@ Fixpoint typeOf Γ e : option PType :=
 *)
 Lemma typeOfCorrect' : forall Γ e T, Γ |p= e : T -> typeOf Γ e = Some T.
 Proof.
-  intros Γ e T Hty.
-  induction Hty; try easy;
+  induction 1; try easy;
   simpl;
   repeat match goal with
   | [H: typeOf _ _ = Some _ |- _] => rewrite H; clear H
@@ -162,14 +161,28 @@ Qed.
 
 
 Ltac destTOf Γ e :=
-    destruct (typeOf Γ e) as [[ | | | ? | ? ?] | _] eqn:?; try easy.
+    destruct (typeOf Γ e) as [[ | | | ? | ? ?] | ?] eqn:?; try easy.
+
+Ltac destTOf' :=
+  match goal with
+  H: context [typeOf ?Γ ?e] |- _ => idtac e; destTOf Γ e
+  end.
+
+
+Ltac destTOf''' :=
+  match goal with
+  | H: context [match typeOf ?Γ ?e with Some _ => _ | None => _ end] |- _ =>
+     idtac e; destruct (typeOf Γ e) eqn:?; try easy
+  | H: context [match typeOf ?Γ ?e with Some _ => _ | _ => _ end] |- _ =>
+     idtac e; destTOf Γ e
+  end.
 
 (*
 ** 'typeOf' is correct (part 2)
 *)
 Lemma typeOfCorrect'' : forall Γ e T, typeOf Γ e = Some T -> Γ |p= e : T.
 Proof.
-  intros Γ e T Heq.
+  intros * Heq.
   generalize dependent Γ.
   generalize dependent T.
   induction e; intros * Heq; subst;
@@ -177,28 +190,26 @@ Proof.
   try (destTOf Γ e1; destTOf Γ e2;
     inversion Heq; subst; eauto using PTyping; fail).
   - (* Set *)
-    destTOf Γ e1.
-    destTOf Γ e2.
-    destruct (typeOf Γ e3) eqn:?; try easy.
+    destTOf'.
+    destTOf'.
+    repeat destTOf'''.
     destruct (dec_TP p p0) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
   - (* App *)
-    destTOf Γ e1.
-    destruct (typeOf Γ e2) eqn:?; try easy.
+    destTOf'.
+    destTOf'''.
     destruct (dec_TP p p1) eqn:?; try easy.
     inversion Heq; subst. eauto using PTyping.
   - (* Fun *)
-    clear H0.
-    destruct (typeOf (s |=> p; Γ) e) eqn:HT; try easy.
+    destTOf'''.
     destruct (dec_TP p0 p1); subst; try discriminate.
     inversion Heq; subst. eauto using PTyping.
   - (* Let *)
-    destruct (typeOf Γ e1) eqn:HT1; try easy.
-    destruct (typeOf (s |=> p; Γ) e2) eqn:HT2; try easy.
+    repeat destTOf'''.
     destruct (dec_TP p p0); subst; try easy.
     inversion Heq; subst. eauto using PTyping.
   - (* Cast *)
-    destruct (typeOf Γ e) eqn:?; try easy.
+    destTOf'''.
     inversion Heq; subst. eauto using PTyping.
 Qed.
 
@@ -216,7 +227,7 @@ Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 Lemma PTypeUnique : forall Γ e t1 t2,
     Γ |p= e : t1 -> Γ |p= e : t2 -> t1 = t2.
 Proof.
-  intros Γ e t1 t2 H1 H2.
+  intros * H1 H2.
   apply typeOfCorrect in H1.
   apply typeOfCorrect in H2.
   congruence.
@@ -377,6 +388,8 @@ Inductive PExpValue : Set :=
 | PEV : forall e, PValue e -> PExpValue.
 
 
+Ltac DExpValue := match goal with E: PExpValue |- _ => destruct E end.
+
 Definition PEV2Val (me : PExpValue) : PE :=
   match me with
   | PEV v _ => v
@@ -469,7 +482,7 @@ where "'[' x ':=' s ']p' t" := (substitution x s t)
 Lemma Pinclusion_typing : forall Γ Γ' e te,
   inclusion Γ Γ' -> Γ |p= e : te -> Γ' |p= e : te.
 Proof.
-  intros Γ Γ' e te Hin Hty.
+  intros * Hin Hty.
   generalize dependent Γ'.
   induction Hty; eauto using PTyping, inclusion_update.
 Qed.
@@ -492,13 +505,14 @@ Lemma Psubst_typing : forall e2 Γ var tv te e1,
   MEmpty |p= e1 : tv ->
        Γ |p= ([var := e1]p e2) : te.
 Proof.
-  induction e2; intros Γ var tv te e1 HT2 HT1;
+  induction e2; intros * HT2 HT1;
   simpl; inversion HT2; subst;
   breakStrDec;
+  try match goal with H: Some ?e = Some ?e' |- _ =>
+    replace e' with e in * by congruence
+  end;
   eauto 6 using Pinclusion_typing, inclusion_shadow, inclusion_permute,
     PTyping, Ptyping_empty, InNotEq.
-  - replace te with tv by congruence.
-    eauto using Ptyping_empty.
 Qed.
 
 
@@ -678,10 +692,9 @@ Inductive Pmem_correct : PMem -> Prop :=
 *)
 Lemma PMCValue : forall m a n, PValue (PqueryT a n m).
 Proof.
+  unfold PqueryT.
   intros.
-  induction m; eauto using PValue.
-  destruct p. unfold PqueryT.
-  lir.breakIndexDec; trivial.
+  induction m; try DExpValue; lir.breakIndexDec; eauto using PValue.
 Qed.
 
 
@@ -693,9 +706,8 @@ Lemma PMCTy : forall m a n Γ,
     Pmem_correct m ->
     Γ |p= (PqueryT a n m) : PTStar.
 Proof.
-  intros * H.
-  induction H; eauto using PTyping.
-  unfold PqueryT. lir.breakIndexDec; subst; eauto using Ptyping_empty.
+  unfold PqueryT.
+  induction 1; lir.breakIndexDec; eauto using PTyping, Ptyping_empty.
 Qed.
 
 
@@ -708,12 +720,9 @@ Lemma PMCTyF : forall m a var type body Γ,
     (var |=> type; Γ) |p= body : PTStar.
 Proof.
   intros * HEq HMC.
-  induction HMC; eauto.
-  - simpl in HEq. injection HEq; intros; subst.
-    eauto using PTyping.
-  - simpl in HEq. lir.breakIndexDec; eauto.
-    injection HEq; intros; subst.
-    eauto using Pinclusion_typing, inclusion_update, inclusion_empty.
+  induction HMC; simpl in HEq;
+    lir.breakIndexDec; try (injection HEq; intros; subst);
+    eauto using PTyping, Pinclusion_typing, inclusion_update, inclusion_empty.
 Qed.
 
 
@@ -723,7 +732,7 @@ Qed.
 Lemma Pmem_correct_freshT : forall m m' free,
   Pmem_correct m -> (free,m') = PfreshT m -> Pmem_correct m'.
 Proof.
-  intros m m' free Hmc Heq. inversion Heq.
+  inversion 2.
   eauto using Pmem_correct, PTyping.
 Qed.
 
@@ -737,9 +746,7 @@ Lemma Pmem_correct_freshF : forall m m' var T1 T2 body free,
   (free,m') = PfreshF m var T1 body ->
   Pmem_correct m'.
 Proof.
-  unfold PfreshF. intros * HTy Hmc Heq.
-  inversion Heq; subst.
-  eapply PMCF; trivial.
+  inversion 3; subst.
   eauto using Pmem_correct, PTyping.
 Qed.
 
@@ -749,10 +756,7 @@ Lemma memCorrectSet : forall a idx v (Vv: PValue v) T m,
   Pmem_correct m ->
   Pmem_correct (setTable m a idx v Vv).
 Proof.
-  intros * PTy PMC.
-  unfold setTable.
-  eapply PMCT; trivial.
-  eauto using PTyping.
+  eauto using Pmem_correct, PTyping.
 Qed.
 
 
@@ -766,11 +770,11 @@ Lemma PmemPreservation : forall (m m' : PMem) e e' t,
   m / e -p-> m' / e' ->
   Pmem_correct m'.
 Proof.
-  intros m m' e e' t HMC HTy Hst.
+  intros * HMC HTy Hst.
   generalize dependent m'.
   generalize dependent e'.
   remember MEmpty as Γ.
-  induction HTy; intros e' m' Hst; inversion Hst; subst;
+  induction HTy; intros * Hst; inversion Hst; subst;
   eauto using Pmem_correct_freshT, Pmem_correct_freshF, Pmem_correct,
               memCorrectSet.
 Qed.
@@ -789,12 +793,10 @@ Proof.
   generalize dependent m'.
   generalize dependent e'.
   remember MEmpty as Γ.
-  induction HT; intros e' m' Hst; inversion Hst; subst;
-  eauto using PTyping, PMCTy, PMCTyF, Psubst_typing, CastEqType.
-  - inversion HT1; subst.
-    eauto using PTyping, PMCTy, PMCValue.
-  - inversion HT1; subst.
-    eauto using PTyping, PMCTyF.
+  induction HT; intros * Hst; inversion Hst; subst;
+  eauto using PTyping, PMCTy, PMCTyF, Psubst_typing, CastEqType;
+  inversion HT1; subst;
+    eauto using PTyping, PMCTy, PMCTyF, PMCValue.
 Qed.
 
 

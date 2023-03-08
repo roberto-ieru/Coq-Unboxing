@@ -38,23 +38,21 @@ Fixpoint In {A} M var : option A :=
 
 Lemma InEq' : forall A (M : Map A) var r r',
     In (var |=> r; M) var = Some r' -> r = r'.
-Proof. intros. simpl in *. breakStrDec.
-       congruence.
-Qed.
+Proof. intros. breakStrDec. congruence. Qed.
 
 
 Lemma InEq : forall A (M : Map A) var r, In (var |=> r; M) var = Some r.
-Proof. intros. simpl. breakStrDec. Qed.
+Proof. intros; breakStrDec. Qed.
 
 
 Lemma InNotEq : forall A (M : Map A) var var' r r',
     var <> var' -> In (var' |=> r; M) var = r' -> In M var = r'.
-Proof. intros. simpl in *. breakStrDec. Qed.
+Proof. intros; breakStrDec. Qed.
 
 
 Lemma InNotEq' : forall A (M : Map A) var var' r,
     var <> var' -> In (var' |=> r; M) var = In M var.
-Proof. intros. simpl in *. breakStrDec. Qed.
+Proof. intros; breakStrDec. Qed.
 
 
 Definition inclusion {A} (M : Map A) M' :=
@@ -62,38 +60,31 @@ Definition inclusion {A} (M : Map A) M' :=
 
 
 Lemma inclusion_empty : forall A (M : Map A), inclusion MEmpty M.
-Proof.
-  unfold inclusion. intros A M x v H. inversion H.
-Qed.
+Proof. unfold inclusion. inversion 1. Qed.
 
 
 Lemma inclusion_refl : forall A (M : Map A), inclusion M M.
 Proof. unfold inclusion. trivial. Qed.
 
+
 Lemma inclusion_update : forall A (M : Map A) M' var tvar,
   inclusion M M' -> inclusion (var |=> tvar ; M) (var |=> tvar ; M').
 Proof.
-  intros A M M' var tvar Hinc.
-  unfold inclusion; intros v tv Hin.
-  simpl in *; breakStrDec; auto.
+  unfold inclusion; intros; breakStrDec; auto.
 Qed.
 
 
 Lemma inclusion_shadow : forall A (M : Map A) var t1 t2,
   inclusion (var |=> t1; (var |=> t2; M)) (var |=> t1; M).
 Proof.
-  unfold inclusion.
-  intros A M var t1 t2 var' t' Hin.
-  simpl. breakStrDec.
+  unfold inclusion; intros; breakStrDec.
 Qed.
 
 
 Lemma inclusion_shadow' : forall A (M : Map A) var t1 t2,
   inclusion (var |=> t1; M) (var |=> t1; (var |=> t2; M)).
 Proof.
-  unfold inclusion.
-  intros A M var t1 t2 var' t' Hin.
-  simpl in *; breakStrDec.
+  unfold inclusion; intros; breakStrDec.
 Qed.
 
 
@@ -102,9 +93,7 @@ Lemma inclusion_permute : forall A (M : Map A) var1 var2 t1 t2,
   inclusion (var1 |=> t1; (var2 |=> t2; M))
             (var2 |=> t2; (var1 |=> t1; M)).
 Proof.
-  unfold inclusion. simpl.
-  intros A M var1 var2 t1 t2 Hneq var' t' HIn.
-  breakStrDec.
+  unfold inclusion; intros; breakStrDec.
 Qed.
 
 
@@ -112,10 +101,7 @@ Lemma InInclusionEq : forall A (M M' : Map A) var t,
     inclusion (var |=> t; M) M' ->
     In M' var = Some t.
 Proof.
-  intros * HI.
-  unfold inclusion in HI.
-  apply HI.
-  eauto using InEq.
+  unfold inclusion; eauto using InEq.
 Qed.
 
 
@@ -123,10 +109,7 @@ Lemma InInclusion : forall A (M M' : Map A) var t,
     inclusion (var |=> t; M) M' ->
     In M' var = Some t.
 Proof.
-  intros * HI.
-  unfold inclusion in HI.
-  apply HI.
-  eauto using InEq.
+  unfold inclusion; intros; eauto using InEq.
 Qed.
 
 
@@ -139,35 +122,31 @@ Lemma map_eq_In : forall {A} (M M': Map A) var v v',
     v = v'.
 Proof.
   intros * HI HEq.
-  assert (In M' var = Some v').
-  { specialize (HEq var). rewrite InEq in HEq. congruence. }
-  congruence.
+  replace (In M' var) with (Some v') in *; try congruence.
+  specialize (HEq var). rewrite InEq in HEq. congruence.
 Qed.
 
 
 Lemma map_eq_incl : forall {A} (M M': Map A),
     map_eq M M' -> inclusion M M'.
 Proof.
-  unfold inclusion.
-  intros.
-  unfold map_eq in *.
-  congruence.
+  unfold inclusion; unfold map_eq; intros; congruence.
 Qed.
 
 
 (* map_eq is an equivalence relation *)
 
 Lemma map_eq_refl : forall A (M : Map A), map_eq M M.
-Proof. unfold map_eq. trivial. Qed.
+Proof. unfold map_eq; trivial. Qed.
 
 Lemma map_eq_sym : forall A (M M': Map A), map_eq M M' -> map_eq M' M.
-Proof. unfold map_eq. auto. Qed.
+Proof. unfold map_eq; auto. Qed.
 
 Lemma map_eq_trans : forall A (M M' M'': Map A),
     map_eq M M' ->
     map_eq M' M'' ->
     map_eq M M''.
-Proof. unfold map_eq. intros. congruence. Qed.
+Proof. unfold map_eq; intros; congruence. Qed.
 
 
 Lemma eqeq_shadow : forall A (M M' : Map A) var v v',
@@ -176,7 +155,6 @@ Lemma eqeq_shadow : forall A (M M' : Map A) var v v',
 Proof.
   intros * H1.
   intros var'.
-  simpl.
   breakStrDec.
   specialize (H1 var').
   rewrite InNotEq' in H1; trivial.
@@ -186,8 +164,7 @@ Qed.
 Lemma eq_shadow : forall A (M : Map A) var v v',
    map_eq (var |=> v; M) (var |=> v; (var |=> v'; M)).
 Proof.
-  intros.
-  eauto using eqeq_shadow, map_eq_refl.
+  intros; eauto using eqeq_shadow, map_eq_refl.
 Qed.
 
 
@@ -196,8 +173,8 @@ Lemma eqeq_permute : forall A (M M' : Map A) var var' v v',
    var <> var' ->
    map_eq (var |=> v; (var' |=> v'; M)) (var' |=> v'; M').
 Proof.
-  unfold map_eq.
-  intros.
+  intros * H ?.
+  intros var0.
   specialize (H var0).
   breakStrDec.
 Qed.

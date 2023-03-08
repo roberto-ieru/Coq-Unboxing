@@ -287,9 +287,9 @@ Proof with eauto using IRTyping.
     + destruct (GtypeOf (var |=> Tvar; Γ)) eqn:?; subst.
       * apply IRTyBox.
         eapply inclusion_typing.
-        ** eapply inclusion_shadow'.
         ** unfold GtypeOf in Heqi. rewrite H in Heqi.
-           rewrite <- Heqi. trivial.
+           rewrite <- Heqi. eauto.
+        ** eapply inclusion_shadow'.
       *  unfold GtypeOf in Heqi. rewrite H in Heqi.
         rewrite Heqi in IHPTyping.
         simpl in IHPTyping.

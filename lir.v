@@ -181,10 +181,7 @@ where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 Theorem typeUnique : forall Γ e t t',
    (Γ  |= e : t) -> (Γ |= e : t') -> t = t'.
 Proof.
-  intros Γ e t t' H1.
-  generalize dependent t'.
-  induction H1; intros ? H2; inversion H2; subst; f_equal;
-  auto ; try congruence.
+  induction 1; inversion 1; subst; auto; congruence.
 Qed.
 
 Unset Elimination Schemes.
@@ -231,15 +228,14 @@ Fixpoint isValue (e : IRE) : bool :=
 
 Lemma isValueCorrect : forall e, Value e <-> isValue e = true.
 Proof.
-  split; induction e; intros H; trivial;
-  inversion H; subst; auto using Value.
+  split; induction e; trivial;
+  inversion 1; subst; auto using Value.
 Qed.
 
 
 Lemma valBoxVal : forall gt e, Value (IREBox gt e) -> Value e.
 Proof.
-  intros * HV.
-  inversion HV; trivial.
+  inversion 1; trivial.
 Qed.
 
 
@@ -250,18 +246,14 @@ Qed.
 Lemma valnil : forall Γ e,
   Γ |= e : IRTNil -> Value e -> e = IRENil.
 Proof.
-  intros Γ e HT HV.
-  inversion HV;
-  inversion HT; subst; congruence.
+  inversion 1; inversion 1; subst; congruence.
 Qed.
 
 
 Lemma valint : forall Γ e,
     Γ |= e : IRTInt -> Value e -> exists n, e = IRENum n.
 Proof.
-  intros Γ e HT HV.
-  inversion HV;
-  inversion HT; subst; try discriminate.
+  inversion 1; inversion 1; try discriminate.
   eexists; auto 1.
 Qed.
 
@@ -269,32 +261,26 @@ Qed.
 Lemma valtbl : forall Γ e,
     Γ |= e : IRTTbl -> Value e -> exists a, e = IRETAddr a.
 Proof.
-  intros Γ e HT HV.
-  inversion HV;
-  inversion HT; subst; try discriminate.
-  eauto.
+  inversion 1; inversion 1; try discriminate; eauto.
 Qed.
 
 
 Lemma valfun : forall Γ e,
     Γ |= e : IRTFun -> Value e -> exists a, e = IREFAddr a.
 Proof.
-  intros * HT HV.
-  inversion HV;
-  inversion HT; subst; try discriminate.
-  eauto.
+  inversion 1; inversion 1; try discriminate; eauto.
 Qed.
 
 
 Lemma valbox : forall Γ e, Γ |= e : IRTStar -> Value e ->
     exists o t, e = IREBox t o /\ (Γ |= o : Tag2Type t) /\ Value o.
 Proof.
-  intros Γ e HT HV.
+  intros * HT HV.
   inversion HV;
   inversion HT; subst; try discriminate.
   match goal with
-  | [H: IREBox _ _ = IREBox _ _ |- _ ] => inversion H; subst end.
-  (eexists; eexists; auto using Value).
+  | [H: IREBox _ _ = IREBox _ _ |- _ ] => injection H; intros; subst end.
+  eexists; eexists; auto using Value.
 Qed.
 
 
@@ -476,9 +462,11 @@ where "'[' x ':=' s ']' t" := (substitution x s t)
 ** Extending an environment preserves typing
 *)
 Lemma inclusion_typing : forall Γ Γ' e te,
-  inclusion Γ Γ' -> Γ |= e : te -> Γ' |= e : te.
+  Γ |= e : te ->
+  inclusion Γ Γ' ->
+  Γ' |= e : te.
 Proof.
-  intros Γ Γ' e te Hin Hty.
+  intros * Hty Hin.
   generalize dependent Γ'.
   induction Hty; eauto using IRTyping, inclusion_update.
 Qed.
@@ -501,7 +489,7 @@ Lemma subst_typing : forall e2 Γ var tv te e1,
   MEmpty |= e1 : tv ->
        Γ |= ([var := e1] e2) : te.
 Proof.
-  induction e2; intros Γ var tv te e1 HT2 HT1;
+  induction e2; intros * HT2 HT1;
   simpl; inversion HT2; subst;
   breakStrDec;
   eauto 6 using inclusion_typing, inclusion_shadow, inclusion_permute,
@@ -683,10 +671,8 @@ Qed.
 Lemma MCTy : forall m a n Γ,
     mem_correct m -> Γ |= (queryT a n m) : IRTStar.
 Proof.
-  intros.
-  induction H; trivial.
-  - eauto using typing_empty, IRTyping.
-  - simpl. breakIndexDec; auto using typing_empty.
+  induction 1; simpl; breakIndexDec;
+    eauto using typing_empty, IRTyping.
 Qed.
 
 
@@ -699,13 +685,10 @@ Lemma MCTyF : forall m a var body Γ,
     var |=> IRTStar; Γ |= body : IRTStar.
 Proof.
   intros * HEq HMC.
-  induction HMC.
-  - simpl in HEq. injection HEq; intros; subst.
-    unfold BoxedNil. auto using IRTyping.
-  -  eauto.
-  - simpl in HEq. breakIndexDec; eauto.
-    injection HEq; intros; subst.
-    eauto using inclusion_typing, inclusion_update, inclusion_empty.
+  induction HMC; simpl in HEq; breakIndexDec; eauto;
+   injection HEq; intros; subst;
+    unfold BoxedNil;
+    eauto using IRTyping, inclusion_typing, inclusion_update, inclusion_empty.
 Qed.
 
 
@@ -716,7 +699,7 @@ Qed.
 Lemma mem_correct_freshT : forall m m' free,
   mem_correct m -> (free,m') = freshT m -> mem_correct m'.
 Proof.
-  unfold freshT. intros m m' free Hmc Heq. inversion Heq.
+  unfold freshT. inversion 2.
   eauto using mem_correct, IRTyping.
 Qed.
 
@@ -730,8 +713,8 @@ Lemma mem_correct_freshF : forall m m' var body free,
   (free,m') = freshF m var body ->
   mem_correct m'.
 Proof.
-  unfold freshF. intros * HTy Hmc Heq.
-  inversion Heq; subst.
+  unfold freshF.
+  inversion 3; subst.
   eauto using mem_correct.
 Qed.
 
@@ -746,11 +729,10 @@ Lemma memPreservation : forall (m m' : Mem) e e' t,
   m / e --> m' / e' ->
   mem_correct m'.
 Proof.
-  intros m m' e e' t HMC HTy Hst.
-  generalize dependent m'.
+  intros * ? HTy ?.
   generalize dependent e'.
   remember MEmpty as Γ.
-  induction HTy; intros e' m' Hst; inversion Hst; subst;
+  induction HTy; inversion 1; subst;
   eauto using mem_correct_freshT, mem_correct_freshF, mem_correct.
 Qed.
 
@@ -760,7 +742,7 @@ Qed.
 *)
 Lemma boxTyping : forall e t,
   MEmpty |= IREBox t e : IRTStar -> MEmpty |= e : Tag2Type t.
-Proof. intros e t H. inversion H; trivial. Qed.
+Proof. inversion 1; trivial. Qed.
 
 
 (*
@@ -772,11 +754,10 @@ Lemma expPreservation : forall m e t m' e',
   m / e --> m' / e' ->
   MEmpty |= e' : t.
 Proof.
-  intros m e t m' e' Hmc HT.
-  generalize dependent m'.
+  intros * Hmc HT.
   generalize dependent e'.
   remember MEmpty as Γ.
-  induction HT; intros e' m' Hst; inversion Hst; subst;
+  induction HT; inversion 1; subst;
   eauto using IRTyping, MCTy, boxTyping, MCTyF, subst_typing.
 Qed.
 
@@ -804,8 +785,7 @@ Proof.
   intros * Hst HV.
   generalize dependent m'.
   generalize dependent v.
-  induction HV; intros;
-  inversion Hst; subst; eauto.
+  induction HV; inversion 1; subst; eauto.
 Qed.
 
 
@@ -814,9 +794,7 @@ Theorem value_normalF : forall m e,
     Value e ->
     False.
 Proof.
-  intros * Hst HV.
-  induction HV;
-  inversion Hst; subst; auto.
+  induction 1; inversion 1; subst; auto.
 Qed.
 
 
@@ -850,9 +828,8 @@ Lemma DeterministicStepM : forall m e m1 e1 m2 e2,
     m1 = m2.
 Proof.
   intros * HSt1.
-  generalize dependent m2.
   generalize dependent e2.
-  induction HSt1; intros * HSt2; inversion HSt2; subst; eauto;
+  induction HSt1; inversion 1; subst; eauto;
    try (exfalso; eauto using value_normal, Value; fail);
    try congruence.
    f_equal. f_equal. eauto using Value_unique.
@@ -865,9 +842,8 @@ Theorem DeterministicStep : forall m e m1 e1 m2 e2,
     e1 = e2.
 Proof.
   intros * HSt1.
-  generalize dependent m2.
   generalize dependent e2.
-  induction HSt1; intros * HSt2; inversion HSt2; subst; eauto;
+  induction HSt1; inversion 1; subst; eauto;
    try (exfalso; eauto using value_normal, Value; fail);
    f_equal; eauto; congruence.
 Qed.
@@ -881,23 +857,28 @@ Theorem Progress : forall m e t,
     Value e \/
     (m / e --> fail \/ exists m' e', m / e --> m' / e').
 Proof.
-  intros m e t Hty.
+  intros * Hty.
   remember MEmpty as Γ.
   induction Hty; subst;
+
   (* variables *)
   try match goal with
   | [H : In MEmpty _ = _ |- _] => inversion H
    end;
+
   (* break induction hypotheses *)
   repeat match goal with
   | [H : _ -> _ \/ (_ \/ _) |- _] =>
       decompose [or ex and] (H eq_refl); clear H
   end;
   subst;
+
   (* trivial steps and failures *)
   try (right; auto using stepF; fail);
+
   (* trivial values *)
   auto using Value;
+
   (* break values *)
   repeat open_value valint;
   try open_value valtbl;
@@ -908,14 +889,19 @@ Proof.
         Hv : Value ?e |- _] => eapply vallam in Ht; trivial;
           decompose [ex or and] Ht
   end; subst;
+
   (* try cases that became easy after breaking values *)
   try (unshelve (right; right; eauto using step, eq_refl); trivial; fail).
+
   - (* cannot find the correct sequence with StSet3 ? *)
     right. right. eexists. eexists.
     eapply StSet3; eauto.
-  - right. right.
-    destruct (queryF x m) eqn:?.
+
+  - (* App *)
+    right. right.
+    match goal with [a: address |- _] => destruct (queryF a m) eqn:? end.
     eauto using step, Value.
+
   - (* unboxing has to handle success vs. failure *)
     match goal with | [t1:Tag, t2:Tag |- _] => destruct (dec_Tag t1 t2) end;
     right; subst; eauto using step, stepF.
@@ -965,11 +951,7 @@ Lemma multiTrans : forall m0 e0 m1 e1 m2 e2,
     m1 / e1 -->* m2 / e2 ->
     m0 / e0 -->* m2 / e2.
 Proof.
-  intros m0 e0 m1 e1 m2 e2 H0 H1.
-  generalize dependent m2.
-  generalize dependent e2.
-  induction H0; intros ? H2; trivial.
-  eauto using multistep.
+  induction 1; eauto using multistep.
 Qed.
 
 
@@ -989,11 +971,7 @@ Theorem Soundness : forall m e t m' e',
     Value e' \/
    (m' / e' --> fail \/ exists m'' e'', m' / e' --> m'' / e'').
 Proof.
-  intros m e t m' e' HTy HMem HMulti.
-  remember (Some e') as E eqn:Heq.
-  induction HMulti; inversion Heq; subst.
-  - eauto using Progress.
-  - eauto using expPreservation, memPreservation.
+  induction 3; eauto using Progress, expPreservation, memPreservation.
 Qed.
 
 
@@ -1009,7 +987,7 @@ Proof.
   intros * Hty HM HSt.
   induction HSt; trivial.
   apply IHHSt;
-  eapply Preservation; eauto.
+  eapply Preservation; eauto using Preservation.
 Qed.
 
 

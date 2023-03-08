@@ -39,9 +39,7 @@ Infix "<M|" := PrecMem (at level 80).
 Lemma PrecMemRefl : forall m,
     mem_correct m -> m <M| m.
 Proof.
-  intros m Hm.
-  induction Hm; constructor; trivial;
-  eapply PrecisionRefl; eauto.
+  induction 1; eauto using PrecMem, PrecisionRefl.
 Qed.
 
 
@@ -50,9 +48,7 @@ Qed.
 *)
 Lemma PrecCorrect1 : forall m1 m2, m1 <M| m2 -> mem_correct m1.
 Proof.
-  intros * H.
-  induction H; intros *; simpl;
-  eauto using mem_correct, PrecisionType1.
+  induction 1; eauto using mem_correct, PrecisionType1.
 Qed.
 
 
@@ -61,9 +57,7 @@ Qed.
 *)
 Lemma PrecCorrect2 : forall m1 m2, m1 <M| m2 -> mem_correct m2.
 Proof.
-  intros * H.
-  induction H; intros *; simpl;
-  eauto using mem_correct, PrecisionType2.
+  induction 1; eauto using mem_correct, PrecisionType2.
 Qed.
 
 
@@ -73,7 +67,7 @@ Qed.
 Lemma PrecIndex : forall e1 e2,
     Precision MEmpty e1 IRTStar MEmpty e2 IRTStar ->
     ToIndex e1 = ToIndex e2.
-Proof. intros * HP. induction HP; eauto. Qed.
+Proof. induction 1; eauto. Qed.
 
 
 (*
@@ -81,10 +75,7 @@ Proof. intros * HP. induction HP; eauto. Qed.
 *)
 Lemma PrecFreshaux : forall m1 m2,
     m1 <M| m2 -> freshaux m1 = freshaux m2.
-Proof.
-  intros * HOM.
-  induction HOM; simpl; eauto.
-Qed.
+Proof. induction 1; simpl; eauto. Qed.
 
 
 (*
@@ -94,13 +85,12 @@ Qed.
 Lemma PrecFreshT : forall m1 m2 free m1',
     m1 <M| m2 ->
     (free, m1') = freshT m1 ->
-    exists m2', m1' <M| m2' /\ (free, m2') = freshT m2.
+    exists m2', (free, m2') = freshT m2 /\ m1' <M| m2'.
 Proof.
   unfold freshT.
-  intros * HOM HF.
-  injection HF; intros; subst; clear HF.
+  injection 2; intros; subst.
   replace (freshaux m2) with (freshaux m1) by auto using PrecFreshaux.
-  eexists. split; only 2: trivial;
+  eexists; split;
   eauto using PrecMem, Precision, EnvCompRefl.
 Qed.
 
@@ -118,10 +108,9 @@ Lemma PrecFreshF : forall m1 m2 var d1 d2 free m1',
     exists m2', m1' <M| m2' /\ (free, m2') = freshF m2 var d2.
 Proof.
   unfold freshF.
-  intros * HOM HP HF.
-  injection HF; intros; subst; clear HF.
+  injection 3; intros; subst.
   replace (freshaux m2) with (freshaux m1) by auto using PrecFreshaux.
-  eexists; eauto using PrecMemUDF.
+  eauto using PrecMemUDF.
 Qed.
 
 
@@ -147,13 +136,10 @@ Lemma PrecQueryF : forall m1 m2 a var var' body body',
          (var |=> IRTStar; MEmpty) body' IRTStar.
 Proof.
   intros * HM HEq1 HEq2.
-  induction HM; simpl; eauto.
-  - inversion HEq1; inversion HEq2; subst.
+  induction HM; simpl in *;
+    breakIndexDec; eauto;
+    injection HEq1; injection HEq2; intros; subst;
     split; eauto 6 using Precision, EnvCompRefl.
-  - simpl in *.
-    breakIndexDec; eauto.
-    injection HEq1; injection HEq2; intros; subst.
-    clear HEq1 HEq2. split; trivial.
 Qed.
 
 
@@ -165,8 +151,8 @@ Lemma PrecUpdate : forall m1 m2 a i1 i2 v1 v2,
     UpdateT a (ToIndex i1) (EV v1 vv1) m1 <M|
     UpdateT a (ToIndex i2) (EV v2 vv2) m2.
 Proof.
-  intros * HOM HV1 HV2 HP1 HP2.
-  rewrite <- (PrecIndex HP1).
+  intros.
+  replace (ToIndex i2) with (ToIndex i1) by eauto using PrecIndex.
   auto using PrecMem.
 Qed.
 
@@ -199,13 +185,13 @@ Proof.
 
   - (* let *)
     breakStrDec;
-      eauto 12 using Precision, PrecisionInclusion, map_eq_incl, map_eq_sym, eqeq_shadow,
-                       EnvCompExt, extend2Types, eqeq_permute.
+      eauto 12 using Precision, PrecisionInclusion, map_eq_incl,
+      map_eq_sym, eqeq_shadow, EnvCompExt, extend2Types, eqeq_permute.
 
   - (* fun *)
     breakStrDec;
-      eauto 12 using Precision, PrecisionInclusion, map_eq_incl, map_eq_sym, eqeq_shadow,
-                       EnvCompExt, extend2Types, eqeq_permute.
+      eauto 12 using Precision, PrecisionInclusion, map_eq_incl,
+      map_eq_sym, eqeq_shadow, EnvCompExt, extend2Types, eqeq_permute.
 Qed.
 
 
@@ -219,8 +205,7 @@ Lemma PrecSubs' : forall var body body' v1 v2,
     Precision MEmpty v1 IRTStar MEmpty v2 IRTStar ->
     Precision MEmpty ([var := v1] body) IRTStar MEmpty ([var := v2] body') IRTStar.
 Proof.
-  intros * HPF HPV.
-  inversion HPF; subst.
+  inversion 1; subst.
   eauto using PrecSubs, map_eq_refl.
 Qed.
 
@@ -238,21 +223,18 @@ Ltac ContraTags :=
 
 Lemma GroundFlat': forall g g', (Tag2Type g) <| (Tag2Type g') -> g = g'.
 Proof.
-  intros * H. apply GroundFlat in H. injection H; trivial.
+  intros. GroundFlat. congruence.
 Qed.
 
 
 Lemma GroundType: forall g t g',
     t <| Tag2Type g -> Type2Tag t = Some g' -> g = g'.
 Proof.
-  intros * HT Heq.
+  intros.
   destruct t eqn:Heq';
   ContraTags;
-  injection Heq; intros;
-    rewrite <- Heq' in HT;
-    replace t with (Tag2Type g') in HT by (subst; trivial);
-    symmetry;
-    subst; eauto using GroundFlat'.
+  GroundFlat;
+  simpl in *; congruence.
 Qed.
 
 
@@ -274,8 +256,6 @@ Lemma stepValueMem : forall e1 e2 e2' t1 t2 m m',
 Proof.
   intros * HP HV HStep.
   remember MEmpty as Γ.
-  generalize dependent m'.
-  generalize dependent m.
   generalize dependent e2'.
   induction HP; intros * HStep; inversion HV;
   inversion HStep; subst; eauto using Precision.
@@ -298,8 +278,6 @@ Lemma PrecisionPreservation : forall e1 e2 e2' t1 t2 m m',
 Proof.
   intros * HP HV HStep.
   remember MEmpty as Γ.
-  generalize dependent m'.
-  generalize dependent m.
   generalize dependent e2'.
   induction HP; subst; intros * HStep; inversion HV; subst;
   ForceΓEmpty Γ;
@@ -308,7 +286,7 @@ Proof.
 
   exfalso.
   apply PrecisionType1 in HP. inversion HP; subst.
-  apply NoneBiggerThanStar in H. discriminate.
+  ContraTags.
 Qed.
 
 
@@ -321,8 +299,7 @@ Lemma PrecisionPreservationMult : forall e1 e2 e2' t1 t2 m m',
     m / e2 -->* m' / e2' ->
     Precision MEmpty e1 t1 MEmpty e2' t2.
 Proof.
-  intros * HP HV HStep.
-  induction HStep; eauto using PrecisionPreservation.
+  induction 3; eauto using PrecisionPreservation.
 Qed.
 
 
@@ -339,14 +316,20 @@ Proof.
   intros * Hst.
   remember (IREBox tg e) as E.
   generalize dependent e.
-  induction Hst; intros * HEq HP HV.
-  - exists e0. auto.
+  induction Hst; intros * HEq HP HV; eauto.
   - subst.
-    replace m' with m in * by (eapply stepValueMem; eauto).
+    replace m' with m in * by (eauto using stepValueMem).
     inversion H; subst.
     eauto using PrecisionPreservation.
 Qed.
 
+
+Ltac typePrecLT :=
+  match goal with
+    [HP: Precision _ _ ?t _ _ (Tag2Type ?g),
+     HT: ?t <| Tag2Type ?tg |- _] =>
+       replace g with tg in * by (eauto using GroundTop, PPT)
+  end.
 
 (*
 ** If the term "catching-up" has type '*', it converges to a box.
@@ -363,9 +346,7 @@ Proof.
   intros * HP HSty HVP HStep HV.
   inversion HP; subst; try (inversion HVP; fail);
   ContraTags.
-  replace g with tg in * by (
-    apply PPT in H;
-    eauto using GroundTop).
+  typePrecLT.
   eauto using BoxPreservePrecision.
 Qed.
 

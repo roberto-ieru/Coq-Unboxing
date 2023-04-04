@@ -697,6 +697,62 @@ Proof.
 Qed.
 
 
+Ltac NoneBiggerThanStar :=
+  try match goal with
+    |[H: Precision _ _ IRTStar _ _ (Tag2Type _) |- _] => apply PPT in H
+  end;
+  try match goal with
+    |[H: IRTStar <| Tag2Type _ |- _] => apply NoneBiggerThanStar in H; discriminate
+   end.
+
+
+Lemma PrecTagGround : forall Γ Δ e1 t1 e2 t2,
+    Precision Γ e1 (Tag2Type t1) Δ e2 (Tag2Type t2) ->
+    t1 = t2.
+Proof.
+  intros * H. apply PPT in H. apply GroundFlat in H. congruence.
+Qed.
+
+
+Lemma PrecValueGround : forall Γ Δ v1 v2 t,
+    Precision Γ v1 (Tag2Type t) Δ v2 (Tag2Type t) ->
+    Value v1 ->
+    Value v2 ->
+    v1 = v2.
+Proof.
+  inversion 1; subst; intros * V1 V2; trivial;
+  try (inversion V1; fail); inversion V2.
+Qed.
+
+
+Lemma PrecValueStar : forall Γ Δ v1 v2,
+    Precision Γ v1 IRTStar Δ v2 IRTStar ->
+    Value v1 ->
+    Value v2 ->
+    v1 = v2.
+Proof.
+  inversion 1; subst; intros V1 V2; trivial;
+  try (inversion V1; fail);
+  try (inversion V2; fail);
+  NoneBiggerThanStar.
+  specialize (valbox Δ v2) as [? [? [? [? ?]]]]; eauto using PrecisionType2; subst.
+  inversion H0; subst.
+  - replace x0 with g in * by eauto using PrecTagGround.
+    f_equal. eauto using PrecValueGround, valBoxVal.
+  - inversion V1. inversion H6.
+Qed.
+
+
+Lemma PrecValue : forall Γ Δ v1 v2 t,
+    Precision Γ v1 t Δ v2 t ->
+    Value v1 ->
+    Value v2 ->
+    v1 = v2.
+Proof.
+  destruct t; eauto using PrecValueGround, PrecValueStar.
+Qed.
+
+
 Lemma PrecEnvL1 : forall Γ1 Γ1' Γ2 e1 e2 t1 t1' t2,
     Precision Γ1 e1 t1 Γ2 e2 t2 ->
     Γ1' <E| Γ1 ->
@@ -761,15 +817,6 @@ Ltac changeT T :=
        replace T with IRTStar in * by (eauto using NoneBiggerThanStar, PPT);
        eauto using Precision
   end.
-
-
-Ltac NoneBiggerThanStar :=
-  try match goal with
-    |[H: Precision _ _ IRTStar _ _ (Tag2Type _) |- _] => apply PPT in H
-  end;
-  try match goal with
-    |[H: IRTStar <| Tag2Type _ |- _] => apply NoneBiggerThanStar in H; discriminate
-   end.
 
 
 Lemma PrecTrans : forall e2 Γ1 Γ2 Γ3 e1 e3 t1 t2 t3,

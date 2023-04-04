@@ -377,7 +377,7 @@ Proof.
   ContraTags;
   ForceΓEmpty Γ;
 
-  specialize (ValueStarP HP H HV H0 H1) as [? [? _]];
+  specialize ValueStarP as [? [? _]]; eauto;
       subst;
 
   try (eapply GroundType in H; only 2: (simpl; trivial);
@@ -430,7 +430,6 @@ Ltac doCatchUp :=
 
 Ltac applyRules := repeat split;
   eauto 9 using EnvCompRefl, CongBox, CongUnbox,
-    multiTrans, EnvCompRefl,
     CongPlus1, CongPlus2, CongGet1, CongGet2,
     CongApp1, CongApp2, CongSet1, CongSet2, CongSet3, CongLet,
     PrecQueryT, PrecUpdate, PrecSubs, map_eq_refl,
@@ -475,41 +474,35 @@ Proof.
 
 
   - (* StPlus *)
-    assert (N1: x = IRENum n1). {
-      specialize (PrecisionPreservationMult HP1 (Vnum n1) H) as NH1.
-      inversion NH1; subst; trivial; NoValueUnbox.
-    }
+    assert (N1: IRENum n1 = x) by
+      eauto using PrecValue, Value, PrecisionPreservationMult.
 
-    assert (N2: x0 = IRENum n2). {
-      specialize (PrecisionPreservationMult HP2 (Vnum n2) H1) as NH2.
-      inversion NH2; subst; trivial; NoValueUnbox.
-    }
+    assert (N2: IRENum n2 = x0) by
+      eauto using PrecValue, Value, PrecisionPreservationMult.
 
     subst.
     solveSim (IRENum (n1 + n2)) m2.
 
   - (* StCstr *)
-    specialize (PrecFreshT HM H0) as [? [? ?]].
+    specialize PrecFreshT as [? [? ?]]; eauto.
     solveSim2.
 
   - (* StGet *)
     clear IHHP1 IHHP2.
 
-    assert (N1: x = IRETAddr a). {
-      specialize (PrecisionPreservationMult HP1 (Vtbl a) H) as NH1.
-      inversion NH1; subst; trivial; NoValueUnbox.
-    } subst.
+    assert (N1: IRETAddr a = x) by
+      eauto using PrecValue, Value, PrecisionPreservationMult.
 
+    subst.
     solveSim (queryT a x0 m2) m2.
 
   - (* StSet *)
     clear IHHP1 IHHP2 IHHP3.
 
-    assert (N1: x = IRETAddr a). {
-      specialize (PrecisionPreservationMult HP1 (Vtbl a) H) as NH1.
-      inversion NH1; subst; trivial; NoValueUnbox.
-    } subst.
+    assert (N1: IRETAddr a = x) by
+      eauto using PrecValue, Value, PrecisionPreservationMult.
 
+    subst.
     exists IRENil. eexists (UpdateT _ _ (EV x1 H4) _).
     applyRules.
 
@@ -519,30 +512,25 @@ Proof.
 
   - (* StFun *)
     clear IHHP.
-    specialize (PrecFreshF HM HP H5) as [? [? ?]].
+    specialize PrecFreshF as [? [? ?]]; eauto.
     solveSim2.
 
   - (* StApp *)
     clear IHHP1 IHHP2.
 
-    assert (N1: x0 = IREFAddr a). {
-      specialize (PrecisionPreservationMult HP2 (Vfun a) H1) as NH1.
-      inversion NH1; subst. eauto. NoValueUnbox.
-    }
-    subst.
+    assert (N1: IREFAddr a = x0) by
+      eauto using PrecValue, Value, PrecisionPreservationMult.
 
+    subst.
     destruct (queryF a m2) as [var' body'] eqn:HEq2. symmetry in HEq2.
-    specialize (PrecQueryF _ HM H5 HEq2) as [? ?]; subst.
+    specialize PrecQueryF as [? ?]; eauto; subst.
     solveSim (IRELet var' IRTStar x body') m2.
 
   - (* StUnbox *)
     clear IHHP.
     inversion HP; subst; ContraTags.
     * exfalso. apply PPT in H1. ContraTags.
-    * specialize (ValueStarP H3 (TPrecisionRefl (Tag2Type g))
-        H5 H H0) as [? [? ?]].
-      subst.
-      solveSim2.
+    * specialize ValueStarP as [? [? ?]]; eauto using TPrecision.
 
 Qed.
 
@@ -566,10 +554,10 @@ Proof.
   generalize dependent t2.
   generalize dependent e2.
   induction HMSt; intros * HV HPE HMem.
-  - specialize (CatchUp m2 HPE HV) as [? [? ?]].
+  - specialize CatchUp as [? [? ?]]; eauto.
     eexists. eexists; repeat split; eauto using PrecisionPreservationMult.
-  - specialize (Sim HPE H HMem) as [? [? [? [? ?]]]].
-    specialize (IHHMSt _ _ _ HV H2 H1) as [? [? [? [? [? ?]]]]].
+  - specialize Sim as [? [? [? [? ?]]]]; eauto.
+    specialize IHHMSt as [? [? [? [? [? ?]]]]]; eauto.
     exists x1. exists x2. repeat split; eauto using multiTrans.
 Qed.
 
@@ -593,7 +581,7 @@ Proof.
   assert(Precision MEmpty e1 t1 MEmpty (dyn e1) IRTStar)
     by (eapply DynLessPrecise; trivial).
   assert (m1 <M| m1) by auto using PrecMemRefl.
-  specialize (SimMult HSt HV H H0) as [? [? [? [? [? ?]]]]].
+  specialize SimMult as [? [? [? [? [? ?]]]]]; eauto.
   eexists x. eexists. repeat split;
   eauto using PrecDynEqualVal.
 Qed.

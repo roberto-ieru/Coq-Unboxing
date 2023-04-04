@@ -365,7 +365,7 @@ Example L2 : exists m,
 Proof.
   destruct (LfreshF LEmptyMem "x" (LEVar "x")) as [a m'] eqn:Heq.
   destruct (LqueryF a m') eqn:Heq'.
-  specialize (auxmem _ _ _ _ _ _ _ Heq Heq') as [? ?]; subst.
+  specialize auxmem as [? ?]; eauto; subst.
   eexists.
   eauto using Lstep, LValue.
 Qed.

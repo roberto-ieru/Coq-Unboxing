@@ -160,22 +160,15 @@ Proof.
 Qed.
 
 
-Ltac destTOf Γ e :=
-    destruct (typeOf Γ e) as [[ | | | ? | ? ?] | ?] eqn:?; try easy.
-
-Ltac destTOf' :=
-  match goal with
-  H: context [typeOf ?Γ ?e] |- _ => idtac e; destTOf Γ e
-  end.
+(* To avoid repeated inversions *)
+Lemma DisjointSome : forall T (X : T) C, None = Some X -> C.
+Proof. intros. easy. Qed.
 
 
-Ltac destTOf''' :=
-  match goal with
-  | H: context [match typeOf ?Γ ?e with Some _ => _ | None => _ end] |- _ =>
-     idtac e; destruct (typeOf Γ e) eqn:?; try easy
-  | H: context [match typeOf ?Γ ?e with Some _ => _ | _ => _ end] |- _ =>
-     idtac e; destTOf Γ e
-  end.
+(* idem *)
+Lemma InjectSome : forall T (X1 X2 : T), Some X1 = Some X2 -> X1 = X2.
+Proof. injection 1; trivial. Qed.
+
 
 (*
 ** 'typeOf' is correct (part 2)
@@ -185,32 +178,15 @@ Proof.
   intros * Heq.
   generalize dependent Γ.
   generalize dependent T.
-  induction e; intros * Heq; subst;
-  simpl in Heq; inversion Heq; subst; eauto using PTyping;
-  try (destTOf Γ e1; destTOf Γ e2;
-    inversion Heq; subst; eauto using PTyping; fail).
-  - (* Set *)
-    destTOf'.
-    destTOf'.
-    repeat destTOf'''.
-    destruct (dec_TP p p0) eqn:?; try easy.
-    inversion Heq; subst. eauto using PTyping.
-  - (* App *)
-    destTOf'.
-    destTOf'''.
-    destruct (dec_TP p p1) eqn:?; try easy.
-    inversion Heq; subst. eauto using PTyping.
-  - (* Fun *)
-    destTOf'''.
-    destruct (dec_TP p0 p1); subst; try discriminate.
-    inversion Heq; subst. eauto using PTyping.
-  - (* Let *)
-    repeat destTOf'''.
-    destruct (dec_TP p p0); subst; try easy.
-    inversion Heq; subst. eauto using PTyping.
-  - (* Cast *)
-    destTOf'''.
-    inversion Heq; subst. eauto using PTyping.
+  induction e; intros * Heq;
+  simpl in Heq;
+  (* Destruct all cases *)
+  repeat match goal with
+    H: (match ?E with _ => _ end = _) |- _ =>
+      destruct E eqn:?
+  end;
+  try (apply InjectSome in Heq; subst); eauto using PTyping;
+  eapply DisjointSome; eauto.
 Qed.
 
 
@@ -870,7 +846,7 @@ Proof.
   (* Each of the next cases needs some very specific destructs *)
 
   - (* New *)
-    pose (PfreshT m) as P. destruct P eqn:?;
+    pose (PfreshT m) as P; destruct P eqn:?;
     dostep.
 
   - (* Fun *)

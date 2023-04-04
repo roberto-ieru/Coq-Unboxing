@@ -636,7 +636,7 @@ Lemma PCastBox : forall v T v' t,
 Proof.
   intros * HTy HV HCst Heq.
   assert (T <> PTStar) by (intros contra; subst; discriminate).
-  specialize (ValStar _ HV HTy) as [v'' [Heq' HV']]; subst.
+  specialize (ValStar v) as [v'' [Heq' HV']]; trivial; subst.
   simpl in *.
   assert (HCst': PCast v'' T = Some v') by (destruct T; easy).
   inversion HTy; subst.
@@ -942,7 +942,7 @@ Proof.
    (* not so easy cases *)
    destruct T1; simpl; GtypeOf2T; simpl;
       (* specialize induction hypothesis *)
-      try (specialize (IHHV H3 HC); simpl in IHHV; trivial);
+      try (specialize IHHV; simpl in IHHV; eauto);
       (* cases that actually fail *)
       try (eapply StUnboxF; auto using stepF, PValueValue; easy);
       (* impossible cases (PCast could not fail) *)

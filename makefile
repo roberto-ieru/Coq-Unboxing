@@ -1,8 +1,8 @@
-lir.vo: lir.v
+all: lir.vo dyn.vo precision.vo simprec.vo pallene.vo pall2lir.vo lua.vo
+.PHONY: all
 
 %.vo: %.v
 	coqc -Q . LIR $<
-
 
 lir.vo: lir.v maps.vo
 dyn.vo: dyn.v maps.vo lir.vo

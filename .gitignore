@@ -5,3 +5,4 @@
 *.vok
 .lia.cache
 temp
+.coq-native

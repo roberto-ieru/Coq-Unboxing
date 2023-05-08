@@ -791,6 +791,16 @@ Proof.
 Qed.
 
 
+Corollary PPreservation : forall m e t m' e',
+  Pmem_correct m ->
+  MEmpty |p= e : t ->
+  m / e -p-> m' / e' ->
+  Pmem_correct m' /\ MEmpty |p= e' : t.
+Proof.
+  intros. split; eauto using PmemPreservation, PexpPreservation.
+Qed.
+
+
 (*
 ** Preservation of types for λ-Pallene terms,
 ** function version.

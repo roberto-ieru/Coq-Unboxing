@@ -1,6 +1,8 @@
-# assumes Coq version 8.16.1 or compatible
-#
-all: lir.vo dyn.vo precision.vo simprec.vo pallene.vo pall2lir.vo lua.vo example.vo
+# Assumes Coq version 8.16.1 or compatible
+# (Tested with Coq 8.16.1 and 8.17.0.)
+
+all: lir.vo dyn.vo precision.vo simprec.vo pallene.vo pall2lir.vo \
+     lua.vo example.vo
 
 %.vo: %.v
 	coqc -Q . LIR $<

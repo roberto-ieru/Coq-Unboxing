@@ -1,3 +1,8 @@
+(*
+** λ-Pallene: Syntax and semantics.
+*)
+
+
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
 Require Import Coq.Strings.String.
@@ -10,40 +15,41 @@ Require Import LIR.maps.
 Require LIR.lir.
 
 
-(* Pallene types *)
+(* λ-Pallene types *)
 Inductive PType : Set :=
-| PTStar : PType
-| PTNil : PType
-| PTInt : PType
-| PTArr : PType -> PType
-| PTFun : PType -> PType -> PType
+| PTStar : PType  (* '*' or 'any' *)
+| PTNil : PType   (* nil *)
+| PTInt : PType   (* int *)
+| PTArr : PType -> PType  (* {τ} *)
+| PTFun : PType -> PType -> PType  (* σ -> τ *)
 .
 
 
+(* Type equality is decidable *)
 Lemma dec_TP : forall (t1 t2 : PType), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. Defined.
 
 
-(* Type environment for Pallene *)
+(* Type environment for λ-Pallene *)
 Definition PEnvironment := Map PType.
 
 (*
 ** Syntax of λ-Pallene
 *)
 Inductive PE : Set :=
-| PENil : PE
-| PENum : nat -> PE
-| PEPlus : PE -> PE -> PE
-| PENew : PType -> PE
-| PETAddr : lir.address -> PType -> PE
-| PEFAddr : lir.address -> PType -> PType -> PE
-| PEGet : PE -> PE -> PE
-| PESet : PE -> PE -> PE -> PE
-| PEVar : string -> PE
-| PEApp :  PE -> PE -> PE
-| PEFun : string -> PType -> PE -> PType -> PE
-| PELet : string -> PType -> PE -> PE -> PE
-| PECast : PE -> PType -> PE
+| PENil : PE  (* nil *)
+| PENum : nat -> PE  (* n *)
+| PEPlus : PE -> PE -> PE  (* e₁ + e₂ *)
+| PENew : PType -> PE  (* {}:{τ} *)
+| PETAddr : lir.address -> PType -> PE  (* α:{τ} *)
+| PEFAddr : lir.address -> PType -> PType -> PE  (* β:σ->τ *)
+| PEGet : PE -> PE -> PE  (* e₁[e₂] *)
+| PESet : PE -> PE -> PE -> PE  (* e₁[e₂]=e₃ *)
+| PEVar : string -> PE  (* x *)
+| PEApp :  PE -> PE -> PE  (* e₁(e₂) *)
+| PEFun : string -> PType -> PE -> PType -> PE  (* λx.e:σ->τ *)
+| PELet : string -> PType -> PE -> PE -> PE  (* let x:τ=e₁ in e₂ *)
+| PECast : PE -> PType -> PE  (* e as τ *)
 .
 
 
@@ -95,7 +101,8 @@ where "Γ '|p=' e ':' t" := (PTyping Γ e t)
 
 
 (*
-** Typing algorithm for λ-Pallene
+** Typing algorithm for λ-Pallene. Result in 'None'
+** iff term is ill typed.
 *)
 Fixpoint typeOf Γ e : option PType :=
   match e with
@@ -191,14 +198,14 @@ Qed.
 
 
 (*
-** Rules and algorithm agree
+** Typing rules and algorithm agree
 *)
 Lemma typeOfCorrect : forall Γ e T, typeOf Γ e = Some T <-> Γ |p= e : T.
 Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 
 
 (*
-** Pallene types are unique
+** λ-Pallene types are unique
 *)
 Lemma PTypeUnique : forall Γ e t1 t2,
     Γ |p= e : t1 -> Γ |p= e : t2 -> t1 = t2.
@@ -210,6 +217,9 @@ Proof.
 Qed.
 
 
+(*
+** Extending an environment preserves typing
+*)
 Lemma PinclusionType : forall Γ Γ' e T,
   Γ |p= e : T ->
   inclusion Γ Γ' ->
@@ -230,7 +240,7 @@ Qed.
 
 
 (*
-** Pallene values
+** λ-Pallene values
 *)
 Inductive PValue : PE -> Prop :=
 | PVnil : PValue PENil
@@ -241,8 +251,9 @@ Inductive PValue : PE -> Prop :=
 .
 
 
-(* Canonical forms *)
+(* Canonical forms for λ-Pallene terms *)
 
+(* All values of type '*' must have the form 'v as *'. *)
 Lemma ValStar : forall v,
   PValue v ->
   MEmpty |p= v : PTStar ->
@@ -285,7 +296,7 @@ Qed.
 
 
 (*
-** Cast a Pallene expression to a given type; gives None iff cast
+** Cast a λ-Pallene term to a given type; gives None iff cast
 ** fails.
 *)
 Fixpoint PCast (e : PE) (T : PType) : option PE :=
@@ -293,15 +304,16 @@ Fixpoint PCast (e : PE) (T : PType) : option PE :=
   | PECast e' PTStar, PTStar => Some e		(* '*' to '*' *)
   | PECast e' PTStar, T => PCast e' T		(* downcast from '*' *)
   | e', PTStar => Some (PECast e' PTStar)	(* upcast to '*' *)
-  | PENil, PTNil => Some e
-  | PENum n, PTInt => Some e
-  | PETAddr a T, PTArr T' => Some (PETAddr a T')
+  | PENil, PTNil => Some e  (* nil as nil *)
+  | PENum n, PTInt => Some e  (* n as int *)
+  | PETAddr a T, PTArr T' => Some (PETAddr a T')  (* α:{τ} as α:{ț'} *)
   | PEFAddr a T1 T2, PTFun T1' T2' => Some (PEFAddr a T1' T2')
-  | _, _ => None
+      (* β:σ->τ as β:σ'->τ' *)
+  | _, _ => None  (* everything else fails *)
   end.
 
 (*
-** The cast of a value gives a value
+** Cast preserves values
 *)
 Lemma CastValue : forall e v T,
   PValue e ->
@@ -350,13 +362,16 @@ Qed.
 *)
 Lemma CastToStar : forall e, exists e', PCast e PTStar = Some e'.
 Proof.
-  induction e; try (eexists; simpl; eauto; fail).
+  induction e; try (eexists; simpl; auto; fail).
+  (* only really inductive case: '(e as p) as *' *)
   destruct IHe.
   destruct p;
   simpl; eauto.
 Qed.
 
 
+(*
+** λ-Pallene uses only integers as array (table) index *)
 Definition PToIndex (n : nat) : lir.Index := lir.I n lir.TgInt.
 
 
@@ -498,7 +513,7 @@ Definition setTable (m : PMem) (a : lir.address) (idx : nat) (v : PE)
 
 
 (*
-** Evaluation steps for Lir expressions
+** Evaluation steps for λ-Pallene terms
 *)
 Reserved Notation "m '/' e '-p->' m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
@@ -576,7 +591,7 @@ where "m / e -p-> m1 / e1" := (pstep m e m1 e1).
 
 
 (*
-** Fail evaluation for Pallene expressions
+** Fail evaluation for λ-Pallene terms
 *)
 Inductive pstepF : PMem -> PE -> Prop :=
 | PStPlus1F : forall m e1 e2,
@@ -664,7 +679,7 @@ Inductive Pmem_correct : PMem -> Prop :=
 
 
 (*
-** All expressions stored in memory tables are values
+** All terms stored in memory tables are values
 *)
 Lemma PMCValue : forall m a n, PValue (PqueryT a n m).
 Proof.
@@ -675,7 +690,7 @@ Qed.
 
 
 (*
-** All expressions stored in a table of a correct memory are
+** All terms stored in a table of a correct memory are
 ** well typed
 *)
 Lemma PMCTy : forall m a n Γ,
@@ -757,7 +772,7 @@ Qed.
 
 
 (*
-** Preservation of types for Pallene expressions
+** Preservation of types for λ-Pallene terms
 *)
 Theorem PexpPreservation : forall m e t m' e',
   Pmem_correct m ->
@@ -777,7 +792,7 @@ Qed.
 
 
 (*
-** Preservation of types for Pallene expressions,
+** Preservation of types for λ-Pallene terms,
 ** function version.
 *)
 Lemma PexpPreservTypeOf : forall m e t m' e',
@@ -864,4 +879,23 @@ Proof.
       dostep.
 
 Qed.
+
+
+(*
+** Multistep
+*)
+Reserved Notation "m '/' e '-p->*' m1 '/' e1"
+(at level 40, e at level 39, m1 at level 39, e1 at level 39).
+Reserved Notation "m '/' e '-p->*' 'fail'"
+(at level 40, e at level 39).
+
+Inductive Pmultistep : PMem -> PE -> PMem -> PE -> Prop :=
+| PMStRefl : forall m e, m / e -p->* m / e
+| PMStMStep : forall m e m' e' m'' e'',
+    m / e -p-> m' / e' ->
+    m' / e' -p->* m'' / e'' ->
+    m / e -p->* m'' / e''
+
+where "m / e -p->* m1 / e1" := (Pmultistep m e m1 e1)
+.
 

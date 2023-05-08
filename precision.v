@@ -1,3 +1,7 @@
+(*
+** The Precision Relation for LIR
+*)
+
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
 Require Import Coq.Strings.String.
@@ -72,7 +76,6 @@ Ltac GroundFlat :=
   end.
 
 
-
 Lemma GroundTop : forall t g1 g2,
   t <| Tag2Type g1 -> t <| Tag2Type g2 -> g1 = g2.
 Proof.
@@ -99,7 +102,7 @@ Inductive TPrecOption : option IRType -> option IRType -> Prop :=
 
 
 (*
-** Environment precision
+** Lift precision to Environments
 *)
 Definition EnvComp (Γ1 Γ2 : IREnvironment) : Prop :=
     forall var, TPrecOption (In Γ1 var) (In Γ2 var).
@@ -165,6 +168,10 @@ Proof.
 Qed.
 
 
+(*
+** Precision for environments imply precision
+** for their elements
+*)
 Lemma PEnvIn : forall Γ1 Γ2 var t1 t2,
     Γ1 <E| Γ2 ->
     In Γ1 var = Some t1 ->
@@ -179,6 +186,9 @@ Proof.
 Qed.
 
 
+(*
+** Precision for environments imply precision for terms typed by them
+*)
 Lemma LELT : forall Γ1 Γ2 e t1 t2,
     Γ1 |= e : t1 ->
     Γ2 |= e : t2 ->
@@ -193,66 +203,41 @@ Qed.
 
 
 (*
-** The Precision relation for expressions
+** The Precision relation for terms
 *)
 
 (*
-** (Precision Γ e1 τ1 Δ e2 τ2) means Γ⊑Δ ⊢ e1 ⊑ e2 : τ1 ⊑ τ2.
-** In words: the expression e1 with type τ1 in the environment Γ is
-** more (or equally) precise than the expression e2 with type τ2 in the
-** environment Δ.
+** (Precision Γ e1 τ1 Δ e2 τ2) means Γ ⊢ e1 : τ1 ⊑ Δ ⊢ e2 : τ2.
+** In words: the term e1 with type τ1 in the environment Γ is
+** more (or equally) precise than the term e2 with type τ2
+** in the environment Δ.
 *)
 Inductive Precision : IREnvironment -> IRE -> IRType ->
                       IREnvironment -> IRE -> IRType -> Prop :=
 
-(*  Γ ⊑ Δ
-   ----------------------
-   Γ⊑ ⊢ nil ⊑ nil : nil ⊑ nil       *)
 | PNil : forall Γ Δ, Γ <E| Δ -> Precision Γ IRENil IRTNil Δ IRENil IRTNil
 
-
-(* Γ ⊑ Δ    (x : σ) ∈ Γ   (x : τ) ∈ Δ
-  -----------------------------------
-  Γ ⊢ x : σ ⊑ Δ ⊢ x : τ	*)
 | PVar : forall Γ Δ var t1 t2,
     Γ <E| Δ ->
     In Γ var = Some t1 ->
     In Δ var = Some t2 ->
     Precision Γ (IREVar var) t1 Δ (IREVar var) t2
 
-(* Γ ⊑ Δ
-   ----------------------
-   Γ⊑ ⊢ n ⊑ n : int ⊑ int	*)
 | PNum : forall Γ Δ n, Γ <E| Δ -> Precision Γ (IRENum n) IRTInt Δ (IRENum n) IRTInt
 
-(* Γ⊑ ⊢ d₁ ⊑ e₁ : int ⊑ int   Γ⊑ ⊢ d₂ ⊑ e₂ : int ⊑ int
-   ----------------------------------------------------
-   Γ⊑ ⊢ d₁ + d₂ ⊑ e₁ + e₂ : int ⊑ int	*)
 | PPlus : forall Γ Δ d1 e1 d2 e2,
     Precision Γ d1 IRTInt Δ e1 IRTInt ->
     Precision Γ d2 IRTInt Δ e2 IRTInt ->
     Precision Γ (IREPlus d1 d2) IRTInt Δ (IREPlus e1 e2) IRTInt
 
-(* Γ ⊑ Δ
-   ----------------------
-   Γ⊑ ⊢ {} ⊑ {} : tbl ⊑ tbl	*)
 | PNew : forall Γ Δ, Γ <E| Δ -> Precision Γ IRENew IRTTbl Δ IRENew IRTTbl
 
-(* Γ ⊑ Δ
-   ----------------------
-   Γ⊑ ⊢ a ⊑ a : tbl ⊑ tbl	*)
 | PTAddr : forall Γ Δ addr, Γ <E| Δ -> Precision Γ (IRETAddr addr) IRTTbl
                                                  Δ (IRETAddr addr) IRTTbl
 
-(* ----------------------
-   Γ⊑ ⊢ a ⊑ a : fun ⊑ fun	*)
 | PFAddr : forall Γ Δ addr, Γ <E| Δ -> Precision Γ (IREFAddr addr) IRTFun
                                                  Δ (IREFAddr addr) IRTFun
 
-
-(* Γ⊑ ⊢ d₁ ⊑ e₁ : tbl ⊑ tbl   Γ⊑ ⊢ d₂ ⊑ e₂ : * ⊑ *
-   ----------------------------------------------------
-   Γ⊑ ⊢ d₁[d₂] ⊑ e₁[e₂] : * ⊑ *	*)
 | PGet : forall Γ Δ d1 d2 i1 i2,
     Precision Γ d1 IRTTbl Δ d2 IRTTbl ->
     Precision Γ i1 IRTStar Δ i2 IRTStar ->
@@ -264,33 +249,21 @@ Inductive Precision : IREnvironment -> IRE -> IRType ->
     Precision Γ v1 IRTStar Δ v2 IRTStar ->
     Precision Γ (IRESet d1 i1 v1) IRTNil Δ (IRESet d2 i2 v2) IRTNil
 
-(* Γ⊑, x : σ ⊑ τ ⊢ d₂ ⊑ e₂ : σ′ ⊑ τ′    Γ⊑ ⊢ d₁ ⊑ e₁ : σ ⊑ τ
-   -------------------------------------------------------
-   Γ⊑ ⊢ let x:σ = d₁ in d₂ ⊑ let x:τ = e₁ in e₂ : σ′ ⊑ τ′	*)
 | PLet : forall Γ Δ var d1 t1 d2 t2 b1 t1' b2 t2',
     Precision (var |=> t1; Γ) b1 t1' (var |=> t2; Δ) b2 t2' ->
     Precision Γ d1 t1 Δ d2 t2 ->
     Precision Γ (IRELet var t1 d1 b1) t1' Δ (IRELet var t2 d2 b2) t2'
 
-(* Γ⊑, x : * ⊑ * ⊢ d ⊑ e : * ⊑ *
-   --------------------------------
-   Γ⊑ ⊢ (λx.d) ⊑ (λx.e) : fun ⊑ fun	*)
 | PFun : forall Γ Δ var d1 d2,
     Precision (var |=> IRTStar; Γ) d1 IRTStar (var |=> IRTStar; Δ) d2 IRTStar ->
     Γ <E| Δ ->
     Precision Γ (IREFun var d1) IRTFun Δ (IREFun var d2) IRTFun
 
-(* Γ⊑ ⊢ d₁ ⊑ e₁ : fun ⊑ fun    Γ⊑ ⊢ d₂ ⊑ e₂ : * ⊑ *
-  -------------------------------------------------
-  Γ⊑ ⊢ d₁(d₂) ⊑ e₁(e₂) : * ⊑ *	*)
 | PApp : forall Γ Δ f1 v1 f2 v2,
     Precision Γ v1 IRTStar Δ v2 IRTStar ->
     Precision Γ f1 IRTFun Δ f2 IRTFun ->
     Precision Γ (IREApp f1 v1) IRTStar Δ (IREApp f2 v2) IRTStar
 
-(* Γ⊑ ⊢ d ⊑ e : t ⊑ g
-   ----------------------------------
-   Γ⊑ ⊢ d ⊑ box[g](e) : t ⊑ ★	*)
 (* Note: in our particular case, t must be equal to g, because
    g is a ground type and there is no type strictly more precise
    than a ground type. *)
@@ -298,24 +271,15 @@ Inductive Precision : IREnvironment -> IRE -> IRType ->
     Precision Γ d t Δ e (Tag2Type g) ->
     Precision Γ d t Δ (IREBox g e) IRTStar
 
-(* Γ⊑ ⊢ d ⊑ e : g ⊑ ★
-   ----------------------------------
-   Γ⊑ ⊢ box[g]d ⊑ e : ★ ⊑ ★	*)
 | PBoxL : forall Γ Δ d e g,
     Precision Γ d (Tag2Type g) Δ e IRTStar ->
     Precision Γ (IREBox g d) IRTStar Δ e IRTStar
 
-(* Γ⊑ ⊢ d ⊑ e : ★ ⊑ ★
-   ----------------------------------
-   Γ⊑ ⊢ unbox[g](d) ⊑ e : g ⊑ *		*)
 | PUnboxL : forall Γ Δ d e g tg,
     tg = Tag2Type g ->
     Precision Γ d IRTStar Δ e IRTStar ->
     Precision Γ (IREUnbox g d) tg Δ e IRTStar
 
-(* Γ⊑ ⊢ d ⊑ e : t ⊑ ★ , t ⊑ g
-   ----------------------------------
-   Γ⊑ ⊢ d ⊑ unbox[g](e) : t ⊑ g	*)
 | PUnboxR : forall Γ Δ d e t g tg,
     t <| (Tag2Type g) ->
     tg = Tag2Type g ->
@@ -325,25 +289,27 @@ Inductive Precision : IREnvironment -> IRE -> IRType ->
 .
 
 
-(* Γ⊑ ⊢ d ⊑ e : g ⊑ g
-   ----------------------------------
-   Γ⊑ ⊢ box[g](d) ⊑ box[g](e) : ★ ⊑ ★	*)
+(*
+** Boxing preserves precision.
+*)
 Lemma BoxCongruent : forall Γ Δ d e g,
     Precision Γ d (Tag2Type g) Δ e (Tag2Type g) ->
     Precision Γ (IREBox g d) IRTStar Δ (IREBox g e) IRTStar.
 Proof. eauto using Precision. Qed.
 
 
-(* Γ⊑ ⊢ d ⊑ e : ★ ⊑ ★
-   ----------------------------------
-   Γ⊑ ⊢ unbox[g](d) ⊑ unbox[g](e) : g ⊑ g	*)
+(*
+** Unboxing preserves precision.
+*)
 Lemma UnboxCongruent: forall Γ Δ d e g,
     Precision Γ d IRTStar Δ e IRTStar ->
     Precision Γ (IREUnbox g d) (Tag2Type g) Δ (IREUnbox g e) (Tag2Type g).
 Proof. eauto using Precision, TPrecisionRefl. Qed.
 
 
-(* Strip an expression of all its boxes and unboxes *)
+(*
+** Strip a term of all its boxes and unboxes
+*)
 Fixpoint Tbones (e : IRE) : IRE :=
   match e with
   | IRENil => e
@@ -363,7 +329,9 @@ Fixpoint Tbones (e : IRE) : IRE :=
   end.
 
 
-(* Equal bones is the same as equal 'dyn' *)
+(*
+** Equal bones is the same as equal 'dyn'
+*)
 Lemma DynBones : forall e1 e2, dyn e1 = dyn e2 <-> Tbones e1 = Tbones e2.
 Proof.
   split; generalize dependent e2; induction e1; intros * H;
@@ -382,7 +350,9 @@ Proof.
 Qed.
 
 
-(* Expressions related by Precision differ only in boxes and unboxes *)
+(*
+** Terms related by Precision differ only in boxes and unboxes
+*)
 Lemma EqBones : forall Γ Δ e1 t1 e2 t2,
   Precision Γ e1 t1 Δ e2 t2 -> Tbones e1 = Tbones e2.
 Proof.
@@ -396,17 +366,17 @@ Definition B10 := (IREBox TgInt (IRENum 10)).
 
 Definition UB10 := IREUnbox TgInt B10.
 
-(* 10 ⊑ unbox[int](box[int](10)) : int ⊑ int *)
+(* 10 ⊑ unbox[int](box[int](10)) *)
 Example example1 : Precision MEmpty (IRENum 10) IRTInt MEmpty UB10 IRTInt.
   eauto using Precision, TPrecisionRefl, EnvCompRefl.
 Qed.
 
-(* FALSE!  unbox[int](box[int](10)) ⊑ 10 : int ⊑ int *)
+(* FALSE!  unbox[int](box[int](10)) ⊑ 10 *)
 Example example2 : ~ Precision MEmpty UB10 IRTInt MEmpty (IRENum 10) IRTInt.
   inversion 1.
 Qed.
 
-(* unbox[int](box[int](10)) ⊑ box[int](10) : int ⊑ * *)
+(* unbox[int](box[int](10)) ⊑ box[int](10) *)
 Example example3 : Precision MEmpty UB10 IRTInt MEmpty B10 IRTStar.
   eauto using Precision, EnvCompRefl.
 Qed.
@@ -463,7 +433,7 @@ Goal exists e1 t1 e2 t2,
 Qed.
 
 
-(* Types inside precision-related expressions can go astray... *)
+(* Types inside precision-related terms can go astray... *)
 Goal Precision MEmpty (IREBox TgTbl (IREUnbox TgTbl B10)) IRTStar MEmpty B10 IRTStar.
 Proof.
   eauto 6 using Precision, EnvCompRefl.
@@ -539,7 +509,9 @@ End Examples.
 
 
 
-(* For precision environments, equivalence implies inclusion *)
+(*
+** For precision environments, equivalence implies inclusion
+*)
 Lemma PinclusionEquiv : forall (Γ Γ' : IREnvironment),
     map_eq Γ Γ' -> inclusion Γ Γ'.
 Proof.
@@ -559,8 +531,7 @@ Qed.
 
 
 (*
-** The types in a precision relation must be
-** in a precision relation too.
+** The types in a precision relation must be in a precision relation too.
 *)
 Lemma PPT : forall Γ Δ e1 t1 e2 t2,
     Precision Γ e1 t1 Δ e2 t2 -> t1 <| t2.
@@ -569,20 +540,21 @@ Proof.
 Qed.
 
 
+(*
+** Special case of PEnvIn
+*)
 Lemma extend2Types : forall Γ Δ var t1 t1' t2 t2' b1 b2,
     Precision (var |=> t1; Γ) b1 t1' (var |=> t2; Δ) b2 t2' ->
     t1 <| t2.
 Proof.
-  intros * HP.
-  apply PPE in HP.
-  specialize (HP var).
-  rewrite InEq in HP.
-  rewrite InEq in HP.
-  inversion HP.
-  trivial.
+  intros.
+  eapply PEnvIn with (var:=var); eauto using InEq, PPE.
 Qed.
 
 
+(*
+** Inclusion preserves precision
+*)
 Lemma PrecisionInclusion : forall Γ1 Γ2 Δ1 Δ2 e1 t1 e2 t2,
     Precision Γ1 e1 t1 Δ1 e2 t2 ->
     inclusion Γ1 Γ2 ->
@@ -608,7 +580,7 @@ Qed.
 
 
 (*
-** Precision subsumes typing for its first expression
+** Precision subsumes typing for its first term
 *)
 Lemma PrecisionType1: forall Γ Δ e1 t1 e2 t2,
   Precision Γ e1 t1 Δ e2 t2 -> Γ |= e1 : t1.
@@ -618,7 +590,7 @@ Qed.
 
 
 (*
-** Precision subsumes typing for its second expression
+** Precision subsumes typing for its second term
 *)
 Lemma PrecisionType2: forall Γ Δ e1 t1 e2 t2,
   Precision Γ e1 t1 Δ e2 t2 -> Δ |= e2 : t2.
@@ -637,6 +609,9 @@ Proof.
 Qed.
 
 
+(*
+** Dynamisation of environments makes them less precise
+*)
 Lemma PEnvDyn : forall Γ, Γ <E| dynGamma Γ.
 Proof.
   intros Γ var.
@@ -647,7 +622,7 @@ Qed.
 
 
 (*
-** Type erasure produces expresssions that are less precise than
+** Type erasure produces terms that are less precise than
 ** the original
 *)
 Theorem DynLessPrecise : forall Γ e t,
@@ -658,7 +633,7 @@ Qed.
 
 
 (*
-** Any pair of expressions in a precision relation are equal
+** Any pair of terms in a precision relation are equal
 ** up to type erasure.
 *)
 Theorem PrecDynEqual : forall Γ Δ e1 t1 e2 t2,
@@ -669,8 +644,8 @@ Qed.
 
 
 (*
-** Any star value less precise than an expression is equal to the
-** expression type erasure.
+** Any star value less precise than a term is equal to the
+** term type erasure.
 *)
 Theorem PrecDynEqualVal : forall e1 t1 e2,
     Value e2 ->
@@ -685,7 +660,7 @@ Qed.
 
 (*
 ** (dyn e1) is larger than any expression larger than e1:
-** forall e2, e1 ⊑ e2  ->  e2 ⊑ dyn (e1)
+** forall e2, e1 ⊑ e2  ->  e2 ⊑ dyn e1
 *)
 Theorem DynMoreDyn : forall Γ Δ e1 t1 e2 t2,
   Precision Γ e1 t1 Δ e2 t2 ->
@@ -710,7 +685,7 @@ Lemma PrecTagGround : forall Γ Δ e1 t1 e2 t2,
     Precision Γ e1 (Tag2Type t1) Δ e2 (Tag2Type t2) ->
     t1 = t2.
 Proof.
-  intros * H. apply PPT in H. apply GroundFlat in H. congruence.
+  intros * H. apply PPT in H. inversion H; subst; trivial.
 Qed.
 
 
@@ -743,6 +718,9 @@ Proof.
 Qed.
 
 
+(*
+** Any two values related by precision with the same type are equal.
+*)
 Lemma PrecValue : forall Γ Δ v1 v2 t,
     Precision Γ v1 t Δ v2 t ->
     Value v1 ->
@@ -753,6 +731,9 @@ Proof.
 Qed.
 
 
+(*
+** Auxiliar lemma for precision transitivity
+*)
 Lemma PrecEnvL1 : forall Γ1 Γ1' Γ2 e1 e2 t1 t1' t2,
     Precision Γ1 e1 t1 Γ2 e2 t2 ->
     Γ1' <E| Γ1 ->
@@ -769,6 +750,9 @@ Proof.
 Qed.
 
 
+(*
+** Auxiliar lemma for precision transitivity
+*)
 Lemma PrecEnvL2 : forall Γ1 Γ2 Γ2' e1 e2 t1 t2 t2',
     Precision Γ1 e1 t1 Γ2 e2 t2 ->
     Γ2 <E| Γ2' ->
@@ -819,6 +803,9 @@ Ltac changeT T :=
   end.
 
 
+(*
+** Precision for terms is transitive.
+*)
 Lemma PrecTrans : forall e2 Γ1 Γ2 Γ3 e1 e3 t1 t2 t3,
     Precision Γ1 e1 t1 Γ2 e2 t2 ->
     Precision Γ2 e2 t2 Γ3 e3 t3 ->

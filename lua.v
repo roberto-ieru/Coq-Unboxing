@@ -1,3 +1,8 @@
+(*
+** λ-Lua: syntax and semantics (both stand alone and through LIR)
+*)
+
+
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
 Require Import Coq.Strings.String.
@@ -42,7 +47,7 @@ Definition LEnv := Map unit.
 
 
 (*
-** A well-formed Lua expression cannot have free variables
+** A well-formed λ-Lua term cannot have free variables
 *)
 
 Reserved Notation "Γ '|l=' e"  (at level 40, no associativity,
@@ -72,7 +77,7 @@ where "Γ '|l=' e" := (LEWT Γ e)
 
 
 (*
-** Compilation of Lua programs to Lir
+** Compilation of λ-Lua programs to LIR
 *)
 Fixpoint Lua2Lir (e : LE) : IRE :=
   match e with
@@ -98,7 +103,7 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
 
 
 (*
-** Tanslation of Pallene programs to Lua (erasure)
+** Tanslation of λ-Pallene programs to λ-Lua (erasure)
 *)
 Fixpoint Pall2Lua (e : PE) : LE :=
   match e with
@@ -160,7 +165,7 @@ Qed.
 
 
 (*
-** Lua programs are as dynamic as possible
+** λ-Lua programs are as dynamic as possible
 *)
 Theorem LuaIsDyn : forall e, Lua2Lir e = dyn (Lua2Lir e).
 Proof.
@@ -169,11 +174,15 @@ Qed.
 
 
 (*
-** Direct semantics of Lua programs, without
-** translation to Lir
+** Direct semantics of λ-Lua programs, without
+** translation to LIR
 *)
 
 Unset Elimination Schemes.
+
+(*
+** λ-Lua values
+*)
 Inductive LValue : LE -> Prop :=
 | LVnil : LValue LENil
 | LVnum : forall n, LValue (LENum n)
@@ -184,6 +193,9 @@ Set Elimination Schemes.
 
 Scheme LValue_ind := Induction for LValue Sort Prop.
 
+(*
+** Proofs of Values are unique
+*)
 Lemma LV_unique: forall v  (V1 V2 : LValue v), V1 = V2.
 Proof.
   intros *.
@@ -191,10 +203,16 @@ Proof.
 Qed.
 
 
+(*
+** Terms with proofs that they are values
+*)
 Inductive LExpValue : Set :=
 | LEV : forall e, LValue e -> LExpValue.
 
 
+(*
+** Get the term out of a LExpValue
+*)
 Definition LEV2Val (me : LExpValue) :=
   match me with
   | LEV v _ => v
@@ -210,6 +228,9 @@ Proof.
 Qed.
 
 
+(*
+** Memory for λ-Lua
+*)
 Inductive LMem : Set :=
 | LEmptyMem : LMem
 | LUpdateT : address -> Index -> LExpValue -> LMem -> LMem
@@ -227,12 +248,19 @@ Definition LToIndex (e : LE) : Index :=
   end.
 
 
+(*
+** Indices are preserved under compilation to LIR
+*)
 Lemma LuaIndex : forall e, LToIndex e = ToIndex (Lua2Lir e).
 Proof.
   destruct e; trivial.
 Qed.
 
 
+(*
+** The following definitions are mostly a translation of
+** similar LIR definitions to λ-Lua
+*)
 
 Fixpoint LqueryT (a : address) (idx : LE) (m : LMem) : LE :=
   match m with
@@ -299,7 +327,7 @@ where "'[' x ':=' s ']l' t" := (substitution x s t)
 
 
 (*
-** Bigstep semantics for Lua expressions
+** Bigstep semantics for λ-Lua expressions
 *)
 Reserved Notation "m '/' e ==> m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
@@ -532,6 +560,10 @@ Proof.
 Qed.
 
 
+(*
+** The bigstep reduction for Lua always results in values and preserves
+** well-formness and memory correcness.
+*)
 Lemma luaPreservation : forall e m v m',
   m / e ==> m' / v ->
   Lmem_correct m ->
@@ -584,13 +616,7 @@ Lemma stepValue : forall e m v m',
   Lmem_correct m ->
   MEmpty |l= e ->
   LValue v.
-Proof.
-  intros * HSt HM HWT.
-  induction HSt; inversion HWT; subst;
-  eauto 10 using LValue, LMCqueryT, LMCqueryF, luaPreservationMem,
-                 luaPreservationWT, subst_WT.
-Qed.
-
+Proof. eapply luaPreservation. Qed.
 
 
 (*
@@ -745,14 +771,15 @@ Ltac instHI :=
 
 
 (*
-** If a Lua program results in a value, its translation to Lir results
-** in the Lir translation of the final value.
+** If a λ-Lua term reduces to a value, its translation to LIR reduces
+** to the LIR translation of that value.
 *)
 Theorem SimLua : forall e m v m',
     Lmem_correct m ->
     MEmpty |l= e ->
     m /e ==> m' / v  ->
     (MLua2Lir m) / (Lua2Lir e) -->* (MLua2Lir m') / (Lua2Lir v).
+
 Proof with eauto 16 using CongBox, CongUnbox, CongPlus1, CongPlus2,
                    CongGet1, CongGet2, CongSet1, CongSet2, CongSet3,
                    CongLet, CongApp1, CongApp2,

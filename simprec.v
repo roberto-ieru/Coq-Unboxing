@@ -1,3 +1,10 @@
+(*
+** Simulation: assuming a well-typed memory m1 and a
+** well-typed term e1, if (m1 / e1) reduces to a value (m1' / e1'),
+** then (m1 / dyn e1) reduces to (m2' / dyn e1') (for some
+** memory m2' less precise than m1').
+*)
+
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
 Require Import Coq.Strings.String.
@@ -14,7 +21,7 @@ Set Implicit Arguments.
 
 (*
 ** Precision relation for memories: implies that memory is correct,
-** because the precision relation needs the types of the expressions
+** because the precision relation needs the types of the terms
 ** being compared.
 *)
 Inductive PrecMem : Mem -> Mem -> Prop :=
@@ -114,6 +121,10 @@ Proof.
 Qed.
 
 
+(*
+** Querying table entries in memories related by precision
+** results in terms related by precision.
+*)
 Lemma PrecQueryT : forall m1 m2 a i1 i2,
     m1 <M| m2 ->
     Precision MEmpty i1 IRTStar MEmpty i2 IRTStar ->
@@ -126,6 +137,10 @@ Proof.
 Qed.
 
 
+(*
+** Querying functions in memories related by precision
+** results in terms related by precision.
+*)
 Lemma PrecQueryF : forall m1 m2 a var var' body body',
     m1 <M| m2 ->
     (var, body) = queryF a m1 ->
@@ -143,6 +158,10 @@ Proof.
 Qed.
 
 
+(*
+** Updating memories with values related by precision
+** preserves precision.
+*)
 Lemma PrecUpdate : forall m1 m2 a i1 i2 v1 v2,
     m1 <M| m2 ->
     forall (vv1 : Value v1) (vv2 : Value v2),
@@ -158,7 +177,9 @@ Qed.
 
 
 (*
-** Substitution preserves precision
+** Substitution preserves precision. (The 'map_eq' gives the
+** flexibility to handle the 'let-in' case, where othersiwe we
+** would need to prove that environments are equal up to permutes.)
 *)
 Lemma PrecSubs : forall body Γ Γ' Δ Δ' var  body' v1 v2 t1 t2 t1' t2',
     Precision MEmpty v1 t1 MEmpty v2 t2 ->
@@ -193,7 +214,6 @@ Proof.
       eauto 12 using Precision, PrecisionInclusion, map_eq_incl,
       map_eq_sym, eqeq_shadow, EnvCompExt, extend2Types, eqeq_permute.
 Qed.
-
 
 
 (*
@@ -242,8 +262,8 @@ Qed.
 ** About "catch-up": when e1 ⊑ e2 and e1 is a value, e2 may not be
 ** a value (e.g., (unbox (box 10))). But we can guarantee that e2
 ** reduces to a value (nor errors or infinite loops) in a somewhat
-** restricted way. This property is called "catch-up", and several
-** of the following lemmas help its proof.
+** restricted way (only 'StUnbox' steps). This property is called "catch-up",
+** and several of the following lemmas help its proof.
 *)
 
 (*
@@ -252,7 +272,8 @@ Qed.
 Lemma stepValueMem : forall e1 e2 e2' t1 t2 m m',
     Precision MEmpty e1 t1 MEmpty e2 t2 ->
     Value e1 ->
-    m / e2 --> m' / e2' -> m = m'.
+    m / e2 --> m' / e2' ->
+    m = m'.
 Proof.
   intros * HP HV HStep.
   remember MEmpty as Γ.
@@ -396,6 +417,9 @@ Ltac BreakIH :=
   end.
 
 
+(*
+** Unbox terms are not values. (Avoid repeated inversions.)
+*)
 Lemma NoValueUnbox : forall tg e (C : Type),
     Value (IREUnbox tg e) -> C.
 Proof.
@@ -461,8 +485,7 @@ Proof.
   induction HP; intros * Hstep HM;
 
   (* Handle BoxR and UnboxR, which should not invert step *)
-  try (subst; BreakIH; solveSim2;
-    fail);
+  try (subst; BreakIH; solveSim2; fail);
 
   inversion Hstep; subst; repeat BreakIH;
   try ForceΓEmpty Γ;

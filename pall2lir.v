@@ -1,3 +1,7 @@
+(*
+** Translation of λ-Pallene to LIR.
+*)
+
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
 Require Import Coq.Strings.String.
@@ -12,7 +16,7 @@ Require Import LIR.pallene.
 
 
 (*
-** Convert a Pallene type to its corresponding Lir type
+** Convert a λ-Pallene type to its corresponding LIR type
 *)
 Definition PT2IRT (t : PType) : IRType :=
   match t with
@@ -24,13 +28,8 @@ Definition PT2IRT (t : PType) : IRType :=
   end.
 
 
-Lemma PT2IRTFun : forall T1 T2,
-    PT2IRT (PTFun T1 T2) = IRTFun.
-Proof. intros T1 T2. unfold PT2IRT. trivial. Qed.
-
-
 (*
-** Convert a Pallene environment to a Lir environment
+** Convert a λ-Pallene environment to a LIR environment
 *)
 Fixpoint TP2TGamma (Γ : Map PType) : IREnvironment :=
   match Γ with
@@ -39,6 +38,9 @@ Fixpoint TP2TGamma (Γ : Map PType) : IREnvironment :=
   end.
 
 
+(*
+** The conversion of an environment is the conversion of its types.
+*)
 Lemma TP2TGammaIn : forall Γ var T,
     In Γ var = Some T -> In (TP2TGamma Γ) var = Some (PT2IRT T).
 Proof.
@@ -65,6 +67,9 @@ Notation "'<' t1 '<=' t2 '>' e" := (Cast t1 t2 e)
     (at level 50, t1 at next level, t2 at next level).
 
 
+(*
+** Cast and substitution commute.
+*)
 Lemma SubstCast : forall var e1 e2 T T',
   [var := e1] (<T <= T'> e2) = (<T <= T'> [var := e1] e2).
 Proof.
@@ -74,16 +79,9 @@ Proof.
 Qed.
 
 
-Lemma StCastF : forall m e T T',
-  m / e --> fail  ->
-  m / (<T <= T'> e) --> fail.
-Proof.
-  intros.
-  destruct T; destruct T'; simpl; eauto using stepF.
-  destruct (dec_Tag t t0); eauto using stepF.
-Qed.
-
-
+(*
+** Context rules for casts
+*)
 Lemma CastStep : forall t1 t2 e m e' m',
   m / e --> m' / e' ->
   m / (<t1 <= t2> e) --> m' / (<t1 <= t2> e').
@@ -94,7 +92,6 @@ Proof.
   destruct (dec_Tag t t0); eauto using step.
 Qed.
 
-
 Lemma CastStepF : forall t1 t2 e m,
   m / e --> fail ->
   m / (<t1 <= t2> e) --> fail.
@@ -104,7 +101,6 @@ Proof.
   destruct t1; destruct t2; eauto using stepF.
   destruct (dec_Tag t t0); eauto using stepF.
 Qed.
-
 
 Lemma CongCast : forall t1 t2 e m e' m',
   m / e -->* m' / e' ->
@@ -117,7 +113,7 @@ Qed.
 
 
 (*
-** Get the ground type of an expression; if correctly typed;
+** Get the ground type of an expression, if correctly typed;
 ** otherwise assume nil. (The expression will always be correctly
 ** typed.)
 *)
@@ -128,13 +124,14 @@ Definition GtypeOf Γ e : IRType :=
   end.
 
 
+(*
+** GtypeOf is correct.
+*)
 Lemma GtypeOfT : forall Γ e T, typeOf Γ e = Some T -> GtypeOf Γ e = PT2IRT T.
 Proof. intros. unfold GtypeOf. rewrite H. trivial. Qed.
 
-
 Lemma GtypeOfT' : forall Γ e T, Γ |p= e : T -> GtypeOf Γ e = PT2IRT T.
 Proof. eauto using GtypeOfT, typeOfCorrect'. Qed.
-
 
 Lemma tagStar2type : forall Γ e,
     GtypeOf Γ e = IRTStar -> typeOf Γ e = Some PTStar.
@@ -147,7 +144,7 @@ Qed.
 
 
 (*
-** Translation (compilation) of Pallene programs to Lir
+** Translation (compilation) of Pallene programs to LIR
 *)
 Fixpoint Pall2Lir (Γ : PEnvironment) (e : PE) : IRE :=
   match e with
@@ -390,7 +387,9 @@ Proof.
 Qed.
 
 
-
+(*
+** Compilation to LIR and substitution commute
+*)
 Lemma Psubst : forall Γ var Tvar e1 e2 te,
   (var |=> Tvar; Γ) |p= e2 : te ->
   MEmpty |p= e1 : Tvar ->
@@ -471,6 +470,9 @@ Proof.
 Qed.
 
 
+(*
+** The translation of a value gives a value
+*)
 Theorem PValueValue : forall e, PValue e -> Value (Pall2Lir MEmpty e).
 Proof.
   intros * PV.
@@ -479,6 +481,9 @@ Proof.
 Defined.
 
 
+(*
+** Lifting compilation to memories
+*)
 Fixpoint MPall2Lir (m : PMem) : Mem :=
   match m with
   | PEmptyMem => EmptyMem
@@ -496,6 +501,9 @@ Fixpoint MPall2Lir (m : PMem) : Mem :=
   end.
 
 
+(*
+** Lifting preserves correctness
+*)
 Lemma MPall2LirCorrect : forall m,
   Pmem_correct m -> mem_correct (MPall2Lir m).
 Proof.
@@ -644,28 +652,22 @@ Proof.
   generalize dependent T.
   generalize dependent t.
   generalize dependent T1.
-  induction HV'; intros * HTy * HEq HNEq HCst.
+  induction HV'; intros * HTy * HEq HNEq HCst;
+  try (
+    match goal with
+    [ T : PType |- _] =>
+      destruct T; simpl in *; try discriminate;
+      injection HEq; injection HCst; intros; subst; trivial; fail
+    end).
 
-  - destruct T; simpl in *; try discriminate.
-    injection HEq; injection HCst; intros; subst. trivial.
-
-  - destruct T; simpl in *; try discriminate.
-    injection HEq; injection HCst; intros; subst. trivial.
-
-  - destruct T0; simpl in *; try discriminate.
-    injection HEq; injection HCst; intros; subst. trivial.
-
-  - destruct T; simpl in *; try discriminate.
-    injection HEq; injection HCst; intros; subst. trivial.
-
-  - unfold GtypeOf.
-    replace (typeOf MEmpty (PECast v PTStar)) with (Some T1)
-      by (symmetry; eauto using typeOfCorrect').
-    inversion HTy; subst.
-    simpl.
-    eapply IHHV'; clear IHHV'; eauto.
-    subst. simpl in *.
-    destruct T; trivial; discriminate.
+  unfold GtypeOf.
+  replace (typeOf MEmpty (PECast v PTStar)) with (Some T1)
+    by (symmetry; eauto using typeOfCorrect').
+  inversion HTy; subst.
+  simpl.
+  eapply IHHV'; clear IHHV'; eauto.
+  subst. simpl in *.
+  destruct T; trivial; discriminate.
 Qed.
 
 
@@ -769,6 +771,13 @@ Proof.
 Qed.
 
 
+(*
+** Simulation λ-Pallene - LIR: Success cases.
+**
+** If a well-typed λ-Pallene term e reduces in one step to e',
+** its translation to LIR reduces in zero or more steps to
+** the translation of e'.
+*)
 Theorem SimPallLir : forall m e T m' e',
   Pmem_correct m ->
   MEmpty |p= e : T ->
@@ -923,7 +932,7 @@ end.
 
 (*
 ** Main lemma for fail simulation: A failed cast in Pallene will
-** fail when translated to Lir.
+** fail when translated to LIR.
 *)
 Lemma CastFail : forall {v} m {T T'},
   PValue v ->
@@ -1015,7 +1024,12 @@ Proof.
 Qed.
 
 
-Lemma SimPallLirF : forall m e T,
+(*
+** Fail simulation: If the evaluation of a well-typed
+** λ-Pallene term e fails in one step, the evaluation of its
+** translation to LIR fail in zero or more steps.
+*)
+Theorem SimPallLirF : forall m e T,
   Pmem_correct m ->
   MEmpty |p= e : T ->
   m / e -p-> fail ->

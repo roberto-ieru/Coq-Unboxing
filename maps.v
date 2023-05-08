@@ -1,3 +1,7 @@
+(*
+** Maps used to represent environments in all three languages.
+*)
+
 
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
@@ -7,7 +11,9 @@ Require Import Bool.
 Require Import Nat.
 
 
-
+(*
+** A Map maps strings to A.
+*)
 Inductive Map (A : Type) : Type :=
 | MEmpty : Map A
 | MCons : string -> A -> Map A -> Map A
@@ -29,6 +35,9 @@ Ltac breakStrDec :=
 end.
 
 
+(*
+** Return 'M[var]' (None if absent)
+*)
 Fixpoint In {A} M var : option A :=
   match M with
   | MEmpty => None
@@ -36,23 +45,23 @@ Fixpoint In {A} M var : option A :=
   end.
 
 
-Lemma InEq' : forall A (M : Map A) var r r',
-    In (var |=> r; M) var = Some r' -> r = r'.
-Proof. intros. breakStrDec. congruence. Qed.
-
-
 Lemma InEq : forall A (M : Map A) var r, In (var |=> r; M) var = Some r.
 Proof. intros; breakStrDec. Qed.
 
 
-Lemma InNotEq : forall A (M : Map A) var var' r r',
-    var <> var' -> In (var' |=> r; M) var = r' -> In M var = r'.
-Proof. intros; breakStrDec. Qed.
+Lemma InEq' : forall A (M : Map A) var r r',
+    In (var |=> r; M) var = Some r' -> r = r'.
+Proof. intros * H. rewrite InEq in H. injection H. trivial. Qed.
 
 
 Lemma InNotEq' : forall A (M : Map A) var var' r,
     var <> var' -> In (var' |=> r; M) var = In M var.
 Proof. intros; breakStrDec. Qed.
+
+
+Lemma InNotEq : forall A (M : Map A) var var' r r',
+    var <> var' -> In (var' |=> r; M) var = r' -> In M var = r'.
+Proof. intros * HNeq Heq. rewrite InNotEq' in Heq; trivial. Qed.
 
 
 Definition inclusion {A} (M : Map A) M' :=

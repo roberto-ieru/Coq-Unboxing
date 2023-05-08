@@ -1,3 +1,6 @@
+(*
+** LIR: Lua Intermediate Language. Syntax and semantics.
+*)
 
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
@@ -11,7 +14,8 @@ Require Import LIR.maps.
 
 
 (*
-** Tags for Lir
+** Tags for Lir: represent unboxed types and
+** tags for boxed values.
 *)
 Inductive Tag : Set := | TgNil | TgInt | TgTbl | TgFun.
 
@@ -22,7 +26,8 @@ Proof. decide equality. Defined.
 
 
 (*
-** Types for Lir
+** Types for Lir: a 'Tag2Type' represents unboxed values,
+** IRTStar is the type for boxed values.
 *)
 Inductive IRType : Set :=
 | Tag2Type : Tag  -> IRType
@@ -35,6 +40,9 @@ Lemma dec_IRType : forall (t1 t2 : IRType), {t1 = t2} + {t1 <> t2}.
 Proof. decide equality. auto using dec_Tag. Defined.
 
 
+(*
+** Get the tag from a type, if possible.
+*)
 Definition Type2Tag (t : IRType) : option Tag :=
   match t with
   | Tag2Type tg => Some tg
@@ -50,17 +58,17 @@ Definition IRTFun := Tag2Type TgFun.
 
 
 (*
-** Addresses represent tables and functions in memory
+** Addresses represent tables and functions in memory.
 *)
 Definition address := nat.
 
 
 (*
-** Syntax for Lir expressions
+** Syntax for Lir terms (expressions).
 *)
 Inductive IRE : Set :=
 | IRENil : IRE		(* nil *)
-| IRENum : nat -> IRE	(* n - integer literals *)
+| IRENum : nat -> IRE	(* n - integer literal *)
 | IREPlus : IRE -> IRE -> IRE	(* e + e *)
 | IRENew : IRE		(* {} - table constructor *)
 | IRETAddr : address -> IRE  (* table address - only at runtime *)
@@ -76,56 +84,12 @@ Inductive IRE : Set :=
 .
 
 
-(*
-Coercion IRENum : nat >-> IRE.
-Coercion IREVar : string >-> IRE.
-
-Declare Custom Entry IRE.
-
-Declare Scope IRE_scope.
-
-Notation "'<{' e '}>'" := e
-    (at level 0, e custom IRE at level 99) : IRE_scope.
-Notation "( x )" := x (in custom IRE, x at level 99) : IRE_scope.
-Notation "x" := x (in custom IRE at level 0, x constr at level 0) : IRE_scope.
-Notation "f x" := (IREApp f x)
-                  (in custom IRE at level 0,
-                  f constr at level 0, x constr at level 9) : IRE_scope.
-Notation "x + y" := (IREPlus x y)
-   (in custom IRE at level 50, left associativity).
-Notation "x '[' y ']'" := (IREGet x y)
-    (in custom IRE at level 80).
-Notation "x '[' y ']' '=' z" := (IRESet x y z)
-    (in custom IRE at level 80, z at level 90).
-Notation "{}" := (IRENew) (in custom IRE at level 100).
-Notation "'λ' x ':' t '.' e" := (IREFun x t e)
-    (in custom IRE at level 100, e at level 110).
-Notation "'box[' t '](' x ')'" := (IREBox t x)
-    (in custom IRE at level 100).
-Notation "'unbox[' t '](' x ')'" := (IREUnbox t x)
-    (in custom IRE at level 100).
-
-(* just for examples *)
-Definition X := "X"%string.
-Definition F := "F"%string.
-
-Open Scope IRE_scope.
-
-Unset Printing Notations.
-Set Printing Coercions.
-Check <{ X[0] = X[0] + 1 }>.
-Unset Printing Coercions.
-Set Printing Notations.
-Check <{ X[0] = X[0] + 1 }>.
-
-*)
-
 (* Type environments for Lir *)
 Definition IREnvironment := Map IRType.
 
 
 (*
-** Typing rules for Lir expressions
+** Typing rules for Lir terms.
 *)
 Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
@@ -176,7 +140,7 @@ where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 
 
 (*
-** Types for Lir expressions are unique
+** Types for Lir terms are unique.
 *)
 Theorem typeUnique : forall Γ e t t',
    (Γ  |= e : t) -> (Γ |= e : t') -> t = t'.
@@ -187,8 +151,8 @@ Qed.
 Unset Elimination Schemes.
 
 (*
-** Value predicate for Lir expressions: The only values are nil,
-** numbers, and addresses, plus a box of one of those previous values.
+** Value predicate for Lir terms: The only values are nil,
+** numbers, and addresses, plus boxes of one of those previous values.
 ** (The type system forbids boxes of boxes.)
 *)
 Inductive Value : IRE -> Prop :=
@@ -203,6 +167,9 @@ Set Elimination Schemes.
 
 Scheme Value_ind := Induction for Value Sort Prop.
 
+(*
+** Value proofs are unique.
+*)
 Lemma Value_unique: forall v (Vv1 Vv2 : Value v), Vv1 = Vv2.
 Proof.
   intros.
@@ -226,6 +193,9 @@ Fixpoint isValue (e : IRE) : bool :=
   end.
 
 
+(*
+** 'Value' and 'isValue' agree.
+*)
 Lemma isValueCorrect : forall e, Value e <-> isValue e = true.
 Proof.
   split; induction e; trivial;
@@ -233,6 +203,9 @@ Proof.
 Qed.
 
 
+(*
+** A term inside a box value is a value.
+*)
 Lemma valBoxVal : forall gt e, Value (IREBox gt e) -> Value e.
 Proof.
   inversion 1; trivial.
@@ -240,7 +213,7 @@ Qed.
 
 
 (*
-** Canonical forms
+** Canonical forms for Values.
 *)
 
 Lemma valnil : forall Γ e,
@@ -286,7 +259,7 @@ Qed.
 
 (*
 ** Table indices. Only values are used as table indices, but we will
-** allow any expression for now. For values, the index has a 'nat',
+** allow any term for now. For values, the index has a 'nat',
 ** good for numbers and addresses, and a tag.
 *)
 Inductive Index : Set :=
@@ -312,6 +285,7 @@ Fixpoint ToIndex (e : IRE) : Index :=
   end.
 
 
+(* Index equality is decidable. *)
 Lemma Index_dec : forall (i1 i2 : Index), {i1 = i2} + {i1 <> i2}.
 Proof.
   decide equality; auto using Nat.eq_dec, dec_Tag.
@@ -331,13 +305,13 @@ Ltac breakIndexDec :=
 
 
 (*
-** Type representing expressions that are values
+** Type representing terms that are values.
 *)
 Inductive ExpValue : Set :=
 | EV : forall e, Value e -> ExpValue.
 
 
-(* Extract the expression from an ExpValue *)
+(* Extract the term from an ExpValue *)
 Definition EV2Val (me : ExpValue) : IRE :=
   match me with
   | EV v _ => v
@@ -348,10 +322,10 @@ Definition EV2Val (me : ExpValue) : IRE :=
 ** Memory for Lir.
 *)
 Inductive Mem : Set :=
-| EmptyMem : Mem
-| UpdateT :  (* table entries *)
+| EmptyMem : Mem  (* the empty memory *)
+| UpdateT :  (* table entries: address[index] := value *)
     address -> Index -> ExpValue -> Mem -> Mem
-| UpdateF :  (* closures *)
+| UpdateF :  (* closures: address := λstring.expression *)
     address -> string -> IRE -> Mem -> Mem.
 
 
@@ -361,7 +335,8 @@ Definition BoxedNilValue : Value BoxedNil := Vbox TgNil IRENil Vnil.
 
 
 (*
-** Get the memory content of a table entry
+** Get the memory content of a table entry, or 'box nil' for undefined
+** entries.
 *)
 Fixpoint queryT (a : address) (idx : IRE) (m : Mem) : IRE :=
   match m with
@@ -375,6 +350,9 @@ Fixpoint queryT (a : address) (idx : IRE) (m : Mem) : IRE :=
   end.
 
 
+(*
+** Equal indices return equal contents.
+*)
 Lemma queryTIndexEq : forall m a idx idx',
   ToIndex idx = ToIndex idx' ->
   queryT a idx m = queryT a idx' m.
@@ -400,7 +378,7 @@ Fixpoint queryF (a : address) (m : Mem) : (string * IRE) :=
 
 
 (*
-** Create a fresh address for a memory
+** Create a fresh address for a memory.
 *)
 Fixpoint freshaux (m : Mem) : address :=
   match m with
@@ -429,7 +407,7 @@ Definition freshF (m : Mem) (v : string) (b : IRE) : (address * Mem) :=
 
 
 (*
-** Substitution by closed Lir expressions
+** Substitution of closed Lir terms for variables.
 *)
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
 
@@ -500,7 +478,7 @@ Qed.
 
 
 (*
-** Evaluation steps for Lir expressions
+** Evaluation steps for Lir terms
 *)
 Reserved Notation "m '/' e --> m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
@@ -582,7 +560,7 @@ where "m / e --> m1 / e1" := (step m e m1 e1).
 
 
 (*
-** Fail evaluation for Lir expressions
+** Fail evaluation for Lir terms
 *)
 Inductive stepF : Mem -> IRE -> Prop :=
 | StPlus1F : forall m e1 e2,
@@ -637,7 +615,7 @@ Inductive stepF : Mem -> IRE -> Prop :=
 
 (*
 ** Ensures that all elements of tables in a memory have type '*'
-** and that all "functions" are correctly typed
+** and that all function bodies are correctly typed
 *)
 Inductive mem_correct : Mem -> Prop :=
 | MCE : mem_correct EmptyMem
@@ -653,7 +631,7 @@ Inductive mem_correct : Mem -> Prop :=
 
 
 (*
-** All expressions stored in memory tables are values
+** All terms stored in memory tables are values
 *)
 Lemma MCValue : forall m a n, Value (queryT a n m).
 Proof.
@@ -665,8 +643,7 @@ Qed.
 
 
 (*
-** All expressions stored in a table of a correct memory have
-** type '*'
+** All terms stored in a table of a correct memory have type '*'
 *)
 Lemma MCTy : forall m a n Γ,
     mem_correct m -> Γ |= (queryT a n m) : IRTStar.
@@ -677,7 +654,7 @@ Qed.
 
 
 (*
-** All functions stored in a correct memory have correct types.
+** All functions stored in a correct memory have type '* -> *'.
 *)
 Lemma MCTyF : forall m a var body Γ,
     (var, body) = queryF a m ->
@@ -746,7 +723,7 @@ Proof. inversion 1; trivial. Qed.
 
 
 (*
-** Preservation of types for Lir expressions
+** Preservation of types for Lir terms
 *)
 Lemma expPreservation : forall m e t m' e',
   mem_correct m ->
@@ -764,7 +741,7 @@ Qed.
 
 (*
 ** Main preservation theorem for Lir
-** (type preservation of memory and expression)
+** (type preservation of memory and term)
 *)
 Theorem Preservation : forall m e t m' e',
   mem_correct m ->
@@ -789,6 +766,9 @@ Proof.
 Qed.
 
 
+(*
+** The same, for fail steps
+*)
 Theorem value_normalF : forall m e,
     m / e --> fail ->
     Value e ->
@@ -822,6 +802,9 @@ Proof.
 Qed.
 
 
+(*
+** Steps are deterministic, for memories.
+*)
 Lemma DeterministicStepM : forall m e m1 e1 m2 e2,
     m / e --> m1 / e1 ->
     m / e --> m2 / e2 ->
@@ -836,6 +819,9 @@ Proof.
 Qed.
 
 
+(*
+** Steps are deterministic, for terms.
+*)
 Theorem DeterministicStep : forall m e m1 e1 m2 e2,
     m / e --> m1 / e1 ->
     m / e --> m2 / e2 ->
@@ -909,7 +895,7 @@ Qed.
 
 
 (*
-** Multistep
+** Multisteps
 *)
 Reserved Notation "m '/' e -->* m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
@@ -937,6 +923,9 @@ where "m / e -->* 'fail'" := (multistepF m e)
 .
 
 
+(*
+** An evaluation that fails in one step fails in multiple steps.
+*)
 Lemma multistepF1 : forall m e, m / e --> fail -> m / e -->* fail.
 Proof.
   eauto using multistep, multistepF.
@@ -964,6 +953,9 @@ Lemma multistep1 : forall m0 e0 m1 e1,
 Proof. eauto using multistep. Qed.
 
 
+(*
+** Soundness for LIR. (Progress for multiple steps.)
+*)
 Theorem Soundness : forall m e t m' e',
     mem_correct m ->
     MEmpty |= e : t  ->
@@ -996,6 +988,9 @@ Ltac finishmExp :=
   induction Hmt; eauto using step,multistep.
 
 
+(*
+** Congruence rules: e -->* e' implies that F[e] -->* F[e']
+*)
 
 Lemma CongPlus1 : forall e2 m e m' e',
     m / e -->* m' / e' ->  m / IREPlus e e2 -->* m' / IREPlus e' e2.

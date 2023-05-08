@@ -1,3 +1,7 @@
+(*
+** Dynamization of LIR terms: Type erasure for Lir expressions
+*)
+
 Require Import Coq.Logic.Decidable.
 Require Import PeanoNat.
 Require Import Coq.Strings.String.
@@ -11,7 +15,7 @@ Require Import LIR.lir.
 
 
 (*
-** 'dyn' transformation: type erasure for Lir expressions
+** 'dyn' transformation
 *)
 Fixpoint dyn (e : IRE) : IRE :=
   match e with
@@ -35,10 +39,14 @@ Fixpoint dyn (e : IRE) : IRE :=
   end.
 
 
+(* 'dyn' is idempotent *)
 Theorem dynIdempotent : forall e, dyn e = dyn (dyn e).
 Proof. induction e; simpl; congruence. Qed.
 
 
+(*
+** 'dyn' for environments: all variables have type '*'
+*)
 Fixpoint dynGamma (Γ : IREnvironment) : IREnvironment :=
   match Γ with
   | MEmpty => MEmpty
@@ -105,7 +113,7 @@ Qed.
 
 
 (*
-** Erases the types of all values in a memory
+** Lift 'dyn' to memories
 *)
 Fixpoint dynMem (m : Mem) : Mem :=
   match m with
@@ -117,7 +125,7 @@ Fixpoint dynMem (m : Mem) : Mem :=
 
 
 (*
-** 'dyn' preserves memory correctness
+** 'dynMem' preserves memory correctness
 *)
 Lemma dynMemCorrect : forall m, mem_correct m -> mem_correct (dynMem m).
 Proof.

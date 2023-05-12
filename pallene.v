@@ -371,7 +371,41 @@ Qed.
 
 
 (*
-** λ-Pallene uses only integers as array (table) index *)
+** Special case of PCast to Star
+*)
+Definition PCastStar (e : PE) : PE :=
+  match (PCast e PTStar) with
+  | Some e' => e'
+  | None => e
+  end.
+
+
+(*
+** PCastStar is the same as PCast to PTStar
+*)
+Lemma PCastStrCorrect: forall e, PCast e PTStar = Some (PCastStar e).
+Proof.
+  intros.
+  specialize (CastToStar e) as [? ?].
+  unfold PCastStar. rewrite H. trivial.
+Qed.
+
+
+(*
+** A direct cast (v as T) gives the same result as a cast through Star
+** (v as * as T).
+*)
+Lemma CastThroughStar : forall v T,
+  PValue v ->
+  PCast v T = PCast (PCastStar v) T.
+Proof.
+  destruct 1; destruct T; trivial.
+Qed.
+
+
+(*
+** λ-Pallene uses only integers as array (table) indices
+*)
 Definition PToIndex (n : nat) : lir.Index := lir.I n lir.TgInt.
 
 

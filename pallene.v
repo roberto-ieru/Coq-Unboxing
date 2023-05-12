@@ -371,35 +371,19 @@ Qed.
 
 
 (*
-** Special case of PCast to Star
-*)
-Definition PCastStar (e : PE) : PE :=
-  match (PCast e PTStar) with
-  | Some e' => e'
-  | None => e
-  end.
-
-
-(*
-** PCastStar is the same as PCast to PTStar
-*)
-Lemma PCastStrCorrect: forall e, PCast e PTStar = Some (PCastStar e).
-Proof.
-  intros.
-  specialize (CastToStar e) as [? ?].
-  unfold PCastStar. rewrite H. trivial.
-Qed.
-
-
-(*
 ** A direct cast (v as T) gives the same result as a cast through Star
 ** (v as * as T).
 *)
 Lemma CastThroughStar : forall v T,
   PValue v ->
-  PCast v T = PCast (PCastStar v) T.
+  exists v',
+    PCast v PTStar = Some v' /\ PCast v T = PCast v' T.
 Proof.
-  destruct 1; destruct T; trivial.
+  intros * HV.
+  specialize (CastToStar v) as [v' H1].
+  exists v'; split; trivial.
+  destruct HV; injection H1; intros; subst; 
+ destruct T; trivial.
 Qed.
 
 

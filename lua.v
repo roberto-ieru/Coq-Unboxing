@@ -21,7 +21,7 @@ Require Import LIR.dyn.
 
 
 (*
-** Sintax of λ-Lua
+** λ-Lua Syntax
 *)
 Inductive LE : Set :=
 | LENil : LE
@@ -103,7 +103,8 @@ Fixpoint Lua2Lir (e : LE) : IRE :=
 
 
 (*
-** Tanslation of λ-Pallene programs to λ-Lua (erasure)
+** Type Erasure of λ-Pallene
+** fTanslation of λ-Pallene programs to λ-Lua)
 *)
 Fixpoint Pall2Lua (e : PE) : LE :=
   match e with
@@ -157,8 +158,8 @@ Proof.
   simpl;
   repeat rewrite dynCast;
   (* break if's from casts *)
-  repeat match goal with |- context [GtypeOf ?G ?E] =>
-    destruct (GtypeOf G E) end;
+  repeat match goal with |- context [typeOf ?G ?E] =>
+    destruct (typeOf G E) end;
   simpl;
   congruence.
 Qed.
@@ -180,8 +181,9 @@ Qed.
 
 Unset Elimination Schemes.
 
+
 (*
-** λ-Lua values
+** λ-Lua Values
 *)
 Inductive LValue : LE -> Prop :=
 | LVnil : LValue LENil
@@ -229,7 +231,7 @@ Qed.
 
 
 (*
-** Memory for λ-Lua
+** λ-Lua Memory
 *)
 Inductive LMem : Set :=
 | LEmptyMem : LMem
@@ -460,7 +462,9 @@ Proof.
 Qed.
 
 
-
+(*
+** Compiling a value gives a value
+*)
 Theorem L2LirValue : forall e, LValue e -> Value (Lua2Lir e).
 Proof.
   inversion 1; simpl; subst; eauto using Value.
@@ -660,6 +664,10 @@ Lemma ConsLEnv2Lir : forall v Γ,
 Proof. unfold inclusion. trivial. Qed.
 
 
+(*
+** Compiling a well-formed 𝜆-Lua term results in a well-typed LIR
+** term with type *.
+*)
 Lemma Lua2LirTypeAux : forall Γ e,
   Γ |l= e -> LEnv2Lir Γ |= Lua2Lir e : IRTStar.
 Proof.
@@ -771,6 +779,7 @@ Ltac instHI :=
 
 
 (*
+** Simulation of λ-Lua Semantics in LIR:
 ** If a λ-Lua term reduces to a value, its translation to LIR reduces
 ** to the LIR translation of that value.
 *)

@@ -38,7 +38,7 @@ Definition example :=
 (*
 ** Example is well typed with type int
 *)
-Goal typeOf MEmpty example = Some PTInt.
+Goal PtypeOf MEmpty example = Some PTInt.
 Proof. trivial. Qed.
 
 

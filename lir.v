@@ -14,7 +14,7 @@ Require Import LIR.maps.
 
 
 (*
-** Tags for Lir: represent unboxed types and
+** Tags for LIR: represent unboxed types and
 ** tags for boxed values.
 *)
 Inductive Tag : Set := | TgNil | TgInt | TgTbl | TgFun.
@@ -26,11 +26,11 @@ Proof. decide equality. Defined.
 
 
 (*
-** Types for Lir: a 'Tag2Type' represents unboxed values,
+** Types for LIR: a 'Tag2Type' represents unboxed values,
 ** IRTStar is the type for boxed values.
 *)
 Inductive IRType : Set :=
-| Tag2Type : Tag  -> IRType
+| Tag2Type : Tag  -> IRType  (* Ground Types *)
 | IRTStar : IRType
 .
 
@@ -64,7 +64,7 @@ Definition address := nat.
 
 
 (*
-** Syntax for Lir terms (expressions).
+** Syntax for LIR terms (expressions).
 *)
 Inductive IRE : Set :=
 | IRENil : IRE		(* nil *)
@@ -84,12 +84,12 @@ Inductive IRE : Set :=
 .
 
 
-(* Type environments for Lir *)
+(* Type environments for LIR *)
 Definition IREnvironment := Map IRType.
 
 
 (*
-** Typing rules for Lir terms.
+** Typing rules for LIR terms.
 *)
 Reserved Notation "Γ '|=' e ':' t"  (at level 40, no associativity,
                                      e at next level).
@@ -140,7 +140,7 @@ where "Γ '|=' e ':' t" := (IRTyping Γ e t)
 
 
 (*
-** Types for Lir terms are unique.
+** Types for LIR terms are unique.
 *)
 Theorem typeUnique : forall Γ e t t',
    (Γ  |= e : t) -> (Γ |= e : t') -> t = t'.
@@ -151,7 +151,7 @@ Qed.
 Unset Elimination Schemes.
 
 (*
-** Value predicate for Lir terms: The only values are nil,
+** Value predicate for LIR terms: The only values are nil,
 ** numbers, and addresses, plus boxes of one of those previous values.
 ** (The type system forbids boxes of boxes.)
 *)
@@ -258,9 +258,13 @@ Qed.
 
 
 (*
-** Table indices. Only values are used as table indices, but we will
-** allow any term for now. For values, the index has a 'nat',
-** good for numbers and addresses, and a tag.
+** Table indices.
+** To simplify some proofs, we encode any value used as index as an
+** 'Index'. We can think of indices as isomorphic to bxoed values, so
+** that in the end only boxed values are used as indices. From another
+** angle, indices iron out the differences between boxed and unboxed
+** values. Later we will prove that for two values, their indices are
+** equal iff they are equal up to boxes and unboxes.
 *)
 Inductive Index : Set :=
 | I : nat -> Tag -> Index
@@ -270,8 +274,7 @@ Inductive Index : Set :=
 
 (*
 ** Normalize values used as indices, so that boxed and unboxed values
-** give the same index. Later we will prove that for two values, their
-** indices are equal iff they are equal up to boxes and unboxes.
+** give the same index.
 *)
 Fixpoint ToIndex (e : IRE) : Index :=
   match e with
@@ -283,6 +286,47 @@ Fixpoint ToIndex (e : IRE) : Index :=
   | IREUnbox t e' => ToIndex e'
   | _ => NI
   end.
+
+
+(*
+** This is an inverse of 'ToIndex'. It shows that Indices fully encode
+** boxed values.
+*)
+Definition FromIndex (idx : Index) : IRE :=
+  match idx with
+  | I _ TgNil => IREBox TgNil IRENil
+  | I n TgInt => IREBox TgInt (IRENum n)
+  | I a TgTbl => IREBox TgTbl (IRETAddr a)
+  | I a TgFun => IREBox TgFun (IREFAddr a)
+  | NI => IREPlus (IRENum 0) (IRENum 0)   (* any non-value would do *)
+  end.
+
+
+(*
+** For any ground value, FromIndex recovers the original value from its
+** index (up to boxes).
+*)
+Lemma IndexValueGround : forall v tg,
+  Value v ->
+  MEmpty |= v : Tag2Type tg ->
+  FromIndex (ToIndex v) = IREBox tg v.
+Proof.
+  induction 1; inversion 1; subst; simpl; trivial.
+Qed.
+
+
+(*
+** 'FromIndex' is correct: For any boxed value, FromIndex recovers the
+** original value from its index.
+*)
+Lemma FromIndexCorrect : forall v,
+  Value v ->
+  MEmpty |= v : IRTStar ->
+ FromIndex (ToIndex v) = v.
+Proof.
+  induction 1; inversion 1; subst.
+  simpl. auto using IndexValueGround.
+Qed.
 
 
 (* Index equality is decidable. *)
@@ -319,7 +363,7 @@ Definition EV2Val (me : ExpValue) : IRE :=
 
 
 (*
-** Memory for Lir.
+** Memory for LIR.
 *)
 Inductive Mem : Set :=
 | EmptyMem : Mem  (* the empty memory *)
@@ -407,7 +451,7 @@ Definition freshF (m : Mem) (v : string) (b : IRE) : (address * Mem) :=
 
 
 (*
-** Substitution of closed Lir terms for variables.
+** Substitution of closed LIR terms for variables.
 *)
 Reserved Notation "'[' x ':=' s ']' t" (at level 20, x constr).
 
@@ -478,7 +522,7 @@ Qed.
 
 
 (*
-** Evaluation steps for Lir terms
+** Reduction steps for LIR terms
 *)
 Reserved Notation "m '/' e --> m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
@@ -560,7 +604,7 @@ where "m / e --> m1 / e1" := (step m e m1 e1).
 
 
 (*
-** Fail evaluation for Lir terms
+** Fail reduction for LIR terms
 *)
 Inductive stepF : Mem -> IRE -> Prop :=
 | StPlus1F : forall m e1 e2,
@@ -614,8 +658,7 @@ Inductive stepF : Mem -> IRE -> Prop :=
 
 
 (*
-** Ensures that all elements of tables in a memory have type '*'
-** and that all function bodies are correctly typed
+** Well-Typed Memory (heap)
 *)
 Inductive mem_correct : Mem -> Prop :=
 | MCE : mem_correct EmptyMem
@@ -723,7 +766,7 @@ Proof. inversion 1; trivial. Qed.
 
 
 (*
-** Preservation of types for Lir terms
+** Preservation of types for LIR terms
 *)
 Lemma expPreservation : forall m e t m' e',
   mem_correct m ->
@@ -740,7 +783,7 @@ Qed.
 
 
 (*
-** Main preservation theorem for Lir
+** Main Preservation theorem for LIR
 ** (type preservation of memory and term)
 *)
 Theorem Preservation : forall m e t m' e',
@@ -836,7 +879,7 @@ Qed.
 
 
 (*
-** Progress for Lir terms
+** Progress for LIR terms
 *)
 Theorem Progress : forall m e t,
     MEmpty |= e : t  ->

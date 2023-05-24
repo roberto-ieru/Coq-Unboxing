@@ -15,7 +15,9 @@ Require Import LIR.maps.
 Require LIR.lir.
 
 
-(* λ-Pallene types *)
+(*
+** λ-Pallene Types
+*)
 Inductive PType : Set :=
 | PTStar : PType  (* '*' or 'any' *)
 | PTNil : PType   (* nil *)
@@ -104,12 +106,12 @@ where "Γ '|p=' e ':' t" := (PTyping Γ e t)
 ** Typing algorithm for λ-Pallene. Result in 'None'
 ** iff term is ill typed.
 *)
-Fixpoint typeOf Γ e : option PType :=
+Fixpoint PtypeOf Γ e : option PType :=
   match e with
   | PENil => Some PTNil
   | PENum _ => Some PTInt
   | PEPlus e1 e2 =>
-    match (typeOf Γ e1), (typeOf Γ e2) with
+    match (PtypeOf Γ e1), (PtypeOf Γ e2) with
     | Some PTInt, Some PTInt => Some PTInt
     | _, _ => None
     end
@@ -117,36 +119,36 @@ Fixpoint typeOf Γ e : option PType :=
   | PETAddr _ T => Some (PTArr T)
   | PEFAddr _ T1 T2 => Some (PTFun T1 T2)
   | PEGet e1 e2 =>
-    match (typeOf Γ e1), (typeOf Γ e2) with
+    match (PtypeOf Γ e1), (PtypeOf Γ e2) with
     | Some (PTArr T), Some PTInt => Some T
     | _, _ => None
     end
   | PESet e1 e2 e3 =>
-    match (typeOf Γ e1), (typeOf Γ e2), (typeOf Γ e3) with
+    match (PtypeOf Γ e1), (PtypeOf Γ e2), (PtypeOf Γ e3) with
     | Some (PTArr T), Some PTInt, Some T' =>
         if dec_TP T T' then Some PTNil else None
     | _, _, _ => None
     end
   | PEVar var => In Γ var
   | PEApp e1 e2 =>
-    match typeOf Γ e1, typeOf Γ e2 with
+    match PtypeOf Γ e1, PtypeOf Γ e2 with
     | Some (PTFun T1 T2), Some T1' =>
         if dec_TP T1 T1' then Some T2 else None
     | _, _ => None
     end
   | PEFun var Tv e Tb =>
-    match typeOf (var |=> Tv; Γ) e with
+    match PtypeOf (var |=> Tv; Γ) e with
     | Some Tb' => if dec_TP Tb Tb' then Some (PTFun Tv Tb) else None
     | None => None
     end
   | PELet var Tv init body =>
-    match typeOf Γ init, typeOf (var |=> Tv; Γ) body with
+    match PtypeOf Γ init, PtypeOf (var |=> Tv; Γ) body with
     | Some Tv', Some Tb =>
         if dec_TP Tv Tv' then Some Tb else None
     | _, _ => None
     end
   | PECast e T =>
-    match typeOf Γ e with
+    match PtypeOf Γ e with
     | Some _ => Some T
     | None => None
     end
@@ -156,12 +158,12 @@ Fixpoint typeOf Γ e : option PType :=
 (*
 ** 'typeOf' is correct (part 1)
 *)
-Lemma typeOfCorrect' : forall Γ e T, Γ |p= e : T -> typeOf Γ e = Some T.
+Lemma typeOfCorrect' : forall Γ e T, Γ |p= e : T -> PtypeOf Γ e = Some T.
 Proof.
   induction 1; try easy;
   simpl;
   repeat match goal with
-  | [H: typeOf _ _ = Some _ |- _] => rewrite H; clear H
+  | [H: PtypeOf _ _ = Some _ |- _] => rewrite H; clear H
   | [ |- context [dec_TP ?V1 ?V2] ] => destruct (dec_TP V1 V2)
   end; easy.
 Qed.
@@ -180,7 +182,7 @@ Proof. injection 1; trivial. Qed.
 (*
 ** 'typeOf' is correct (part 2)
 *)
-Lemma typeOfCorrect'' : forall Γ e T, typeOf Γ e = Some T -> Γ |p= e : T.
+Lemma typeOfCorrect'' : forall Γ e T, PtypeOf Γ e = Some T -> Γ |p= e : T.
 Proof.
   intros * Heq.
   generalize dependent Γ.
@@ -200,7 +202,7 @@ Qed.
 (*
 ** Typing rules and algorithm agree
 *)
-Lemma typeOfCorrect : forall Γ e T, typeOf Γ e = Some T <-> Γ |p= e : T.
+Lemma typeOfCorrect : forall Γ e T, PtypeOf Γ e = Some T <-> Γ |p= e : T.
 Proof. split; auto using typeOfCorrect', typeOfCorrect''. Qed.
 
 
@@ -531,7 +533,7 @@ Definition setTable (m : PMem) (a : lir.address) (idx : nat) (v : PE)
 
 
 (*
-** Evaluation steps for λ-Pallene terms
+** Reduction steps for λ-Pallene terms
 *)
 Reserved Notation "m '/' e '-p->' m1 '/' e1"
 (at level 40, e at level 39, m1 at level 39, e1 at level 39).
@@ -609,7 +611,7 @@ where "m / e -p-> m1 / e1" := (pstep m e m1 e1).
 
 
 (*
-** Fail evaluation for λ-Pallene terms
+** Fail Reduction for λ-Pallene terms
 *)
 Inductive pstepF : PMem -> PE -> Prop :=
 | PStPlus1F : forall m e1 e2,
@@ -680,8 +682,7 @@ Qed.
 
 
 (*
-** Ensures that all elements of tables and all "functions" in a
-** memory are well typed.
+** Well-Typed λ-Pallene Memory (heap)
 *)
 Inductive Pmem_correct : PMem -> Prop :=
 | PMCE : Pmem_correct PEmptyMem
@@ -809,6 +810,9 @@ Proof.
 Qed.
 
 
+(*
+** Preservation for λ-Pallene terms and memory
+*)
 Corollary PPreservation : forall m e t m' e',
   Pmem_correct m ->
   MEmpty |p= e : t ->
@@ -827,7 +831,7 @@ Lemma PexpPreservTypeOf : forall m e t m' e',
   Pmem_correct m ->
   MEmpty |p= e : t ->
   m / e -p-> m' / e' ->
-  typeOf MEmpty e = typeOf MEmpty e'.
+  PtypeOf MEmpty e = PtypeOf MEmpty e'.
 Proof.
   intros * PM PTy PSt.
   erewrite typeOfCorrect'; eauto.

@@ -589,16 +589,16 @@ Qed.
 ** Simulation theorem for programmers: no mentions to precision,
 ** concept expressed only in terms of 'dyn'
 *)
-Corollary SimDyn : forall m1 e1 t1 m1' e1',
-  m1 / e1 -->* m1' / e1'   ->
+Corollary SimDyn : forall m1 e1 t1 m1' v1,
+  m1 / e1 -->* m1' / v1   ->
   MEmpty |= e1 : t1 ->
   mem_correct m1 ->
-  Value e1' ->
-  exists e2' m2',
-    m1 / dyn e1 -->* m2' / e2' /\
-    e2' = dyn e1' /\
+  Value v1 ->
+  exists v2 m2',
+    m1 / dyn e1 -->* m2' / v2 /\
+    v2 = dyn v1 /\
     (* m1' <M| m2' /\ *)
-    Value e2'.
+    Value v2.
 Proof.
   intros * HSt Hty HM HV.
   assert(Precision MEmpty e1 t1 MEmpty (dyn e1) IRTStar)

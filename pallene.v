@@ -301,10 +301,10 @@ Qed.
 ** Cast a λ-Pallene term to a given type; gives None iff cast
 ** fails.
 *)
-Fixpoint PCast (e : PE) (T : PType) : option PE :=
+Fixpoint vcast (e : PE) (T : PType) : option PE :=
   match e, T with
   | PECast e' PTStar, PTStar => Some e		(* '*' to '*' *)
-  | PECast e' PTStar, T => PCast e' T		(* downcast from '*' *)
+  | PECast e' PTStar, T => vcast e' T		(* downcast from '*' *)
   | e', PTStar => Some (PECast e' PTStar)	(* upcast to '*' *)
   | PENil, PTNil => Some e  (* nil as nil *)
   | PENum n, PTInt => Some e  (* n as int *)
@@ -319,7 +319,7 @@ Fixpoint PCast (e : PE) (T : PType) : option PE :=
 *)
 Lemma CastValue : forall e v T,
   PValue e ->
-  PCast e T = Some v ->
+  vcast e T = Some v ->
   PValue v.
 Proof.
   intros * PV PC.
@@ -335,7 +335,7 @@ Qed.
 Lemma CastEqType : forall e T1 T2 v,
   PValue e ->
   MEmpty |p= e : T1 ->
-  PCast e T2 = Some v ->
+  vcast e T2 = Some v ->
   MEmpty |p= v : T2.
 Proof.
   intros * HV HT HC.
@@ -352,7 +352,7 @@ Qed.
 Lemma CastToItsType : forall T v,
   PValue v ->
   MEmpty |p= v : T ->
-  PCast v T = Some v.
+  vcast v T = Some v.
 Proof.
   intros * HV HT.
   induction HV; inversion HT; trivial.
@@ -362,7 +362,7 @@ Qed.
 (*
 ** A cast to '*' never fails
 *)
-Lemma CastToStar : forall e, exists e', PCast e PTStar = Some e'.
+Lemma CastToStar : forall e, exists e', vcast e PTStar = Some e'.
 Proof.
   induction e; try (eexists; simpl; auto; fail).
   (* only really inductive case: '(e as p) as *' *)
@@ -379,7 +379,7 @@ Qed.
 Lemma CastThroughStar : forall v T,
   PValue v ->
   exists v',
-    PCast v PTStar = Some v' /\ PCast v T = PCast v' T.
+    vcast v PTStar = Some v' /\ vcast v T = vcast v' T.
 Proof.
   intros * HV.
   specialize (CastToStar v) as [v' H1].
@@ -604,7 +604,7 @@ Inductive pstep : PMem -> PE -> PMem -> PE -> Prop :=
 | PStCast : forall m T v v',
     PValue v ->
     T <> PTStar ->
-    PCast v T = Some v' ->
+    vcast v T = Some v' ->
     m / PECast v T -p-> m / v'
 
 where "m / e -p-> m1 / e1" := (pstep m e m1 e1).
@@ -654,7 +654,7 @@ Inductive pstepF : PMem -> PE -> Prop :=
     m / PECast e t -p-> fail
 | PStCastF : forall m T v,
     PValue v ->
-    PCast v T = None ->
+    vcast v T = None ->
     m / PECast v T -p-> fail
 
  where "m / e -p-> 'fail'" := (pstepF m e)
@@ -907,7 +907,7 @@ Proof.
   - (* Cast *)
     destruct (dec_TP T2 PTStar) eqn:?; subst.
     + (* upcast *) left. eauto using PValue.
-    + (* downcast *) destruct (PCast e T2) eqn:?;
+    + (* downcast *) destruct (vcast e T2) eqn:?;
       dostep.
 
 Qed.

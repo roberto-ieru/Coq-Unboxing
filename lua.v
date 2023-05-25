@@ -158,8 +158,8 @@ Proof.
   simpl;
   repeat rewrite dynCast;
   (* break if's from casts *)
-  repeat match goal with |- context [typeOf ?G ?E] =>
-    destruct (typeOf G E) end;
+  repeat match goal with |- context [typeof ?G ?E] =>
+    destruct (typeof G E) end;
   simpl;
   congruence.
 Qed.
@@ -668,7 +668,7 @@ Proof. unfold inclusion. trivial. Qed.
 ** Compiling a well-formed 𝜆-Lua term results in a well-typed LIR
 ** term with type *.
 *)
-Lemma Lua2LirTypeAux : forall Γ e,
+Theorem Lua2LirTypeAux : forall Γ e,
   Γ |l= e -> LEnv2Lir Γ |= Lua2Lir e : IRTStar.
 Proof.
   intros Γ e.

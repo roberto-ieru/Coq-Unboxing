@@ -408,6 +408,19 @@ Proof.
 Qed.
 
 
+Corollary CatchUpP : forall e1 t1 e2 t2 m,
+  Precision MEmpty e1 t1 MEmpty e2 t2 ->
+  Value e1 ->
+  exists e2', m / e2 -->* m / e2' /\ Value e2' /\
+              Precision MEmpty e1 t1 MEmpty e2' t2.
+Proof.
+  intros * HP HV.
+  specialize (CatchUp m HP HV) as [e2' [HSt HV']].
+  exists e2'.
+  repeat split; eauto using PrecisionPreservationMult.
+Qed.
+
+
 Ltac BreakIH :=
   match goal with
     [IH: context [_ / ?E --> _ / _ -> (PrecMem _ _) -> _] ,

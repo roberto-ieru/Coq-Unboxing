@@ -43,5 +43,5 @@ lemmas, theorems, etc.) used in the text:
 - Lemma 21: Theorem `DynLessPrecise` in file `precision.v`
 - Lemma 22: Theorem `PrecDynEqual` in file `precision.v`
 - Theorem 23: Theorem `SimMult` in file `simprec.v`
-- Lemma 24: Theorem `CatchUp` in file `simprec.v`
+- Lemma 24: Corollary `CatchUpP` in file `simprec.v`
 - Lemma 25: Theorem `Sim` in file `simprec.v`

@@ -21,18 +21,23 @@ Require Import LIR.maps.
 Require Import LIR.pallene.
 Require Import LIR.lir.
 
+(* Variable names *)
+Definition A := "A":string.
+Definition B := "B":string.
+
+
 (* Sequence 'operator' e1 ; e2 *)
 Definition PESeq (e1 e2 : PE) : PE := PELet ("":string) PTNil e1 e2.
 
-Definition example :=
-    PELet ("A":string) (PTArr (PTArr PTInt)) (PENew (PTArr PTInt))
-    (PELet ("B":string) (PTArr PTInt)
-                        (PECast (PEVar ("A":string)) (PTArr PTInt))
+Definition example : PE :=
+    PELet A (PTArr (PTArr PTInt)) (PENew (PTArr PTInt))
+    (PELet B (PTArr PTInt)
+                        (PECast (PEVar A) (PTArr PTInt))
      (PESeq
-       (PESet (PEVar ("A":string)) (PENum 1) (PEVar ("B":string)))
+       (PESet (PEVar A) (PENum 1) (PEVar B))
       (PESeq
-       (PESet (PEVar ("B":string)) (PENum 2) (PENum 10))
-       (PEGet (PEGet (PEVar ("A":string)) (PENum 1)) (PENum 2))))).
+       (PESet (PEVar B) (PENum 2) (PENum 10))
+       (PEGet (PEGet (PEVar A) (PENum 1)) (PENum 2))))).
 
 
 (*
@@ -75,4 +80,5 @@ Proof with eauto 10 using pstep, PValue.
   eauto using Pmultistep.
   Unshelve. all: auto using PValue.
 Qed.
+
 

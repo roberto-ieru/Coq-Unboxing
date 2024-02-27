@@ -11,6 +11,9 @@ Require Import Bool.
 Require Import Nat.
 Require Import Coq.Program.Equality.
 
+(*Require Import String.*)
+Open Scope string_scope.
+
 Require Import LIR.maps.
 
 
@@ -393,13 +396,19 @@ Example L2 : exists m,
     LEmptyMem / LEApp (LEFun "x" (LEVar "x")) (LENum 10) ==>
     m / LENum 10.
 Proof.
-  destruct (LfreshF LEmptyMem "x" (LEVar "x")) as [a m'] eqn:Heq.
-  destruct (LqueryF a m') eqn:Heq'.
-  specialize auxmem as [? ?]; eauto; subst.
+  remember LEmptyMem as m.
+  remember "x" as v.
+  remember (LEVar "x") as e.
+  destruct (LfreshF m v e) as [a m'] eqn:Heq.
+  destruct (LqueryF a m') as (v', e') eqn:Heq'.
+  specialize auxmem with
+    (a := a)
+    (m := m) (m' := m')
+    (v := v) (v' := v')
+    (e := e) (e' := e') as [? ?]; eauto; subst.
   eexists.
   eauto using Lstep, LValue.
 Qed.
-
 
 Lemma ValueStep : forall m e m' e',
   LValue e ->

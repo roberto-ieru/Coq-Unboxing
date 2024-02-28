@@ -398,9 +398,7 @@ Proof.
   ContraTags;
   ForceΓEmpty Γ;
 
-  specialize ValueStarP as [? [? _]]; eauto;
-      subst;
-
+  destruct (ValueStarP HP H HV H0 H1) as [? [? _]]; eauto; subst;
   try (eapply GroundType in H; only 2: (simpl; trivial);
     apply valBoxVal in H1;
     exists x0; split;
@@ -520,7 +518,7 @@ Proof.
     solveSim (IRENum (n1 + n2)) m2.
 
   - (* StCstr *)
-    specialize PrecFreshT as [? [? ?]]; eauto.
+    destruct (PrecFreshT HM H0) as [? [? ?]]; eauto.
     solveSim2.
 
   - (* StGet *)
@@ -548,7 +546,7 @@ Proof.
 
   - (* StFun *)
     clear IHHP.
-    specialize PrecFreshF as [? [? ?]]; eauto.
+    destruct (PrecFreshF HM HP H5) as [? [? ?]]; eauto.
     solveSim2.
 
   - (* StApp *)
@@ -559,15 +557,16 @@ Proof.
 
     subst.
     destruct (queryF a m2) as [var' body'] eqn:HEq2. symmetry in HEq2.
-    specialize PrecQueryF as [? ?]; eauto; subst.
+    destruct (PrecQueryF a HM H5 HEq2) as [? ?]; eauto; subst.
     solveSim (IRELet var' IRTStar x body') m2.
 
   - (* StUnbox *)
     clear IHHP.
     inversion HP; subst; ContraTags.
     * exfalso. apply PPT in H1. ContraTags.
-    * specialize ValueStarP as [? [? ?]]; eauto using TPrecision.
-
+    * exists x. exists m2. split. auto. split. auto.
+      assert ((Tag2Type g) <| (Tag2Type g)) as R. apply TPrecisionRefl.
+      destruct (ValueStarP H3 R H5 H) as [? [? ?]]; eauto using TPrecision.
 Qed.
 
 
@@ -590,10 +589,10 @@ Proof.
   generalize dependent t2.
   generalize dependent e2.
   induction HMSt; intros * HV HPE HMem.
-  - specialize CatchUp as [? [? ?]]; eauto.
+  - destruct (CatchUp m2 HPE HV) as [? [? ?]]; eauto.
     eexists. eexists; repeat split; eauto using PrecisionPreservationMult.
-  - specialize Sim as [? [? [? [? ?]]]]; eauto.
-    specialize IHHMSt as [? [? [? [? [? ?]]]]]; eauto.
+  - destruct (Sim HPE H HMem) as [? [? [? [? ?]]]]; eauto.
+    destruct (IHHMSt x t2 x0 HV H2 H1) as [? [? [? [? [? ?]]]]]; eauto.
     exists x1. exists x2. repeat split; eauto using multiTrans.
 Qed.
 
@@ -617,7 +616,7 @@ Proof.
   assert(Precision MEmpty e1 t1 MEmpty (dyn e1) IRTStar)
     by (eapply DynLessPrecise; trivial).
   assert (m1 <M| m1) by auto using PrecMemRefl.
-  specialize SimMult as [? [? [? [? [? ?]]]]]; eauto.
+  destruct (SimMult HSt HV H H0) as [? [? [? [? [? ?]]]]]; eauto.
   eexists x. eexists. repeat split;
   eauto using PrecDynEqualVal.
 Qed.
